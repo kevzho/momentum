@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Offline · Momentum</title>
+    <meta name="theme-color" content="#fdfdfe" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0f1115" media="(prefers-color-scheme: dark)" />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+
+    <!--
+      Everything this page needs is in this file.
+
+      It is the one surface that has to render with no network at all, so it
+      cannot depend on a hashed CSS chunk that may not be in the cache, on a
+      font that has to be fetched, or on React having loaded. That is why the
+      design tokens below are literal sRGB values rather than the variables in
+      packages/ui/src/styles/globals.css: those are oklch, computed at build
+      time, and unreachable from a static file. They are the same colours —
+      --background, --foreground, --muted-foreground, --primary, --border, --card
+      — in both themes, and they move only when that file does.
+    -->
+    <style>
+      :root {
+        --background: #fdfdfe;
+        --foreground: #161a1f;
+        --muted-foreground: #5f646c;
+        --primary: #545cdf;
+        --primary-foreground: #f8faff;
+        --border: #e1e3e6;
+        --card: #ffffff;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --background: #0f1115;
+          --foreground: #eff0f2;
+          --muted-foreground: #9da2aa;
+          --primary: #7888fc;
+          --primary-foreground: #0d1020;
+          --border: #2b2e34;
+          --card: #16191d;
+        }
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        height: 100%;
+      }
+
+      body {
+        margin: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: max(1.5rem, env(safe-area-inset-top)) max(1.5rem, env(safe-area-inset-right))
+          max(1.5rem, env(safe-area-inset-bottom)) max(1.5rem, env(safe-area-inset-left));
+        background: var(--background);
+        color: var(--foreground);
+        font-family:
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          "Segoe UI",
+          Roboto,
+          "Helvetica Neue",
+          Arial,
+          sans-serif;
+        font-size: 14px;
+        line-height: 1.5;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      main {
+        width: 100%;
+        max-width: 26rem;
+        text-align: center;
+      }
+
+      .mark {
+        width: 2.5rem;
+        height: 2.5rem;
+        margin: 0 auto 1.25rem;
+        display: block;
+      }
+
+      h1 {
+        margin: 0 0 0.5rem;
+        font-size: 1.125rem;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+      }
+
+      p {
+        margin: 0;
+        color: var(--muted-foreground);
+      }
+
+      .note {
+        margin-top: 1.5rem;
+        padding: 0.75rem 1rem;
+        border: 1px solid var(--border);
+        border-radius: 0.5rem;
+        background: var(--card);
+        text-align: left;
+        font-size: 13px;
+        color: var(--muted-foreground);
+      }
+
+      button {
+        margin-top: 1.5rem;
+        appearance: none;
+        border: 0;
+        border-radius: 0.5rem;
+        padding: 0.5rem 1rem;
+        font: inherit;
+        font-weight: 500;
+        color: var(--primary-foreground);
+        background: var(--primary);
+        cursor: pointer;
+      }
+
+      button:focus-visible {
+        outline: 2px solid var(--primary);
+        outline-offset: 2px;
+      }
+
+      .status {
+        margin-top: 0.75rem;
+        min-height: 1.25rem;
+        font-size: 13px;
+        color: var(--muted-foreground);
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          transition: none !important;
+          animation: none !important;
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <main>
+      <svg class="mark" viewBox="0 0 100 100" aria-hidden="true">
+        <g
+          fill="none"
+          stroke="var(--primary)"
+          stroke-width="13"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M10 76 L38 48 L56 66 L90 26" />
+          <path d="M66 26 L90 26 L90 50" />
+        </g>
+      </svg>
+
+      <h1>Momentum is offline</h1>
+      <p>This device has no connection, so there is nothing to show yet.</p>
+
+      <!--
+        The honest sentence. Momentum keeps its week in a database and reads it
+        per request; there is no local copy to fall back to and no queue that
+        will replay what you did while disconnected. Saying so here is cheaper
+        than a user discovering it (specs/12-pwa.md, "be honest about scope").
+      -->
+      <p class="note">
+        Momentum stores your week on the server. It has no offline copy of your tasks, blocks or
+        habits, and nothing you do while offline is queued — reconnect and everything will be
+        exactly as you left it.
+      </p>
+
+      <button type="button" id="retry">Try again</button>
+      <p class="status" id="status" role="status" aria-live="polite"></p>
+    </main>
+
+    <script>
+      // No bundle, no framework: three listeners and a reload.
+      (function () {
+        var retry = document.getElementById("retry");
+        var status = document.getElementById("status");
+
+        function attempt() {
+          if (navigator.onLine === false) {
+            status.textContent = "Still offline.";
+            return;
+          }
+          status.textContent = "Reconnecting…";
+          location.reload();
+        }
+
+        retry.addEventListener("click", attempt);
+
+        // Coming back online is the common case; take the user straight back in
+        // rather than making them find the button.
+        window.addEventListener("online", attempt);
+        window.addEventListener("offline", function () {
+          status.textContent = "";
+        });
+      })();
+    </script>
+  </body>
+</html>

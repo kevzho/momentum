@@ -1,0 +1,501 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* Tailwind scans these for class names. Paths are relative to this file. */
+@source "../**/*.{ts,tsx}";
+@source "../../../../apps/web/src/**/*.{ts,tsx}";
+
+/*
+ * ============================================================================
+ * Momentum token layer — the contract in docs/DESIGN_SYSTEM.md.
+ *
+ * Components consume these through semantic utilities (bg-background,
+ * text-muted-foreground, border-border, bg-project-blue…). They never write a
+ * raw palette value and never an arbitrary [13px]-style value. Anything a page
+ * needs that is not expressible here belongs in a primitive, not inline.
+ *
+ * Colors are oklch so that lightness is perceptual: a hue's "bg" step is the
+ * same apparent lightness across all twelve project hues. Every foreground /
+ * background pair below was verified at >= 4.5:1 in both themes.
+ * ============================================================================
+ */
+
+@theme inline {
+  /* --- Typography ------------------------------------------------------- */
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-sans);
+
+  /* The one addition to Tailwind's size scale, for genuinely dense surfaces
+     (15-minute calendar blocks, Kbd, table meta). */
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+
+  /* --- Semantic color --------------------------------------------------- */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  /* --- Project palette --------------------------------------------------
+     PROJECT_COLORS in @momentum/core/types. Three steps per hue per theme:
+     bg (block fill) · fg (text on that fill) · border (outline / rule).
+     ProjectDot is the only component that maps a ProjectColor to a token. */
+  --color-project-slate: var(--project-slate-bg);
+  --color-project-slate-fg: var(--project-slate-fg);
+  --color-project-slate-border: var(--project-slate-border);
+  --color-project-red: var(--project-red-bg);
+  --color-project-red-fg: var(--project-red-fg);
+  --color-project-red-border: var(--project-red-border);
+  --color-project-orange: var(--project-orange-bg);
+  --color-project-orange-fg: var(--project-orange-fg);
+  --color-project-orange-border: var(--project-orange-border);
+  --color-project-amber: var(--project-amber-bg);
+  --color-project-amber-fg: var(--project-amber-fg);
+  --color-project-amber-border: var(--project-amber-border);
+  --color-project-green: var(--project-green-bg);
+  --color-project-green-fg: var(--project-green-fg);
+  --color-project-green-border: var(--project-green-border);
+  --color-project-teal: var(--project-teal-bg);
+  --color-project-teal-fg: var(--project-teal-fg);
+  --color-project-teal-border: var(--project-teal-border);
+  --color-project-cyan: var(--project-cyan-bg);
+  --color-project-cyan-fg: var(--project-cyan-fg);
+  --color-project-cyan-border: var(--project-cyan-border);
+  --color-project-blue: var(--project-blue-bg);
+  --color-project-blue-fg: var(--project-blue-fg);
+  --color-project-blue-border: var(--project-blue-border);
+  --color-project-indigo: var(--project-indigo-bg);
+  --color-project-indigo-fg: var(--project-indigo-fg);
+  --color-project-indigo-border: var(--project-indigo-border);
+  --color-project-violet: var(--project-violet-bg);
+  --color-project-violet-fg: var(--project-violet-fg);
+  --color-project-violet-border: var(--project-violet-border);
+  --color-project-pink: var(--project-pink-bg);
+  --color-project-pink-fg: var(--project-pink-fg);
+  --color-project-pink-border: var(--project-pink-border);
+  --color-project-rose: var(--project-rose-bg);
+  --color-project-rose-fg: var(--project-rose-fg);
+  --color-project-rose-border: var(--project-rose-border);
+
+  /* --- Radii — one base value, three roles ------------------------------ */
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: var(--radius); /* control:  buttons, inputs, chips, blocks */
+  --radius-lg: calc(var(--radius) * 1.25); /* surface: popovers, sheets, panels */
+  --radius-xl: calc(var(--radius) * 1.5);
+  --radius-2xl: calc(var(--radius) * 2);
+
+  /* --- Elevation — two levels, both on popover/overlay surfaces --------- */
+  --shadow-popover: var(--elevation-popover);
+  --shadow-overlay: var(--elevation-overlay);
+
+  /* --- Motion ----------------------------------------------------------- */
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* Duration and z-index have no Tailwind theme namespace, so they become real
+   utilities rather than [var(--x)] escapes. These are the only durations and
+   the only stacking levels in the product. */
+@utility duration-fast {
+  transition-duration: var(--duration-fast);
+  animation-duration: var(--duration-fast);
+}
+@utility duration-base {
+  transition-duration: var(--duration-base);
+  animation-duration: var(--duration-base);
+}
+@utility duration-slow {
+  transition-duration: var(--duration-slow);
+  animation-duration: var(--duration-slow);
+}
+@utility z-sticky {
+  z-index: var(--z-sticky);
+}
+@utility z-panel {
+  z-index: var(--z-panel);
+}
+@utility z-overlay {
+  z-index: var(--z-overlay);
+}
+@utility z-popover {
+  z-index: var(--z-popover);
+}
+@utility z-toast {
+  z-index: var(--z-toast);
+}
+@utility z-drag {
+  z-index: var(--z-drag);
+}
+
+/*
+ * Safe areas (Phase 12).
+ *
+ * `env(safe-area-inset-*)` reports the display cutout, rounded corners and home
+ * indicator, and it is non-zero only when the document opts in with
+ * `viewport-fit=cover` — which `apps/web/src/app/layout.tsx` does, because an
+ * installed iOS app has to paint under the status bar to look installed at all.
+ * Having opted in, every edge that touches the viewport has to pay it back, or
+ * the top bar sits under the clock and the last row of a list sits under the
+ * home indicator.
+ *
+ * Three utilities rather than one, because the three cases are genuinely
+ * different: the application frame (which owns the top and the sides), a scroll
+ * container (which owes the bottom to its *content*, not to its box), and an
+ * element that covers the viewport by itself and so is never inside the frame.
+ *
+ * Every `env()` carries a `0px` fallback, so a browser that has never heard of
+ * safe areas gets a padding of zero rather than an invalid declaration. These
+ * utilities add insets and nothing else — an edge that also wants ordinary
+ * padding composes it with a normal `p-*`, on a child.
+ */
+@utility safe-frame {
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+/* For a scroll container: the extra space lands after the last row rather than
+   cropping it behind the home indicator. */
+@utility safe-scroll-bottom {
+  scroll-padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* For an element that covers the viewport on its own — a drawer, a full-screen
+   overlay — which the frame's padding never reaches. */
+@utility safe-overlay {
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+/* The week grid's column template: a fixed time gutter plus seven day columns
+   that never shrink below a legible width. Below that the grid scrolls inside
+   its own container rather than overflowing the page. */
+@utility calendar-week-grid {
+  display: grid;
+  grid-template-columns:
+    var(--calendar-gutter-width)
+    repeat(7, minmax(var(--calendar-day-min-width), 1fr));
+}
+
+/* Day view is the same grid with one day column. The gutter keeps its width so
+   switching between the two views does not move the time labels. */
+@utility calendar-day-grid {
+  display: grid;
+  grid-template-columns:
+    var(--calendar-gutter-width)
+    minmax(var(--calendar-day-min-width), 1fr);
+}
+
+/* The width the header rows and the time grid share.
+ *
+ * They are separate grids stacked in one scroll container, so their columns
+ * only line up if both boxes are exactly as wide as each other. Sizing that
+ * width from the tokens rather than from `max-content` also keeps content out
+ * of the layout: an all-day chip with a long title truncates instead of
+ * stretching Tuesday. It is a minimum, so the grid still fills a wide window.
+ */
+@utility calendar-canvas {
+  min-width: calc(var(--calendar-gutter-width) + 7 * var(--calendar-day-min-width));
+}
+
+@utility calendar-canvas-day {
+  min-width: calc(var(--calendar-gutter-width) + var(--calendar-day-min-width));
+}
+
+/* A day column clips what falls outside the visible hours — a block that starts
+ * before the window renders at a negative offset rather than being pinned to a
+ * time it does not have. `clip` rather than `hidden` so the column never becomes
+ * a scroll container, and a clip margin so the 3px focus ring of a block against
+ * the column's edge is not the thing that gets cut off.
+ */
+@utility calendar-day-clip {
+  overflow: clip;
+  overflow-clip-margin: 4px;
+}
+
+:root {
+  color-scheme: light;
+
+  --radius: 0.5rem;
+
+  /* Motion */
+  --duration-fast: 120ms;
+  --duration-base: 180ms;
+  --duration-slow: 260ms;
+
+  /* Layering */
+  --z-sticky: 10;
+  --z-panel: 20;
+  --z-overlay: 30;
+  --z-popover: 40;
+  --z-toast: 50;
+  --z-drag: 60;
+
+  /* Sizes */
+  --sidebar-width: 15rem; /* 240px expanded */
+  --sidebar-width-collapsed: 3.5rem; /* 56px collapsed */
+  --top-bar-height: 3rem; /* 48px */
+  --side-panel-width: 20rem; /* 320px */
+  --side-sheet-width: 30rem; /* 480px */
+  --calendar-hour-height: 3.5rem; /* 56px → a 15-minute slot is 14px */
+  --calendar-gutter-width: 3.5rem;
+  --calendar-day-min-width: 5rem; /* below this the week grid scrolls */
+
+  /* Elevation */
+  --elevation-popover:
+    0 1px 2px -1px oklch(0.21 0.012 260 / 0.08), 0 4px 12px -2px oklch(0.21 0.012 260 / 0.1);
+  --elevation-overlay:
+    0 2px 4px -2px oklch(0.21 0.012 260 / 0.08), 0 16px 40px -8px oklch(0.21 0.012 260 / 0.16);
+
+  /* Semantic color — light */
+  --background: oklch(0.994 0.001 257);
+  --foreground: oklch(0.215 0.012 260);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.215 0.012 260);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.215 0.012 260);
+  --primary: oklch(0.545 0.196 275);
+  --primary-foreground: oklch(0.985 0.008 275);
+  --secondary: oklch(0.962 0.004 260);
+  --secondary-foreground: oklch(0.265 0.012 260);
+  --muted: oklch(0.965 0.004 260);
+  --muted-foreground: oklch(0.502 0.014 260);
+  --accent: oklch(0.952 0.012 275);
+  --accent-foreground: oklch(0.315 0.075 275);
+  --destructive: oklch(0.545 0.216 27);
+  --destructive-foreground: oklch(0.985 0.01 27);
+  --success: oklch(0.525 0.132 152);
+  --success-foreground: oklch(0.985 0.01 152);
+  --warning: oklch(0.565 0.128 62);
+  --warning-foreground: oklch(0.985 0.01 62);
+  --border: oklch(0.915 0.005 260);
+  --input: oklch(0.885 0.006 260);
+  --ring: oklch(0.545 0.196 275);
+
+  --sidebar: oklch(0.977 0.003 260);
+  --sidebar-foreground: oklch(0.215 0.012 260);
+  --sidebar-primary: oklch(0.545 0.196 275);
+  --sidebar-primary-foreground: oklch(0.985 0.008 275);
+  --sidebar-accent: oklch(0.942 0.007 262);
+  --sidebar-accent-foreground: oklch(0.245 0.014 260);
+  --sidebar-border: oklch(0.906 0.005 260);
+  --sidebar-ring: oklch(0.545 0.196 275);
+
+  --chart-1: oklch(0.545 0.196 275);
+  --chart-2: oklch(0.62 0.13 195);
+  --chart-3: oklch(0.6 0.13 152);
+  --chart-4: oklch(0.68 0.14 62);
+  --chart-5: oklch(0.6 0.16 350);
+
+  /* Project palette — light */
+  --project-slate-bg: oklch(0.955 0.009 257);
+  --project-slate-fg: oklch(0.425 0.037 257);
+  --project-slate-border: oklch(0.872 0.017 257);
+  --project-red-bg: oklch(0.955 0.032 27);
+  --project-red-fg: oklch(0.425 0.132 27);
+  --project-red-border: oklch(0.872 0.062 27);
+  --project-orange-bg: oklch(0.955 0.032 52);
+  --project-orange-fg: oklch(0.425 0.132 52);
+  --project-orange-border: oklch(0.872 0.062 52);
+  --project-amber-bg: oklch(0.955 0.032 80);
+  --project-amber-fg: oklch(0.425 0.132 80);
+  --project-amber-border: oklch(0.872 0.062 80);
+  --project-green-bg: oklch(0.955 0.032 150);
+  --project-green-fg: oklch(0.425 0.132 150);
+  --project-green-border: oklch(0.872 0.062 150);
+  --project-teal-bg: oklch(0.955 0.032 183);
+  --project-teal-fg: oklch(0.425 0.132 183);
+  --project-teal-border: oklch(0.872 0.062 183);
+  --project-cyan-bg: oklch(0.955 0.032 215);
+  --project-cyan-fg: oklch(0.425 0.132 215);
+  --project-cyan-border: oklch(0.872 0.062 215);
+  --project-blue-bg: oklch(0.955 0.032 259);
+  --project-blue-fg: oklch(0.425 0.132 259);
+  --project-blue-border: oklch(0.872 0.062 259);
+  --project-indigo-bg: oklch(0.955 0.032 277);
+  --project-indigo-fg: oklch(0.425 0.132 277);
+  --project-indigo-border: oklch(0.872 0.062 277);
+  --project-violet-bg: oklch(0.955 0.032 297);
+  --project-violet-fg: oklch(0.425 0.132 297);
+  --project-violet-border: oklch(0.872 0.062 297);
+  --project-pink-bg: oklch(0.955 0.032 354);
+  --project-pink-fg: oklch(0.425 0.132 354);
+  --project-pink-border: oklch(0.872 0.062 354);
+  --project-rose-bg: oklch(0.955 0.032 13);
+  --project-rose-fg: oklch(0.425 0.132 13);
+  --project-rose-border: oklch(0.872 0.062 13);
+}
+
+.dark {
+  color-scheme: dark;
+
+  --elevation-popover: 0 1px 2px -1px oklch(0 0 0 / 0.4), 0 4px 12px -2px oklch(0 0 0 / 0.45);
+  --elevation-overlay: 0 2px 4px -2px oklch(0 0 0 / 0.45), 0 16px 40px -8px oklch(0 0 0 / 0.55);
+
+  /* Semantic color — dark. Not an inverted light theme: lightness steps are
+     re-chosen so that surfaces stack (background < sidebar < card < popover). */
+  --background: oklch(0.178 0.008 262);
+  --foreground: oklch(0.955 0.003 260);
+  --card: oklch(0.212 0.009 262);
+  --card-foreground: oklch(0.955 0.003 260);
+  --popover: oklch(0.224 0.009 262);
+  --popover-foreground: oklch(0.955 0.003 260);
+  --primary: oklch(0.668 0.172 275);
+  --primary-foreground: oklch(0.18 0.032 275);
+  --secondary: oklch(0.268 0.011 262);
+  --secondary-foreground: oklch(0.955 0.003 260);
+  --muted: oklch(0.262 0.011 262);
+  --muted-foreground: oklch(0.712 0.013 260);
+  --accent: oklch(0.292 0.028 275);
+  --accent-foreground: oklch(0.928 0.022 275);
+  --destructive: oklch(0.672 0.185 25);
+  --destructive-foreground: oklch(0.165 0.03 25);
+  --success: oklch(0.722 0.145 155);
+  --success-foreground: oklch(0.168 0.032 155);
+  --warning: oklch(0.788 0.14 72);
+  --warning-foreground: oklch(0.192 0.032 72);
+  --border: oklch(0.302 0.011 262);
+  --input: oklch(0.342 0.012 262);
+  --ring: oklch(0.598 0.15 275);
+
+  --sidebar: oklch(0.196 0.009 262);
+  --sidebar-foreground: oklch(0.955 0.003 260);
+  --sidebar-primary: oklch(0.668 0.172 275);
+  --sidebar-primary-foreground: oklch(0.18 0.032 275);
+  --sidebar-accent: oklch(0.272 0.012 262);
+  --sidebar-accent-foreground: oklch(0.968 0.003 260);
+  --sidebar-border: oklch(0.288 0.011 262);
+  --sidebar-ring: oklch(0.598 0.15 275);
+
+  --chart-1: oklch(0.668 0.172 275);
+  --chart-2: oklch(0.72 0.12 195);
+  --chart-3: oklch(0.72 0.13 152);
+  --chart-4: oklch(0.79 0.14 72);
+  --chart-5: oklch(0.7 0.15 350);
+
+  /* Project palette — dark */
+  --project-slate-bg: oklch(0.285 0.013 257);
+  --project-slate-fg: oklch(0.855 0.025 257);
+  --project-slate-border: oklch(0.402 0.019 257);
+  --project-red-bg: oklch(0.285 0.048 27);
+  --project-red-fg: oklch(0.855 0.088 27);
+  --project-red-border: oklch(0.402 0.068 27);
+  --project-orange-bg: oklch(0.285 0.048 52);
+  --project-orange-fg: oklch(0.855 0.088 52);
+  --project-orange-border: oklch(0.402 0.068 52);
+  --project-amber-bg: oklch(0.285 0.048 80);
+  --project-amber-fg: oklch(0.855 0.088 80);
+  --project-amber-border: oklch(0.402 0.068 80);
+  --project-green-bg: oklch(0.285 0.048 150);
+  --project-green-fg: oklch(0.855 0.088 150);
+  --project-green-border: oklch(0.402 0.068 150);
+  --project-teal-bg: oklch(0.285 0.048 183);
+  --project-teal-fg: oklch(0.855 0.088 183);
+  --project-teal-border: oklch(0.402 0.068 183);
+  --project-cyan-bg: oklch(0.285 0.048 215);
+  --project-cyan-fg: oklch(0.855 0.088 215);
+  --project-cyan-border: oklch(0.402 0.068 215);
+  --project-blue-bg: oklch(0.285 0.048 259);
+  --project-blue-fg: oklch(0.855 0.088 259);
+  --project-blue-border: oklch(0.402 0.068 259);
+  --project-indigo-bg: oklch(0.285 0.048 277);
+  --project-indigo-fg: oklch(0.855 0.088 277);
+  --project-indigo-border: oklch(0.402 0.068 277);
+  --project-violet-bg: oklch(0.285 0.048 297);
+  --project-violet-fg: oklch(0.855 0.088 297);
+  --project-violet-border: oklch(0.402 0.068 297);
+  --project-pink-bg: oklch(0.285 0.048 354);
+  --project-pink-fg: oklch(0.855 0.088 354);
+  --project-pink-border: oklch(0.402 0.068 354);
+  --project-rose-bg: oklch(0.285 0.048 13);
+  --project-rose-fg: oklch(0.855 0.088 13);
+  --project-rose-border: oklch(0.402 0.068 13);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "cv11";
+  }
+
+  /* Every time, duration, count and percentage aligns in a column. */
+  th[data-numeric],
+  td[data-numeric],
+  [data-slot="numeric"] {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Never a silent focus loss: anything focusable that has not opted into a
+     ring of its own still shows one. */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+}
+
+/*
+ * Reduced motion. One global rule, per docs/DESIGN_SYSTEM.md — it also zeroes
+ * the motion tokens so component-level transitions collapse rather than being
+ * merely overridden. Applies to XP and level-up feedback too (Domain Rule 7).
+ */
+@media (prefers-reduced-motion: reduce) {
+  :root,
+  .dark {
+    --duration-fast: 0ms;
+    --duration-base: 0ms;
+    --duration-slow: 0ms;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

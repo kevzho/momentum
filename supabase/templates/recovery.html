@@ -1,0 +1,16 @@
+<h2>Reset your password</h2>
+
+<p>Follow this link to choose a new password for Momentum:</p>
+
+<p>
+  <a
+    href="{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=recovery&next=/update-password"
+  >
+    Set a new password
+  </a>
+</p>
+
+<p>
+  If you did not ask for this, you can ignore this email — nothing changes until a new password is
+  set.
+</p>

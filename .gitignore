@@ -1,0 +1,60 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.js
+.yarn/
+
+# builds
+.next/
+out/
+build/
+dist/
+*.tsbuildinfo
+next-env.d.ts
+
+# testing
+coverage/
+.nyc_output/
+playwright-report/
+test-results/
+
+# env
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# supabase
+supabase/.branches/
+supabase/.temp/
+supabase/.env
+
+# tauri (post-MVP)
+apps/desktop/target/
+apps/desktop/src-tauri/target/
+*.dmg
+
+# editors / os
+.DS_Store
+# AppleDouble sidecars: macOS writes one per file with extended attributes on
+# non-HFS volumes (this checkout lives on one). They are metadata, never source.
+._*
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+
+# logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# vercel / turbo
+.vercel
+.turbo
+
+# next.js dev output (Next 16 keeps dev and build outputs separate)
+.next/dev/
+
+# vitest
+.vitest/

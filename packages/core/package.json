@@ -1,0 +1,28 @@
+{
+  "name": "@momentum/core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    "./types": "./src/types/index.ts",
+    "./time": "./src/time/index.ts",
+    "./tasks": "./src/tasks/index.ts",
+    "./habits": "./src/habits/index.ts",
+    "./focus": "./src/focus/index.ts",
+    "./gamification": "./src/gamification/index.ts",
+    "./calendar": "./src/calendar/index.ts",
+    "./recurrence": "./src/recurrence/index.ts",
+    "./scheduling": "./src/scheduling/index.ts",
+    "./analytics": "./src/analytics/index.ts",
+    "./parser": "./src/parser/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

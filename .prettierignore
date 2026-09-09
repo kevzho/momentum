@@ -1,0 +1,18 @@
+node_modules/
+.next/
+out/
+build/
+dist/
+coverage/
+.turbo/
+pnpm-lock.yaml
+next-env.d.ts
+*.sql
+supabase/.temp/
+supabase/.branches/
+
+# macOS AppleDouble sidecars (see .gitignore); binary, and not ours to format.
+._*
+
+# Markdown is authored prose; not format-enforced.
+*.md
