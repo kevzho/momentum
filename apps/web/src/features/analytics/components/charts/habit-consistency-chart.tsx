@@ -13,17 +13,10 @@ import { ANALYTICS_COPY, dayLabel, longDayLabel } from "@/features/analytics/cop
 import { WEEKDAY_NAMES, weekdaysFrom } from "@/features/settings/weekday-names";
 
 /**
- * Chart 4 — habit consistency, as a grid of weeks.
- *
- * The one visualization here that is not Recharts, on purpose. A consistency
- * grid is a calendar, not a plot: `HabitHeatmap` already exists in the design
- * system, already encodes each state with a **shape as well as a fill** so the
- * grid survives greyscale (WCAG 1.4.1), and already writes every cell's date
- * and state as text for assistive technology. Redrawing it with a charting
- * library would trade all of that for consistency of import.
- *
- * There is no red in it and no cell is a penalty: a day nothing was recorded on
- * is a hollow square, never a mark against the user (Domain Rule 7).
+ * Habit consistency as a grid of weeks. Not Recharts on purpose: `HabitHeatmap`
+ * already encodes each state with a shape as well as a fill (WCAG 1.4.1) and
+ * writes every cell's date and state as text. A day nothing was recorded on is
+ * a hollow square, never a mark against the user.
  */
 export function HabitConsistencyChart({
   days,
@@ -69,13 +62,9 @@ export function HabitConsistencyChart({
 }
 
 /**
- * One day's state.
- *
- * `free` is a day no habit asked anything of — the correct reading for a window
- * that predates the user's habits, and for the per-week cadences that name no
- * particular day. `partial` covers both "some of what was asked was recorded"
- * and "nothing was asked but something was recorded", because both are days
- * with work on them.
+ * `free` is a day no habit asked anything of. `partial` covers both "some of
+ * what was asked was recorded" and "nothing was asked but something was
+ * recorded".
  */
 function cellFor(day: HabitDay | undefined, date: LocalDate): HeatmapCell {
   const expected = day?.expected ?? 0;
@@ -96,7 +85,7 @@ function cellFor(day: HabitDay | undefined, date: LocalDate): HeatmapCell {
   return { key: date, state, label: `${longDayLabel(date)}: ${describe(expected, met, recorded)}` };
 }
 
-/** The cell's text, for a screen reader and for the hover title. A count, never a verdict. */
+/** The cell's text, for a screen reader and the hover title. A count, never a verdict. */
 function describe(expected: number, met: number, recorded: number): string {
   if (expected > 0) return `${met} of ${expected} recorded`;
   if (recorded > 0) return `${recorded} recorded, none scheduled`;

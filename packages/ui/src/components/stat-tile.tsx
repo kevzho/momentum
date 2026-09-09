@@ -1,10 +1,7 @@
 import * as React from "react";
 import { cn } from "cn";
 
-/**
- * Label + one tabular number. Used sparingly and only where a spec asks for it
- * — rows of stat tiles nobody asked for are a listed failure mode.
- */
+/** Label + one tabular number. Use sparingly. */
 function StatTile({
   label,
   value,

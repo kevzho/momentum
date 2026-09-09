@@ -6,14 +6,6 @@ import { rowToHabit } from "./habit";
 import { profileSettingsToUpdate, rowToProfile } from "./profile";
 import { rowToTask } from "./task";
 
-/**
- * Mappers are the only code that knows both the row shape and the domain
- * shape, so they are where a column rename or a loosely typed jsonb column
- * turns into a real bug. They are total functions and are tested as such:
- * every nullable lifted, every union narrowed, and a loud failure when a row
- * violates an invariant the schema is supposed to guarantee.
- */
-
 const PROFILE_ROW: Row<"profiles"> = {
   id: "11111111-1111-4111-8111-111111111111",
   display_name: "Demo Ross",

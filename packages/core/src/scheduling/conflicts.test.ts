@@ -11,10 +11,7 @@ import {
 } from "./conflicts";
 import type { Commitment, PlanningContext, PlanningTask, PlanningWarning } from "./types";
 
-/**
- * The four warnings under the New York fixture week (Mon 2026-09-07, today
- * Wed 2026-09-09). Fixture-driven, no mocks, no clock: `now` is an input.
- */
+// New York fixture week: Mon 2026-09-07, today Wed 2026-09-09.
 const NEW_YORK = ianaTimeZone("America/New_York");
 
 const d = localDate;
@@ -129,7 +126,7 @@ function ofKind<K extends PlanningWarning["kind"]>(warnings: PlanningWarning[], 
   });
 }
 
-/** A deterministic Fisher–Yates: the test needs "some other order", not randomness. */
+/** A deterministic Fisher–Yates. */
 function shuffled<T>(items: readonly T[], seed: number): T[] {
   const out = items.slice();
   let state = seed;
@@ -244,7 +241,7 @@ describe("past deadline", () => {
   });
 
   it("does not warn for a block on the due date itself, even at 23:30 local", () => {
-    // 23:30 Thursday in New York is already Friday in UTC (Domain Rule 4).
+    // 23:30 Thursday in New York is already Friday in UTC.
     const warnings = conflicts({ commitments: [work("late", "t1", THU, 1410, 1440, dueThu)] });
     expect(ofKind(warnings, "past-deadline")).toEqual([]);
   });
@@ -323,8 +320,7 @@ describe("over capacity", () => {
   });
 
   it("warns for the range on the week's totals, with no day over its own window", () => {
-    // Mon–Thu at their edge (600 each), Fri at its edge (300): 2700 planned
-    // against 2160 working, and the range's tolerance is 540 — exactly at it.
+    // 2700 planned against 2160 working, and the range's tolerance is 540: exactly at it.
     const atTheEdge = [
       event("mon", MON, 480, 1080),
       event("tue", TUE, 480, 1080),
@@ -334,7 +330,6 @@ describe("over capacity", () => {
     ];
     expect(conflicts({ commitments: atTheEdge })).toEqual([]);
 
-    // One more minute, on a day that stays within its own tolerance.
     const warnings = conflicts({ commitments: [...atTheEdge, event("sun", SUN, 600, 601)] });
     expect(warnings).toEqual([
       { kind: "over-capacity", date: null, plannedMinutes: 2701, workingMinutes: 2160 },
@@ -358,7 +353,6 @@ describe("over capacity", () => {
   });
 
   it("counts planned by claim, so two overlapping blocks can exceed the window together", () => {
-    // 09:00–17:00 twice is 960 planned against 480 working.
     const warnings = conflicts({
       commitments: [event("a", TUE, 540, 1020), work("b", "t", TUE, 540, 1020)],
     });
@@ -373,7 +367,6 @@ describe("insufficient time", () => {
   const morningMeeting = event("meeting", WED, 540, 780);
 
   it("does not fire with now null when the whole day counts", () => {
-    // 09:00–13:00 is taken; 13:00–17:00 leaves 240 open for 180 of work.
     expect(conflicts({ commitments: [morningMeeting], tasks: [essay], now: null })).toEqual([]);
   });
 
@@ -402,9 +395,7 @@ describe("insufficient time", () => {
 
   it("counts every working day from today to the due date, minus the busy list", () => {
     const report = task({ id: "report", estimatedMinutes: 900, dueDate: THU });
-    // Wed 480 + Thu 480 = 960 open: enough.
     expect(conflicts({ tasks: [report] })).toEqual([]);
-    // A two-hour block on Thursday leaves 840.
     const warnings = conflicts({ commitments: [event("class", THU, 600, 720)], tasks: [report] });
     expect(warnings).toEqual([
       {
@@ -425,7 +416,6 @@ describe("insufficient time", () => {
       dueDate: THU,
       scheduledOutsideMinutes: 20,
     });
-    // 1000 − 20 − 60 = 920 remaining against 960 − 60 = 900 open.
     const warnings = conflicts({
       commitments: [work("w", "report", THU, 540, 600)],
       tasks: [report],
@@ -484,7 +474,7 @@ describe("insufficient time", () => {
   it("counts from the first day of a future range, not from today", () => {
     const nextWeek = context({ days: WEEK.map((_, index) => d(`2026-09-${14 + index}`)) });
     const report = task({ id: "report", estimatedMinutes: 500, dueDate: d("2026-09-14") });
-    // Only Monday the 14th counts: 480 open, and `now` on the 9th cuts nothing.
+    // Only Monday the 14th counts; `now` on the 9th cuts nothing.
     const warnings = conflicts({ tasks: [report], context: nextWeek, now: at(WED, 900) });
     expect(warnings).toMatchObject([{ remainingMinutes: 500, availableMinutes: 480 }]);
   });
@@ -548,8 +538,6 @@ describe("detectConflicts", () => {
   });
 
   it("keeps the block-level warnings over an empty range and drops the day-level ones", () => {
-    // Overlap and past deadline are facts about the blocks; over capacity and
-    // insufficient time are facts about days, and there are none.
     expect(conflicts({ ...mixed, context: context({ days: [] }) }).map(warningKey)).toEqual([
       "overlap:sync:essay-tue",
       "past-deadline:essay-fri",

@@ -36,25 +36,9 @@ import type {
 } from "@/features/gamification/types";
 import { requireSession } from "@/lib/auth/session";
 
-/**
- * The two reads the progression surface needs.
- *
- * `getProgressBadge()` runs on every authenticated request, because the top bar
- * is on every route. It is three small indexed reads and no arithmetic beyond
- * the level curve.
- *
- * `getProgressPage()` is the /progress route's one read. The week's rows are
- * fetched once and counted twice — today and this week — in
- * `@momentum/core/gamification`, so the daily and weekly numbers can never
- * disagree about the same completion, and every date boundary is resolved in
- * the profile timezone (Domain Rules 4, 5).
- *
- * Nothing here computes an award. Progress is derived from source rows for
- * display; a claim is checked again in SQL against the same rows, and it is
- * that second check that decides (Domain Rule 6).
- */
+// Nothing here computes an award: progress is derived from source rows for
+// display, and a claim is checked again in SQL against the same rows.
 
-/** How many ledger rows the history panel shows. */
 export const XP_HISTORY_LIMIT = 12;
 
 export async function getProgressBadge(): Promise<ProgressBadge> {
@@ -64,10 +48,6 @@ export async function getProgressBadge(): Promise<ProgressBadge> {
   const today = todayIn(profile.timezone, now);
   const week = weekOf(today, profile.weekStart);
 
-  // Three small indexed reads, on every authenticated route, because the
-  // indicator and the celebration are on every authenticated route. The
-  // achievements one joins its definitions rather than fetching them
-  // separately; all three are tables of at most a handful of rows per user.
   const [frame, unlocked, claimed] = await Promise.all([
     gamification.equippedCosmeticKey(supabase, userId, IMPLEMENTED_COSMETIC_KIND),
     gamification.listUnlockedWithNames(supabase, userId),
@@ -91,16 +71,13 @@ export async function getProgressPage(): Promise<ProgressPageData> {
   const today = todayIn(timezone, now);
   const week = weekOf(today, profile.weekStart);
 
-  // The week, as instants. `startOfDay` knows that the local days either side
-  // of a DST transition are 23 or 25 hours long.
+  // `startOfDay` knows the local days either side of a DST transition are 23 or 25 hours.
   const weekWindow = {
     start: startOfDay(week.start, timezone),
     end: startOfDay(addDays(week.start, 7), timezone),
   };
-  // The caps panel measures the window the ledger's trigger measures — the
-  // last 24 hours, rolling — not the local day (Domain Rules §21). A local day
-  // would read "0 of 200" just after midnight while the trigger still counted
-  // yesterday evening's awards.
+  // The caps panel measures the ledger trigger's window (the last 24 hours,
+  // rolling), not the local day, or it would read "0 of 200" just after midnight.
   const capWindow = xpCapWindow(now);
 
   const [
@@ -118,8 +95,7 @@ export async function getProgressPage(): Promise<ProgressPageData> {
     recent,
     awardedToday,
   ] = await Promise.all([
-    // Assigning is idempotent and resolves the period from the profile itself,
-    // so the page can simply ask for "the current quests" (Domain Rule 17).
+    // Idempotent; resolves the period from the profile itself.
     gamification.ensureQuests(supabase),
     gamification.listQuestDefinitions(supabase),
     gamification.listAchievementDefinitions(supabase),
@@ -225,13 +201,7 @@ export async function getProgressPage(): Promise<ProgressPageData> {
   };
 }
 
-/**
- * Ended sessions in the window.
- *
- * `listStartedBetween` returns every session that began in the window; a live
- * one has no measured minutes yet and contributes nothing, so it is filtered
- * here rather than counted as zero and left in the list.
- */
+/** Ended sessions in the window; a live one has no measured minutes yet. */
 async function focusSessionsFor(
   supabase: Awaited<ReturnType<typeof requireSession>>["supabase"],
   userId: string,
@@ -254,14 +224,7 @@ function unlockedRows(
   }));
 }
 
-/**
- * What the caps have paid out in the last 24 hours.
- *
- * Stated rather than hidden, for the reason the focus page states its own: a
- * user who has hit a cap should be told the rule, not left to notice that a
- * completion moved nothing. It is a report of the ledger and never an input to
- * an award (Domain Rule 6), measured over the ledger's own rolling window.
- */
+/** What the caps have paid out over the ledger's rolling window. A report, never an input to an award. */
 function cappedSources(
   awarded: readonly { sourceType: XpSourceType; amount: number }[],
 ): { source: string; awarded: number; cap: number }[] {

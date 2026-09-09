@@ -17,10 +17,8 @@ import type { Json, Row } from "../types";
 import { isJsonObject, oneOf, toInstant, toInstantOrNull, toLocalDateOrNull } from "./scalars";
 
 /**
- * One table, three domain shapes. The `kind` discriminator plus the per-kind
- * check constraints mean a row always has exactly the foreign key its kind
- * requires; the mapper still asserts it, because a violated invariant is a
- * schema bug that should surface here rather than as `undefined` in the grid.
+ * The per-kind check constraints guarantee each row's foreign key; the mapper
+ * still asserts it so a schema bug surfaces here, not as `undefined` in the grid.
  */
 
 export function parseRecurrence(value: Json): Recurrence | null {

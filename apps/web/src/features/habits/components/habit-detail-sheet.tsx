@@ -21,17 +21,8 @@ import type { HabitView, HabitsPageData } from "@/features/habits/types";
 import { useOpenerFocus } from "@/lib/use-opener-focus";
 
 /**
- * One habit's longer view: the four numbers the spec asks for, and the
- * twelve-week heatmap.
- *
- * Every number here is a rate or a fact, and none of them is framed as
- * something to lose (Domain Rule 7). "Best run" sits beside "current run"
- * deliberately: shown together they read as history, where the best alone would
- * read as a high-water mark to defend.
- *
- * The heatmap's legend is not decoration — it is what makes the grid meet
- * "not colour alone": every state's shape is named in words next to an example
- * of it.
+ * One habit's stats and twelve-week heatmap. "Best run" is shown beside
+ * "current run" deliberately, so it reads as history rather than a record to defend.
  */
 export interface HabitDetailSheetProps {
   view: HabitView | null;
@@ -40,12 +31,7 @@ export interface HabitDetailSheetProps {
 }
 
 export function HabitDetailSheet({ view, page, onClose }: HabitDetailSheetProps) {
-  /*
-   * Opened from a row's name or its menu, never from a `Sheet.Trigger`, so
-   * Radix has nothing to return focus to on close and its modal content
-   * cancels the restore anyway. Same helper the task detail sheet uses
-   * (Domain Rule 10).
-   */
+  // Opened without a `Sheet.Trigger`, so Radix has nothing to return focus to on close.
   const openerFocus = useOpenerFocus(view !== null);
 
   return (
@@ -125,11 +111,7 @@ function HabitDetail({ view, page }: { view: HabitView; page: HabitsPageData }) 
   );
 }
 
-/**
- * The states, named. Without this the grid would be shapes a first-time reader
- * has to infer; with it, the shape and the word arrive together — which is what
- * "discernible without relying on hue" asks for.
- */
+/** Names each state beside its shape, so the grid is readable without hue. */
 function HeatmapLegend() {
   const entries = [
     { state: "met", className: "border-success bg-success" },

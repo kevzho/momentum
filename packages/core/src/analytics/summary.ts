@@ -32,18 +32,7 @@ import { buildInsights, type Insight } from "./insights";
 import type { AnalyticsPeriod } from "./period";
 import { tasksCompletedByDay, tasksCompletedByHour, totalTasksCompleted } from "./tasks";
 
-/**
- * One period, every number the analytics surface shows.
- *
- * This is the module's front door and the function Phase 14's weekly review
- * calls. It composes the aggregations above and adds nothing of its own, so a
- * number on the review and the same number on `/analytics` cannot drift: there
- * is one definition of "focused minutes" and both surfaces read it here.
- *
- * Pure and clock-free. The period, the timezone and the rows all arrive as
- * parameters, which is what lets the page compute three ranges from a single
- * read and lets the tests pin a DST weekend without touching the process clock.
- */
+/** One period, every number the analytics surface and the weekly review show; composes the aggregations and adds nothing. */
 
 export interface AnalyticsInput {
   period: AnalyticsPeriod;
@@ -62,9 +51,9 @@ export interface AnalyticsTotals {
   tasksCompleted: number;
   /** Met over expected; `value` is null when the period expected nothing. */
   habitRate: HabitRateValue;
-  /** Scheduled against executed spans (Domain Rule 13). */
+  /** Scheduled against executed spans. */
   blocks: BlockTotals;
-  /** Planned against actual, over the tasks that carry both (Domain Rule 3). */
+  /** Planned against actual, over the tasks that carry both. */
   estimates: EstimateTotals;
 }
 
@@ -86,14 +75,7 @@ export interface AnalyticsSummary {
   focusByHour: HourValue[];
   /** Only those above their sample-size threshold. Empty is a valid, expected result. */
   insights: Insight[];
-  /**
-   * The period recorded nothing at all.
-   *
-   * The one question the empty state asks. It is deliberately about *evidence*
-   * rather than about the account's age: a user who has been away for three
-   * months gets the same designed page as a new one, instead of six charts of
-   * flat zero.
-   */
+  /** The period recorded nothing at all; about evidence, not the account's age. */
   isEmpty: boolean;
 }
 

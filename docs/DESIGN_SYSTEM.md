@@ -34,6 +34,7 @@ machine-generated UI:
 - Arbitrary one-off colors and inconsistent border radii
 - Modals where a side sheet or inline edit would do
 - Layout shift on load; buttons of inconsistent height
+- Placeholder controls: a button that does nothing is not rendered (the top bar lost its bell)
 
 When in doubt, **remove something.**
 
@@ -301,6 +302,12 @@ data, server actions). Feature components compose these; they do not restyle the
 `AppShell` · `Sidebar` (navigation links, collapse state) · `SidebarNav` (the one
 navigation list, shared by the rail and the mobile drawer) · `MobileNav` (drawer below
 `md`) · `TopBar` (section name on mobile, quick-add, palette trigger, `XPBar`, profile
+menu — no bell) · `ProjectDialog` (name + a `role=radiogroup` of twelve `ProjectDot` swatches,
+arrows/Home/End move the selection) · `ProjectMenu` (the sidebar row's "…": Rename, Archive;
+revealed on hover/focus-within, always on coarse pointers) · the seventh task view tab "Archived"
+(an archived row shows a restore icon button in the checkbox's slot and a muted title without
+strikethrough) · Settings' switch rows (Label beside `Switch` with a note line that is always laid
+out, so hydration cannot shift the section) · `TopBar` (continued: section name on mobile, quick-add, palette trigger, `XPBar`, profile
 menu) · `ErrorBoundary` (section boundaries with retry; route boundaries are Next's
 `error.tsx`) · `ThemeProvider` · `ThemeToggle` · route `Skeleton` composites in
 `components/skeletons.tsx` and `features/*/components/*-skeleton.tsx` ·

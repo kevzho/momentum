@@ -1,18 +1,13 @@
 import { defineConfig, devices } from "@playwright/test";
 
 /**
- * End-to-end tests for the 18 audit workflows (docs/ARCHITECTURE.md §13).
- *
- * They run against the real application and the local Supabase stack, signed
- * in as the seeded accounts, so they need `supabase start` and a seeded
- * database (`pnpm db:reset`). The system Chrome is used (`channel: "chrome"`)
- * so no browser download is needed; `pnpm test:e2e` starts `next dev` when
- * nothing is listening on port 3000 and reuses it otherwise.
+ * Runs against the real application and the local Supabase stack, signed in
+ * as the seeded accounts: needs `supabase start` and `pnpm db:reset`. Uses the
+ * system Chrome; `pnpm test:e2e` starts `next dev` unless port 3000 is busy.
  */
 export default defineConfig({
   testDir: "e2e",
-  // macOS AppleDouble sidecars (`._foo.spec.ts`) are metadata, never tests —
-  // the same exclusion `.gitignore` and `eslint.config.mjs` carry.
+  // macOS AppleDouble sidecars (`._foo.spec.ts`) are metadata, never tests.
   testIgnore: "**/._*",
   fullyParallel: false,
   workers: 1,
@@ -28,8 +23,7 @@ export default defineConfig({
     screenshot: "only-on-failure",
   },
   projects: [
-    // The two projects partition the suite: `@mobile` specs run only at phone
-    // size, and everything else only on the desktop viewport.
+    // `@mobile` specs run only at phone size, everything else only on desktop.
     {
       name: "desktop",
       use: { ...devices["Desktop Chrome"], channel: "chrome" },
@@ -37,8 +31,7 @@ export default defineConfig({
     },
     {
       name: "mobile",
-      // iPhone 13 emulation (390×664, touch, mobile UA) in the system Chrome;
-      // the device preset's own browser is WebKit, which is not installed.
+      // iPhone 13 emulation in the system Chrome; the preset's own browser is WebKit.
       use: { ...devices["iPhone 13"], channel: "chrome", defaultBrowserType: "chromium" },
       grep: /@mobile/,
     },

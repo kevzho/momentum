@@ -6,34 +6,18 @@ import { buildTimeline } from "@/features/today/agenda";
 import type { TodayHabit, TodayItem, TodayPageData, TodayTask } from "@/features/today/types";
 
 /**
- * The optimistic overlay for every mutation `/today` can make.
- *
- * It patches *facts* and re-derives everything else, which is the arrangement
- * `features/habits/optimistic.ts` uses and for the same reason: the timeline,
- * Next Up, the habit counts and the At Risk section are all functions of the
- * same page, so a reducer that nudged each of them individually would be four
- * implementations of one change and they would disagree the first time a block
- * completed its task.
- *
- * It is pure, and the server's answer replaces it wholesale on reconcile — so
- * the only thing it has to get right is what the server will conclude, not how
- * to undo itself. On failure the transition settles against unchanged props and
- * React discards it; there is no revert written here, and therefore none to get
- * wrong (Domain Rule 11, docs/ARCHITECTURE.md §8).
+ * The optimistic overlay for every `/today` mutation. It patches facts and
+ * re-derives everything else, never nudging displayed values individually.
+ * Pure; on failure React discards it, so no revert is written here.
  */
 
 export type TodayPatch =
   BlockCompletionPatch | TaskCompletionPatch | HabitDayPatch | ReschedulePatch;
 
 /**
- * A block's completion control.
- *
- * `alsoTask` carries the label's promise — the block was its task's only one,
- * or its last incomplete one — decided by the server in
- * `features/calendar/items.ts` so the wording and the effect come from one
- * calculation (Domain Rule 13). `habit` is set for a habit block, whose
- * completion is two facts in one transaction: the span was executed, and the
- * habit was done on the block's own local date (Domain Rule 14).
+ * A block's completion control. `alsoTask` is the server-decided promise from
+ * `features/calendar/items.ts` (the block was its task's last incomplete one);
+ * `habit` is set for a habit block, whose completion also records the habit.
  */
 export interface BlockCompletionPatch {
   kind: "block-completion";
@@ -45,14 +29,7 @@ export interface BlockCompletionPatch {
   now: Instant;
 }
 
-/**
- * Completing a task from a task row.
- *
- * It marks the task and leaves its blocks alone — Domain Rule 13 is explicit
- * that completing a task from anywhere other than a block does exactly that.
- * The blocks still settle, because a block whose task is complete renders as
- * settled and is skipped by Next Up; that follows from `taskCompletedAt`.
- */
+/** Completing a task from a task row marks the task and leaves its blocks alone; they settle via `taskCompletedAt`. */
 export interface TaskCompletionPatch {
   kind: "task-completion";
   taskId: Uuid;
@@ -90,10 +67,6 @@ export function applyTodayPatch(page: TodayPageData, patch: TodayPatch): TodayPa
   }
 }
 
-/* -------------------------------------------------------------------------- */
-/* Blocks                                                                     */
-/* -------------------------------------------------------------------------- */
-
 function applyBlockCompletion(page: TodayPageData, patch: BlockCompletionPatch): TodayPageData {
   const completedAt = patch.completed ? patch.now : null;
   const target = page.timeline.find((entry) => entry.item.id === patch.itemId);
@@ -125,18 +98,13 @@ function applyBlockCompletion(page: TodayPageData, patch: BlockCompletionPatch):
           kind: "habit-day",
           habitId: patch.habit.id,
           date: patch.habit.date,
-          // Un-completing a habit block removes only the completion that block
-          // created, which for the block's own day is the whole row here.
+          // Un-completing a habit block removes that day's row.
           recorded: patch.completed,
           amount: patch.habit.amount,
         });
 
   return { ...withHabit, timeline };
 }
-
-/* -------------------------------------------------------------------------- */
-/* Tasks                                                                      */
-/* -------------------------------------------------------------------------- */
 
 function applyTaskCompletion(page: TodayPageData, patch: TaskCompletionPatch): TodayPageData {
   const completedAt = patch.completed ? patch.now : null;
@@ -171,19 +139,7 @@ function markTask(page: TodayPageData, taskId: Uuid, completedAt: Instant | null
   };
 }
 
-/* -------------------------------------------------------------------------- */
-/* Habits                                                                     */
-/* -------------------------------------------------------------------------- */
-
-/**
- * A habit's day, recomputed from its patched completions.
- *
- * The row's state, the week's progress and the section's count all come back
- * out of `@momentum/core/habits` rather than being nudged, so a per-week habit
- * that has just reached its target reports so consistently across all three.
- * `patchCompletions` is `features/habits/optimistic.ts`'s — the one prediction
- * of what `record_habit_completion` will write (Domain Rule 14).
- */
+/** A habit's day, recomputed from its patched completions via the same core functions the server ran. */
 function applyHabitDay(page: TodayPageData, patch: HabitDayPatch): TodayPageData {
   return {
     ...page,
@@ -213,20 +169,7 @@ function applyHabitDay(page: TodayPageData, patch: HabitDayPatch): TodayPageData
   };
 }
 
-/* -------------------------------------------------------------------------- */
-/* Reschedule                                                                 */
-/* -------------------------------------------------------------------------- */
-
-/**
- * A block moved to another time.
- *
- * The whole timeline is rebuilt rather than the row edited in place, because
- * moving a block changes where it sits in the order, how much of today it
- * covers, and — when it is moved off today entirely — whether it belongs on the
- * page at all. `buildTimeline` answers all three, and it is the same function
- * the server ran, so the overlay and the reconciled render cannot place the
- * block differently.
- */
+/** Rebuilds the whole timeline: a move changes order, today's coverage, and whether the block belongs on the page. */
 function applyReschedule(page: TodayPageData, patch: ReschedulePatch): TodayPageData {
   const sources = page.timeline.map((entry: TodayItem) =>
     entry.item.id === patch.itemId

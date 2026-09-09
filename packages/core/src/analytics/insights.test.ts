@@ -44,14 +44,10 @@ describe("buildInsights", () => {
   });
 });
 
-/* -------------------------------------------------------------------------- */
-/* Sample-size gating                                                         */
-/* -------------------------------------------------------------------------- */
-
 describe("the time-of-day comparison", () => {
   const { blocks: minimum, perSide } = INSIGHT_THRESHOLDS.timeOfDay;
 
-  /** 90% before the cutoff, 60% after — comfortably past the noise floor. */
+  // 90% before the cutoff, 60% after.
   const wellSampled = [...blocks(10, 9, 9), ...blocks(10, 18, 6)];
 
   it("speaks once enough blocks sit on both sides of the cutoff", () => {
@@ -71,11 +67,6 @@ describe("the time-of-day comparison", () => {
     expect(only(buildInsights({ ...EMPTY, workBlocks: tooFew }), "time-of-day")).toBeUndefined();
   });
 
-  /**
-   * The total is not enough on its own. Nineteen morning blocks and one evening
-   * block would clear it while resting the entire comparison on a single
-   * observation, which is exactly the noise the rule exists to suppress.
-   */
   it("is suppressed when one side is thin, however large the total", () => {
     const lopsided = [...blocks(24, 9, 22), ...blocks(perSide - 1, 18, 2)];
     expect(lopsided.length).toBeGreaterThan(minimum);
@@ -84,8 +75,7 @@ describe("the time-of-day comparison", () => {
   });
 
   it("is suppressed when the two rates are barely apart", () => {
-    // 94% against 88% once the out-of-period dates are dropped: sampled
-    // enough to speak, with nothing worth saying.
+    // 94% against 88% once the out-of-period dates are dropped.
     const flat = [...blocks(20, 9, 16), ...blocks(19, 18, 15)];
 
     expect(only(buildInsights({ ...EMPTY, workBlocks: flat }), "time-of-day")).toBeUndefined();
@@ -133,7 +123,6 @@ describe("the estimate gap", () => {
     expect(insight).toBeUndefined();
   });
 
-  /** Tasks with no estimate cannot make up the numbers (Domain Rule 3). */
   it("does not count unestimated tasks toward its sample", () => {
     const padded = [
       ...overrun(minimum - 1),
@@ -222,7 +211,6 @@ describe("the focus weekday", () => {
     expect(only(buildInsights({ ...EMPTY, focusSessions: thin }), "focus-weekday")).toBeUndefined();
   });
 
-  /** A day that led on one long session is a session, not a pattern. */
   it("is suppressed when the leading day has too few sessions of its own", () => {
     const oneBigDay = [
       session({ date: "2026-06-02", hour: 9, minutes: 600 }),
@@ -241,7 +229,6 @@ describe("the focus weekday", () => {
     const level = [
       ...tuesdays.map((date) => session({ date, hour: 9, minutes: 61 })),
       ...others.map((date) => session({ date, hour: 9, minutes: 30 })),
-      // Four Mondays and Wednesdays at 60, against Tuesday's 61.
       ...["2026-06-01", "2026-06-08", "2026-06-03", "2026-06-10"].map((date) =>
         session({ date, hour: 14, minutes: 91 }),
       ),
@@ -274,19 +261,7 @@ describe("the block completion rate", () => {
   });
 });
 
-/* -------------------------------------------------------------------------- */
-/* Domain Rule 8 — what the sentences may say                                 */
-/* -------------------------------------------------------------------------- */
-
-/**
- * Every sentence this module can produce, gathered from fixtures that make each
- * kind speak, then read for the two things Domain Rule 8 forbids.
- *
- * The lists are the rule written as vocabulary. A causal connective turns a
- * measurement into an explanation the data cannot support; an adjective for the
- * user turns it into a verdict (Domain Rule 7). Neither may appear, in any
- * insight, for any input.
- */
+// Domain Rule 8 written as vocabulary: no causal connective, no adjective for the user.
 const CAUSAL = [
   "because",
   "due to",
@@ -362,8 +337,7 @@ describe("the vocabulary of every insight", () => {
         ...dates(8).map((date) => session({ date, hour: 14, minutes: 20 })),
       ],
     }),
-    // A period where almost nothing was completed: the sentences must stay as
-    // level here as they are when the numbers are flattering.
+    // A period where almost nothing was completed.
     ...buildInsights({ ...EMPTY, workBlocks: [...blocks(12, 9, 1), ...blocks(12, 18, 0)] }),
   ].map((insight) => insight.text);
 
@@ -386,7 +360,7 @@ describe("the vocabulary of every insight", () => {
   it("states a measurement and ends there", () => {
     for (const text of everySentence) {
       expect(text.endsWith(".")).toBe(true);
-      // One sentence each: a second clause is where an explanation would go.
+      // One sentence each.
       expect(text.split(". ").length).toBe(1);
     }
   });

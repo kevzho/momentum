@@ -27,14 +27,7 @@ import {
 } from "@/features/analytics/components/charts/chart-theme";
 import { ANALYTICS_COPY, dayLabel } from "@/features/analytics/copy";
 
-/**
- * Chart 5 — completions per day.
- *
- * An area rather than bars, because this one is read for its shape over a
- * window rather than for any single day's value, and ninety thin bars make a
- * shape harder to see than a filled line does. The y-axis is whole tasks, so
- * its ticks are integers — a "2.5 tasks" gridline would be nonsense.
- */
+/** An area, read for its shape rather than any single day. The y-axis is whole tasks, so ticks are integers. */
 export function CompletionTrendChart({ data }: { data: readonly DayValue[] }) {
   const columns: ChartTableColumn<DayValue>[] = [
     { header: ANALYTICS_COPY.columns.date, cell: (row) => dayLabel(row.date) },

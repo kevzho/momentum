@@ -15,31 +15,15 @@ import { oneOf } from "../mappers/scalars";
 import type { InsertRow, MomentumClient, UpdateRow } from "../types";
 
 /**
- * `calendar_blocks` — the one table every time-bound thing lives in.
- *
- * Plain functions over a user-scoped client, returning domain types. Ownership
- * is never re-checked here: row-level security is the authorization, and a
- * second permission model in TypeScript is only somewhere for the two to
- * disagree (docs/ARCHITECTURE.md §4).
- *
- * `completed_at` appears in no insert or patch shape below. It is a guarded
- * column: the only way to move it is `complete_block` / `uncomplete_block`,
- * which is what `complete()` and `uncomplete()` call (Domain Rule 15).
+ * Ownership is never re-checked here: row-level security is the authorization.
+ * `completed_at` is a guarded column and appears in no insert or patch shape;
+ * it moves only through `complete_block` / `uncomplete_block`.
  */
 
-/* -------------------------------------------------------------------------- */
-/* The window query                                                           */
-/* -------------------------------------------------------------------------- */
-
 /**
- * The range a week or a day is asked for.
- *
- * `start`/`end` are the half-open UTC bounds `[start, end)` that `weekRange`
- * produces — half-open because a block ending exactly at midnight belongs to
- * the earlier day and must not be counted twice by the next day's query.
- * `startDate`/`endDate` are the first and last displayed local dates, which the
- * recurrence predicates need because a series' `until` and an override's
- * `occurrence_date` are `date` columns, not instants.
+ * `start`/`end` are the half-open UTC bounds `[start, end)`. `startDate`/`endDate`
+ * are the first and last displayed local dates, needed because a series' `until`
+ * and an override's `occurrence_date` are `date` columns, not instants.
  */
 export interface BlockWindow {
   start: Instant;
@@ -48,16 +32,7 @@ export interface BlockWindow {
   endDate: LocalDate;
 }
 
-/**
- * The three kinds of row a window contains, kept apart.
- *
- * They are returned separately rather than as one list because they mean three
- * different things: `blocks` belong on the grid as themselves, `series` are
- * rules that produce occurrences, and `overrides` are the edits applied to
- * those occurrences. `expandAll(series, window, overrides)` takes the last two
- * exactly as they come back — `expandSeries` filters overrides by their series
- * itself, so there is nothing to partition first.
- */
+/** `series` and `overrides` go straight to `expandAll(series, window, overrides)`. */
 export interface BlockWindowRows {
   blocks: CalendarBlock[];
   series: EventBlock[];
@@ -65,23 +40,12 @@ export interface BlockWindowRows {
 }
 
 /**
- * Everything the displayed range needs, in one round trip.
+ * Plain blocks, series rules and overrides for a window, in one round trip.
  *
- * The three predicates are fixed by docs/ARCHITECTURE.md §11 and are disjoint —
- * `blocks_recurrence_kind_chk` makes a series row one with `recurrence` and no
- * `series_id`, so no row can be counted as two things:
- *
- *   plain     recurrence is null and series_id is null
- *             and start_at < :end and end_at > :start
- *   series    recurrence is not null and start_at < :end
- *             and (recurrence_until is null or recurrence_until >= :startDate - 1)
- *   override  series_id is not null
- *             and occurrence_date between :startDate - 1 and :endDate + 1
- *
- * The one-day margin on both sides is not slack. The window's bounds are
- * instants chosen in the *user's* timezone while a series' dates are resolved
- * in the *series'* timezone (Domain Rule 16), so the local date either side of
- * the range can still own an occurrence that reaches into it.
+ * The one-day margin on the series/override date predicates is load-bearing:
+ * the window's bounds are instants in the user's timezone while a series' dates
+ * resolve in the series' timezone, so the local date either side of the range
+ * can still own an occurrence that reaches into it.
  */
 export async function listWindow(
   client: MomentumClient,
@@ -90,9 +54,8 @@ export async function listWindow(
   const lead = addDays(window.startDate, -1);
   const trail = addDays(window.endDate, 1);
 
-  // Values are quoted so that PostgREST reads them as opaque strings: an
-  // instant contains the `.` that separates a filter's parts, and quoting is
-  // what says "the value starts here".
+  // Values are quoted so PostgREST reads them as opaque strings: an instant
+  // contains the `.` that separates a filter's parts.
   const { data, error } = await client
     .from("calendar_blocks")
     .select("*")
@@ -104,15 +67,9 @@ export async function listWindow(
           `or(recurrence_until.is.null,recurrence_until.gte."${lead}"))`,
         `and(series_id.not.is.null,` +
           `occurrence_date.gte."${lead}",occurrence_date.lte."${trail}")`,
-        // A fourth predicate, beyond the three in docs/ARCHITECTURE.md §11.
-        // An override may move its occurrence to a different week, and then its
-        // `occurrence_date` — the date the *rule* produced — is outside this
-        // window while the block the user can see is inside it. Selecting
-        // overrides only by that date makes such an occurrence disappear from
-        // both weeks: absent here because its rule date is elsewhere, and
-        // dropped there because `expandSeries` judges it on its new times.
-        // Matching on the times as well is what makes a moved occurrence
-        // findable in the week it was moved to.
+        // An override moved to another week has its `occurrence_date` outside
+        // this window while its visible times are inside it; matching on the
+        // times too is what keeps a moved occurrence findable.
         `and(series_id.not.is.null,` + `start_at.lt."${window.end}",end_at.gt."${window.start}")`,
       ].join(","),
     )
@@ -130,17 +87,7 @@ export async function listWindow(
   return rows;
 }
 
-/* -------------------------------------------------------------------------- */
-/* Reads by identity                                                          */
-/* -------------------------------------------------------------------------- */
-
-/** One block, or null. A row hidden by RLS is indistinguishable from a missing one, by design. */
-/**
- * Blocks completed inside a window of instants.
- *
- * "Completed" means the span was executed (Domain Rule 13), which is what the
- * `blocks_completed` quest metric counts — not that a task finished.
- */
+/** Blocks whose span was executed inside `[start, end)` — not tasks that finished. */
 export async function listCompletedBetween(
   client: MomentumClient,
   userId: Uuid,
@@ -159,6 +106,7 @@ export async function listCompletedBetween(
   return data.map(rowToCalendarBlock);
 }
 
+/** A row hidden by RLS is indistinguishable from a missing one, by design. */
 export async function findById(client: MomentumClient, id: Uuid): Promise<CalendarBlock | null> {
   const { data, error } = await client
     .from("calendar_blocks")
@@ -170,13 +118,7 @@ export async function findById(client: MomentumClient, id: Uuid): Promise<Calend
   return data === null ? null : rowToCalendarBlock(data);
 }
 
-/**
- * The override row for one occurrence of a series, or null.
- *
- * `blocks_override_uniq` is a unique index on `(series_id, occurrence_date)`, so
- * there is at most one — which is also what makes writing an override idempotent
- * under retry (Domain Rule 17).
- */
+/** The override row for one occurrence, or null; `blocks_override_uniq` guarantees at most one. */
 export async function findOverride(
   client: MomentumClient,
   seriesId: Uuid,
@@ -193,21 +135,7 @@ export async function findOverride(
   return data === null ? null : rowToEventBlock(data);
 }
 
-/* -------------------------------------------------------------------------- */
-/* Coverage                                                                   */
-/* -------------------------------------------------------------------------- */
-
-/** How much of a task's planned work is on the calendar, and how much of it is done. */
-/**
- * Every work block belonging to a set of tasks, oldest first.
- *
- * This is Domain Rule 2 as a query: one task, N rows, ordered by when they
- * start. The detail sheet renders the whole list — "Mon 45m, Tue 60m, Thu 30m"
- * — and the coverage sum is taken over it. Unbounded by any calendar window,
- * because a task's blocks are its own regardless of which week is on screen.
- *
- * `blocks_task_idx` makes this an index scan on `task_id`.
- */
+/** Every work block for a set of tasks, oldest first, unbounded by any window. */
 export async function listForTasks(
   client: MomentumClient,
   taskIds: readonly Uuid[],
@@ -226,20 +154,8 @@ export async function listForTasks(
 }
 
 /**
- * Work blocks whose span *starts* inside a window of instants.
- *
- * Analytics counts a block on the local date it starts, the same column the
- * calendar draws it in (Domain Rule 4), so the predicate is on `start_at`
- * alone — a block reaching into the window from the day before belongs to that
- * earlier day and is the previous period's.
- *
- * Only `work`: an event is somebody else's meeting and a habit block is
- * measured by its habit's completions, so neither is scheduled work the
- * scheduled-versus-completed comparison is about. Recurring rows cannot appear
- * here at all — only events recur (Domain Rule 16) — so there is nothing to
- * expand and no series to filter out.
- *
- * `blocks_user_start_idx` covers it.
+ * Work blocks whose span *starts* inside `[start, end)`. The predicate is on
+ * `start_at` alone because analytics counts a block on the date it starts.
  */
 export async function listWorkBetween(
   client: MomentumClient,
@@ -267,13 +183,8 @@ export interface BlockCounts {
 }
 
 /**
- * Per-task work-block counts, unbounded by any window.
- *
- * Domain Rule 13 labels a block's completion control by what it will do — the
- * task's only block, or its last incomplete one, completes the task — and that
- * question is about *all* of the task's blocks, not the displayed week's. A
- * count restricted to the visible range would tell a user that Thursday's block
- * finishes the task while next Monday's was still outstanding.
+ * Per-task work-block counts across all weeks — "does this block finish the
+ * task?" is a question about every block, not the displayed week's.
  */
 export async function blockCountsByTask(
   client: MomentumClient,
@@ -300,26 +211,12 @@ export async function blockCountsByTask(
   return counts;
 }
 
-/** What a habit block is labelled and coloured with: the habit's own name and hue. */
 export interface HabitLabel {
   name: string;
   color: ProjectColor | null;
 }
 
-/**
- * The habits behind a set of habit blocks.
- *
- * A habit block carries no title of its own — `blocks_event_title_chk` requires
- * one only of events, because work and habit blocks display their parent's
- * (docs/DATABASE.md § calendar_blocks). Rendering the block therefore needs the
- * habit, exactly as rendering a work block needs its task.
- *
- * It lives here rather than in a habits repository for the same reason
- * `tasks.scheduledMinutesByTask` reads `calendar_blocks`: the question is "what
- * do I put on this block", which belongs to the block. Phase 6 owns habits
- * themselves and will bring its own repository; this reads two columns and
- * makes no claim on that.
- */
+/** Name and colour of the habits behind a set of habit blocks, which carry no title of their own. */
 export async function habitLabels(
   client: MomentumClient,
   habitIds: readonly Uuid[],
@@ -344,18 +241,7 @@ export async function habitLabels(
   return labels;
 }
 
-/**
- * Every habit block in a date range, for a set of habits.
- *
- * This is what "Add to week" reads before it writes: the dates already carrying
- * a block for the habit, so pressing the button twice tops the week up instead
- * of doubling it (`planHabitWeek` in `@momentum/core/habits`). It is also what
- * the habits page uses to show which days already have time reserved.
- *
- * The window is the half-open instant pair `[start, end)` a week resolves to,
- * matched the same way `listWindow` matches plain rows. `blocks_habit_idx`
- * covers the habit filter.
- */
+/** Every habit block overlapping `[start, end)` for a set of habits, oldest first. */
 export async function listForHabits(
   client: MomentumClient,
   habitIds: readonly Uuid[],
@@ -376,18 +262,9 @@ export async function listForHabits(
   return data.map(rowToCalendarBlock);
 }
 
-/* -------------------------------------------------------------------------- */
-/* Writes                                                                     */
-/* -------------------------------------------------------------------------- */
-
 /**
- * A row to create.
- *
- * `id` is optional but the calendar always supplies one: a client-generated
- * UUID means the optimistic row and the persisted row share a key and a retried
- * insert collides with itself instead of creating a duplicate (Domain Rule 17).
- * Override rows are the exception — their identity is `(series_id,
- * occurrence_date)`, which the unique index already enforces.
+ * A client-supplied `id` lets the optimistic row and the persisted row share a
+ * key, and makes a retried insert collide with itself instead of duplicating.
  */
 export interface NewBlock {
   id?: Uuid;
@@ -441,12 +318,6 @@ export async function insert(client: MomentumClient, block: NewBlock): Promise<C
   return rowToCalendarBlock(data);
 }
 
-/**
- * A move, a resize, a retitle or a recolour — one row write.
- *
- * A drag that changes both the day and the duration is still one update, so the
- * grid never shows a block that has moved but not yet resized.
- */
 export async function update(
   client: MomentumClient,
   id: Uuid,
@@ -473,26 +344,15 @@ export async function update(
   return rowToCalendarBlock(data);
 }
 
-/**
- * Deletes a block. Never touches its task or habit (Domain Rule 13): a block is
- * a plan for some time, and abandoning the plan is not abandoning the work.
- */
+/** Deletes a block. Never touches its task or habit. */
 export async function remove(client: MomentumClient, id: Uuid): Promise<void> {
   const { error } = await client.from("calendar_blocks").delete().eq("id", id);
   if (error) throw error;
 }
 
-/* -------------------------------------------------------------------------- */
-/* Trusted writes                                                             */
-/* -------------------------------------------------------------------------- */
-
 /**
- * Records that a planned span was executed.
- *
- * `alsoCompleteTask` is the UI's decision, resolved on the server from the
- * task's other blocks (Domain Rule 13); the function does not recompute it. The
- * call goes through the database function because `completed_at` is guarded —
- * a direct update is refused even for the row's own owner (Domain Rule 15).
+ * Records that a planned span was executed. Goes through the database function
+ * because `completed_at` is guarded — a direct update is refused even for the owner.
  */
 export async function complete(
   client: MomentumClient,
@@ -523,17 +383,8 @@ export async function uncomplete(
 }
 
 /**
- * The completion control on a *habit* block.
- *
- * A separate function from `complete()` because completing a habit block is two
- * facts, not one: the planned span was executed (Domain Rule 13) and the habit
- * was done on the block's own local date (Domain Rule 14). `complete_habit_block`
- * writes both in one transaction, which is what makes "exactly one completion"
- * survive a retry — and what keeps `complete_block` doing exactly what Phase 3
- * said it does and nothing more.
- *
- * The completion's date and amount are the block's own, resolved server-side:
- * the client asserts neither.
+ * Completes a habit block and records the habit completion on the block's own
+ * local date in one transaction; date and amount are resolved server-side.
  */
 export async function completeHabit(client: MomentumClient, blockId: Uuid): Promise<CalendarBlock> {
   const { data, error } = await client.rpc("complete_habit_block", { p_block_id: blockId });
@@ -542,11 +393,7 @@ export async function completeHabit(client: MomentumClient, blockId: Uuid): Prom
   return rowToCalendarBlock(data);
 }
 
-/**
- * Reverses it, and only as far as it went: the day's completion is removed only
- * when this block is the one that recorded it. A day ticked from the habits
- * page survives. XP is never withdrawn (Domain Rule 7).
- */
+/** Removes the day's completion only when this block recorded it. XP is never withdrawn. */
 export async function uncompleteHabit(
   client: MomentumClient,
   blockId: Uuid,

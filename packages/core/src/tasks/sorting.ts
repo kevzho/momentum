@@ -1,14 +1,7 @@
 import type { Uuid } from "../types/scalars";
 import type { Task } from "../types/task";
 
-/**
- * List ordering. Pure, total, and stable.
- *
- * "Stable" is load-bearing rather than incidental: the list is drag-reorderable
- * and keyboard-reorderable, so a comparator that returned 0 for two rows and
- * let them swap on an unrelated re-render would move a row the user did not
- * touch. Every comparator here ends in a deterministic tie-break.
- */
+/** List ordering. Every comparator ends in a deterministic tie-break: the list is reorderable, so rows must never swap on a re-render. */
 
 export const TASK_SORTS = ["manual", "due", "priority", "title", "created", "estimate"] as const;
 export type TaskSort = (typeof TASK_SORTS)[number];
@@ -28,16 +21,7 @@ export const TASK_SORT_LABELS: Record<TaskSort, string> = {
   estimate: "Estimate",
 };
 
-/**
- * One comparison between two rows on one key.
- *
- * `reversible` is the part a plain comparator gets wrong. A row whose value is
- * *absent* is not ordered relative to a row that has one — it simply goes last
- * — so that ordering must survive `desc` unchanged, while the ordering between
- * two rows that both have values must not. Carrying the distinction in the
- * return value is what lets `sortTasks` apply the direction to exactly the
- * comparisons it should.
- */
+/** One comparison between two rows on one key. */
 interface Comparison {
   order: number;
   /** False for "absent sorts last", which is fixed in both directions. */
@@ -47,15 +31,7 @@ interface Comparison {
 /** `null` means "equal on this key"; the caller falls through to the tie-break. */
 type Comparator = (a: Task, b: Task) => Comparison | null;
 
-/**
- * Missing values sort last in BOTH directions.
- *
- * Deliberate, and the one place this file departs from a plain comparator. A
- * task with no due date has not "got the largest due date" — it has no
- * deadline, and reversing the sort should not float a hundred undated tasks to
- * the top and bury the three that are actually due. The same holds for
- * estimates.
- */
+/** Missing values sort last in BOTH directions: reversing "due" must not float every undated task to the top. */
 function compareOptional<T>(
   a: T | null,
   b: T | null,
@@ -76,29 +52,18 @@ function compareRequired(order: number): Comparison | null {
 const byString = (a: string, b: string): number => a.localeCompare(b, "en");
 const byNumber = (a: number, b: number): number => a - b;
 
-/**
- * The comparators, each in its natural "ascending" reading:
- * soonest deadline, most urgent, A→Z, oldest, shortest, user's own order.
- */
+/** Each in its natural "ascending" reading: soonest deadline, most urgent, A→Z, oldest, shortest, user's own order. */
 const COMPARATORS: Record<TaskSort, Comparator> = {
   manual: (a, b) => compareRequired(byNumber(a.sortOrder, b.sortOrder)),
   due: (a, b) => compareOptional(a.dueDate, b.dueDate, byString),
-  // `1` is the most urgent priority and `4` means "none", so ascending by the
-  // stored number is already most-urgent-first.
+  // `1` is the most urgent, so ascending by the stored number is most-urgent-first.
   priority: (a, b) => compareRequired(byNumber(a.priority, b.priority)),
   title: (a, b) => compareRequired(a.title.localeCompare(b.title, "en", { sensitivity: "base" })),
   created: (a, b) => compareRequired(byString(a.createdAt, b.createdAt)),
   estimate: (a, b) => compareOptional(a.estimatedMinutes, b.estimatedMinutes, byNumber),
 };
 
-/**
- * Sorts a copy. The input is server props and is never mutated.
- *
- * The tie-break chain is manual order, then id: two tasks that are equal on the
- * chosen key keep the order the user dragged them into, and two that were never
- * dragged still land in a fixed order rather than whichever the engine felt
- * like. `manual` itself falls straight through to the id.
- */
+/** Sorts a copy; never mutates. Tie-break is manual order, then id. */
 export function sortTasks(
   tasks: readonly Task[],
   sort: TaskSort,
@@ -116,21 +81,10 @@ export function sortTasks(
   });
 }
 
-/* -------------------------------------------------------------------------- */
-/* Manual reordering                                                          */
-/* -------------------------------------------------------------------------- */
-
 /**
- * `sort_order` is `double precision` precisely so a row can be inserted at the
- * midpoint of its two new neighbours (`20260906120300_tasks.sql`). Wherever a
- * midpoint exists one row is written per reorder instead of renumbering the
- * list, which is what makes both the drag and its keyboard equivalent a single
- * optimistic mutation.
- *
- * The ends are the two cases with only one neighbour: dropping at the top goes
- * one step below the current first, at the bottom one step above the current
- * last. `STEP` is 1 because these are floats and the absolute scale is
- * meaningless — only the ordering is.
+ * `sort_order` is `double precision` so a row can be inserted at the midpoint
+ * of its neighbours: one write per reorder. `STEP` is the room taken at either
+ * end; the absolute scale is meaningless.
  */
 const STEP = 1;
 
@@ -141,15 +95,8 @@ export interface TaskOrder {
 }
 
 /**
- * The writes that place `movedId` at `toIndex` of `ordered`.
- *
- * `ordered` is the list as displayed, and `toIndex` is the index the row should
- * end up at *after* the move — the same convention the keyboard path and the
- * drop handler both speak. Empty means "write nothing": the move is a no-op, or
- * the list already reads the way it would afterwards.
- *
- * One change is the ordinary answer. More than one is the tied-run case below,
- * which no single number can express.
+ * The writes that place `movedId` at `toIndex` (its index after the move) of
+ * `ordered`. Empty means nothing to write; more than one is the tied-run case.
  */
 export function sortOrdersForMove(
   ordered: readonly Task[],
@@ -163,8 +110,7 @@ export function sortOrdersForMove(
   const target = Math.max(0, Math.min(toIndex, ordered.length - 1));
   if (target === fromIndex) return [];
 
-  // The neighbours in the list with the moved row taken out, which is what the
-  // list will look like once it lands.
+  // The neighbours with the moved row taken out.
   const without = ordered.filter((task) => task.id !== movedId);
   const before = target > 0 ? without[target - 1] : undefined;
   const after = without[target];
@@ -180,25 +126,15 @@ export function sortOrdersForMove(
 }
 
 /**
- * The neighbours hold the same number, so there is no midpoint — and no value
- * given to the moved row alone can land it between them. `sortTasks`'s manual
- * comparator reads `sortOrder` first and only falls through to the id
- * tie-break when two rows are *exactly* equal: a number below the run sorts the
- * moved row above all of it, a number above sorts it below all of it, and the
- * run's own number restores the very id order the drag is trying to change.
- *
- * This is the normal state of a list, not an edge case — every task is created
- * at `0` — so the run is spread instead. The tied rows and the moved row are
- * given evenly spaced numbers in the order the list will read, inside the gap
- * left by the nearest distinct row on either side, and the rows whose number
- * does not actually change are not written. Every already-spread list still
- * bisects with the single write above.
+ * The neighbours hold the same number, so no single value can land the moved
+ * row between them (every task is created at `0`, so this is the normal case).
+ * The tied run plus the moved row are spread evenly inside the gap left by the
+ * nearest distinct rows; rows whose number does not change are not written.
  */
 function spreadTiedRun(without: readonly Task[], target: number, moved: Task): TaskOrder[] {
   const tied = (without[target] as Task).sortOrder;
 
-  // The whole run of equal orders around the seam; `target - 1` and `target`
-  // are both in it by construction.
+  // The whole run of equal orders around the seam.
   let first = target - 1;
   while (first > 0 && (without[first - 1] as Task).sortOrder === tied) first -= 1;
   let last = target;
@@ -207,8 +143,7 @@ function spreadTiedRun(without: readonly Task[], target: number, moved: Task): T
   const run = [...without.slice(first, target), moved, ...without.slice(target, last + 1)];
   const under = without[first - 1];
   const over = without[last + 1];
-  // With no distinct row on a side there is nothing to stay clear of, so the
-  // run simply takes `STEP`-wide room of its own on that side.
+  // With no distinct row on a side, the run takes `STEP`-wide room of its own.
   const below = under === undefined ? tied - STEP * (run.length + 1) : under.sortOrder;
   const above = over === undefined ? tied + STEP * (run.length + 1) : over.sortOrder;
   const gap = (above - below) / (run.length + 1);
@@ -218,15 +153,7 @@ function spreadTiedRun(without: readonly Task[], target: number, moved: Task): T
     .filter((change, index) => change.sortOrder !== (run[index] as Task).sortOrder);
 }
 
-/**
- * The number that puts a new row at the top of the list.
- *
- * Quick Add captures from any route, and a capture is meant to be the first
- * thing the user sees in the Inbox — not a row sorted into the middle of
- * whatever else happens to hold the default `0`. One step below the current
- * minimum is distinct from every row that exists, so the new row is placed
- * rather than tied, and the next reorder is the single write above.
- */
+/** The number that puts a new row at the top of the list: one step below the current minimum, so it is placed rather than tied. */
 export function sortOrderBefore(tasks: readonly { sortOrder: number }[]): number {
   let minimum = Infinity;
   for (const task of tasks) minimum = Math.min(minimum, task.sortOrder);

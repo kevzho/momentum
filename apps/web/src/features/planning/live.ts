@@ -11,19 +11,9 @@ import type {
 } from "@/features/calendar/types";
 
 /**
- * The drawer's view of the week, derived — never stored.
- *
- * The board hands the drawer two things: the server's sections (`plan`) and
- * the week as the user sees it right now (`items`, the optimistic overlay).
- * Every number the drawer shows comes from those two through the pure
- * functions below and `@momentum/core/scheduling`; nothing is kept in state
- * and nothing waits for a refresh. That is what makes a total, a bar, a
- * coverage label or a warning move in the same frame as the drop that changed
- * it, and roll back with it when the write fails (Domain Rule 11).
- *
- * None of this does date maths. The projections are field-for-field, and the
- * arithmetic happens in `@momentum/core/scheduling` against the profile
- * timezone carried in the context (Domain Rules 4 and 5).
+ * The drawer's view of the week, derived from `plan` and the optimistic
+ * `items` and never stored, so every number moves with a drop and rolls back
+ * with it. No date maths here; that is `@momentum/core/scheduling`'s.
  */
 
 /** Every item on the board as the scheduler sees it. All-day items map too; `occupiesTime` ignores them. */
@@ -42,7 +32,7 @@ export function commitmentsOf(items: readonly CalendarItem[]): Commitment[] {
   }));
 }
 
-/** The scheduler's projection of a drawer row: what it needs and nothing rendering needs. */
+/** The scheduler's projection of a drawer row. */
 export function planningTaskOf(task: PlanTask): PlanningTask {
   return {
     id: task.id,
@@ -54,15 +44,8 @@ export function planningTaskOf(task: PlanTask): PlanningTask {
 }
 
 /**
- * The block length a drop, a Find Time candidate or the manual dialog creates.
- *
- * One function for every route, so the pointer path and the keyboard paths
- * cannot disagree about how long the block is (specs/03-weekly-calendar.md:
- * `estimated_minutes` determines the initial block length; `dnd.ts` fixes the
- * fallback when there is no estimate). Never shorter than a block can be: a
- * five-minute estimate is a real estimate, but the grid's smallest block is
- * `MIN_BLOCK_MINUTES`, and a drop that created a shorter one would make a
- * block the editor and a resize both refuse.
+ * The block length every scheduling route creates. Never shorter than
+ * `MIN_BLOCK_MINUTES`, which the editor and a resize would refuse.
  */
 export function taskBlockMinutes(task: PlanTask): Minutes {
   return Math.max(MIN_BLOCK_MINUTES, task.estimatedMinutes ?? DEFAULT_TASK_BLOCK_MINUTES);
@@ -75,14 +58,9 @@ export interface LiveSections {
 }
 
 /**
- * The sections as the user sees them right now.
- *
- * UNSCHEDULED is "owns no work block anywhere", decided on the server. The
- * moment a row is dropped onto the week the optimistic overlay holds a block
- * for it, so the row leaves the list here, in the same frame, and the server
- * agrees on refresh; if the write fails the block rolls back and the row
- * returns. OVERDUE and DUE THIS WEEK are unaffected — a block does not change
- * a deadline (Domain Rule 1) — and show their coverage instead.
+ * The sections as the user sees them right now: a task leaves UNSCHEDULED the
+ * moment the overlay holds a block for it. The other two sections are
+ * unaffected, since a block does not change a deadline.
  */
 export function liveSections(plan: PlanningData, commitments: readonly Commitment[]): LiveSections {
   const scheduled = new Set<string>();
@@ -97,11 +75,9 @@ export function liveSections(plan: PlanningData, commitments: readonly Commitmen
 }
 
 /**
- * Every task competing for the range, once each, for capacity and conflict
- * maths. Built from the server's sections rather than the live ones on
- * purpose: a task that just left UNSCHEDULED with a 45-minute block still has
- * the rest of its estimate outstanding, and UNSCHEDULED WORK has to keep
- * counting it.
+ * Every task competing for the range, once each. Built from the server's
+ * sections, not the live ones: a task that just left UNSCHEDULED still has the
+ * rest of its estimate outstanding.
  */
 export function planningTasksOf(plan: PlanningData): PlanningTask[] {
   const seen = new Set<string>();
@@ -114,7 +90,6 @@ export function planningTasksOf(plan: PlanningData): PlanningTask[] {
   return tasks;
 }
 
-/** The settings every planning question resolves against, from the profile's read. */
 export function planningContextOf(
   plan: PlanningData,
   settings: CalendarSettings,

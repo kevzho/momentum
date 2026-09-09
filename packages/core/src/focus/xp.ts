@@ -2,31 +2,10 @@ import type { Minutes } from "../types/scalars";
 import type { TaskPriority } from "../types/task";
 
 /**
- * The focus XP rule, written down once.
- *
- * **This module is a specification, not the implementation.** XP is computed by
- * `finish_focus_session()` in SQL, inside a transaction, from timestamps the
- * database stamped itself — that is Domain Rule 6, and nothing on this side of
- * the wire is allowed to assert an amount. What lives here is the same rule in
- * a form that can be exhaustively tested without a database, and the tunables
- * the *interface* legitimately needs to state (a screen that offers a 3-minute
- * session should say up front that it will not earn, rather than letting the
- * user find out afterwards).
- *
- * The obvious objection is that two copies of a rule drift, which is what
- * `CLAUDE.md` forbids. So they are pinned to each other:
- * `packages/db/src/focus-rules.test.ts` reads the migration as text, extracts
- * the numbers `xp_rule()` returns, and fails if any of them disagrees with
- * `FOCUS_XP` below. Changing a tunable is a migration *and* a one-line change
- * here, or the suite goes red.
- *
- * The anti-farming shape is the point (`specs/07-focus-mode.md`):
- * repeatedly starting and abandoning trivial sessions must not be profitable.
- * A session under the minimum earns nothing at all, one session cannot earn
- * more than `sessionCap`, and a day cannot earn more than `dailyCap` however
- * many sessions it contains. Time is still recorded in every one of those
- * cases — the cap limits the reward, never the measurement (Domain Rule 3),
- * and nothing is ever taken away (Domain Rule 7).
+ * A display-side mirror of `finish_focus_session()` in SQL, which is what
+ * actually awards XP (Domain Rule 6). Every number must match `xp_rule()` in
+ * the migration; `packages/db/src/focus-rules.test.ts` fails if they drift.
+ * Caps limit the reward, never the recorded time.
  */
 export const FOCUS_XP = {
   /** `focus_per_minute` — roughly a point a focused minute. */
@@ -67,19 +46,9 @@ export interface FocusXpAward {
 }
 
 /**
- * The award for one finished session.
- *
- * The order is deliberate and is the order the SQL applies:
- *
- * 1. Under the minimum earns nothing — before anything else, so no bonus can
- *    rescue a 90-second session.
- * 2. A point a focused minute.
- * 3. `+10%` for reaching the planned length. "Reaching" is `actual >= planned`,
- *    so a session run past its bell still counts as completed rather than
- *    losing the bonus for overrunning.
- * 4. A small flat bonus when the session is attributed to a P1 task.
- * 5. The session cap, then what is left of the day's cap. Bonuses are inside
- *    the caps, not added after them, or the cap would not be a cap.
+ * The award for one finished session, in the order the SQL applies: minimum
+ * check, base, planned bonus (`actual >= planned`), P1 bonus, session cap,
+ * then the day's remaining cap. Bonuses are inside the caps.
  */
 export function focusXpAward(input: FocusXpInput): FocusXpAward {
   const minutes = Math.max(0, Math.floor(input.actualMinutes));

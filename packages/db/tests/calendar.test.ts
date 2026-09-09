@@ -15,18 +15,9 @@ import * as tasks from "../src/repositories/tasks";
 import { DB_TESTS_ENABLED, SEED_USERS, signIn, userIdOf, type TestClient } from "./support/harness";
 
 /**
- * The calendar's trusted writes, proved against a real database.
- *
- * The thing under test is a set of `security definer` functions and the guard
- * triggers they exist to outrank, so mocking the client would prove nothing
- * (docs/ARCHITECTURE.md §13). The suite skips itself cleanly without
- * `MOMENTUM_DB_TESTS=1`, so `pnpm test` stays green with no Docker.
- *
- * Run with: `MOMENTUM_DB_TESTS=1 pnpm test` against a freshly reset stack.
- *
- * Fixtures are created and torn down per test rather than borrowed from the
- * seed: these tests complete tasks and blocks, and the seed is shared with the
- * RLS suite, which counts rows.
+ * The calendar's trusted writes and guard triggers, proved against a real
+ * database. Run with `MOMENTUM_DB_TESTS=1 pnpm test`. Fixtures are per test:
+ * the seed is shared with the RLS suite, which counts rows.
  */
 
 const describeDb = DB_TESTS_ENABLED ? describe : describe.skip;
@@ -84,8 +75,7 @@ describeDb("calendar completion", () => {
   });
 
   afterEach(async () => {
-    // Blocks have no meaning without their parent and cascade with it
-    // (Domain Rule 13), so deleting the task is the whole teardown.
+    // Blocks cascade with their task, so deleting it is the whole teardown.
     await owner.from("tasks").delete().eq("id", taskId);
   });
 
@@ -129,9 +119,8 @@ describeDb("calendar completion", () => {
         .eq("id", firstBlock())
         .select("id");
 
-      // Domain Rule 15: the browser holds the user's own JWT, so a column a
-      // policy lets them write is client-writable. This is why the column is
-      // guarded rather than merely "not written by the app".
+      // The browser holds the user's own JWT, so anything a policy lets them
+      // write is client-writable; hence the guard.
       expect(error?.code).toBe("42501");
       expect((await readBlock(firstBlock())).completed_at).toBeNull();
     });
@@ -165,8 +154,7 @@ describeDb("calendar completion", () => {
       const first = await blocks.complete(owner, firstBlock());
       const second = await blocks.complete(owner, firstBlock());
 
-      // A retried optimistic mutation is not an error (Domain Rule 17), and a
-      // retry must not move a completion time the user already earned.
+      // A retry must not move a completion time the user already earned.
       expect(second.completedAt).toBe(first.completedAt);
     });
 
@@ -188,9 +176,7 @@ describeDb("calendar completion", () => {
     });
 
     it("finishes the job on a retry whose first attempt lost its response", async () => {
-      // The block is already complete but the task is not — exactly the state a
-      // dropped response leaves behind. Converging on the requested state is
-      // what makes the retry safe.
+      // Block complete, task not: the state a dropped response leaves behind.
       await blocks.complete(owner, firstBlock(), false);
       await blocks.complete(owner, firstBlock(), true);
 
@@ -246,7 +232,6 @@ describeDb("calendar completion", () => {
       await blocks.complete(owner, firstBlock(), true);
       await blocks.uncomplete(owner, firstBlock());
 
-      // Un-doing a span says nothing about the work by itself (Domain Rule 13).
       expect((await readTask()).status).toBe("completed");
     });
 
@@ -254,8 +239,6 @@ describeDb("calendar completion", () => {
       await blocks.complete(owner, firstBlock(), true);
       await blocks.uncomplete(owner, firstBlock(), true);
 
-      // The mirror of complete_block's flag: a completion the user made in one
-      // action can be undone in one action.
       const task = await readTask();
       expect(task.status).toBe("open");
       expect(task.completed_at).toBeNull();
@@ -297,9 +280,6 @@ describeDb("calendar completion", () => {
     it("leaves every one of the task's blocks untouched", async () => {
       await tasks.complete(owner, taskId);
 
-      // Domain Rule 13: incomplete future blocks of a completed task stay on
-      // the calendar. Nothing is deleted and nothing is completed on their
-      // behalf.
       const counts = await blocks.blockCountsByTask(owner, [taskId]);
       expect(counts.get(taskId)).toEqual({ total: 3, incomplete: 3 });
     });
@@ -326,14 +306,7 @@ describeDb("calendar completion", () => {
     });
   });
 
-  /*
-   * Domain Rule 15 says the guarded columns are written "only by security
-   * definer database functions". Phase 2 wrote the guards as `before update`
-   * triggers, which left a hole a client could walk straight through: a row
-   * does not have to be *updated* into a completed state, it can be *created*
-   * in one. These four ran green against the un-fixed schema, which is why they
-   * are here — a guard nobody tried to get past is a guard nobody has tested.
-   */
+  // A row need not be *updated* into a guarded state; it can be *created* in one.
   describe("the guarded columns, on the way in", () => {
     it("refuses a block created already completed", async () => {
       const { error } = await owner
@@ -361,9 +334,6 @@ describeDb("calendar completion", () => {
     });
 
     it("refuses a task created with actual minutes nobody measured", async () => {
-      // The one that matters most: `actual_minutes` is what Domain Rule 3 calls
-      // the product's long-term signal, Phase 7 writes it only from measured
-      // focus sessions, and Phase 10 reads it back as fact.
       const { error } = await owner
         .from("tasks")
         .insert({ user_id: ownerId, title: "Fabricated", actual_minutes: 999 })
@@ -397,15 +367,8 @@ describeDb("calendar completion", () => {
     });
 
     it("refuses a plain update of completed_at after a trusted call in the same session", async () => {
-      /*
-       * Not the whole of what the migration fixed, and worth saying why. The
-       * trusted flag is transaction-*local*, and PostgREST opens a transaction
-       * per request, so a leak between two HTTP calls is not observable from
-       * here at all — the reviewer who found it had to hold one psql
-       * transaction open across both statements. What this can prove is the
-       * part a client could actually reach: a session that has just called a
-       * trusted function still cannot write the column itself.
-       */
+      // The trusted flag is transaction-local and PostgREST opens one per
+      // request, so only the client-reachable half of the leak is provable here.
       await blocks.complete(owner, secondBlock());
 
       const { error } = await owner
@@ -420,16 +383,8 @@ describeDb("calendar completion", () => {
     });
   });
 
-  /*
-   * The same shape of hole one table over. Domain Rule 16 makes an override
-   * something only an event has, and Rule 13 says the database is what enforces
-   * the per-kind shape — but Phase 2 pinned `kind = 'event'` on the series side
-   * of the recurrence checks and left the override side asking only that
-   * `series_id` and `occurrence_date` arrive together. A work block could
-   * therefore carry a `series_id`, which `listWindow` reads as an override and
-   * `rowToEventBlock` throws on, taking the whole week query down with it. The
-   * first two ran green against the un-fixed schema.
-   */
+  // A non-event row carrying a `series_id` would be read as an override by
+  // `listWindow` and make `rowToEventBlock` throw for the whole week.
   describe("the override shape, on the way in", () => {
     /** An event of the owner's for the mis-shaped rows to point at. */
     let seriesId: string;
@@ -473,10 +428,8 @@ describeDb("calendar completion", () => {
     });
 
     it("refuses the cancelled shape as well, which was the same hole", async () => {
-      // `blocks_cancelled_chk` already required a series, so tightening the
-      // override check reaches it too. Left open, a work block stored
-      // `cancelled = true` read back as *not* cancelled: the mappers hardcode
-      // `cancelled: false` for the kinds that cannot have it.
+      // The mappers hardcode `cancelled: false` for non-event kinds, so a stored
+      // `cancelled = true` on a work block would read back as not cancelled.
       const { error } = await owner
         .from("calendar_blocks")
         .insert({
@@ -519,8 +472,7 @@ describeDb("calendar completion", () => {
     it("cannot complete a block it does not own", async () => {
       const { error } = await neighbour.rpc("complete_block", { p_block_id: firstBlock() });
 
-      // `assert_caller` refuses before anything is written. 42501 is what
-      // PostgREST turns into a 403 and the action layer maps to `forbidden`.
+      // 42501 is what PostgREST turns into a 403 and the action layer maps to `forbidden`.
       expect(error?.code).toBe("42501");
       expect((await readBlock(firstBlock())).completed_at).toBeNull();
     });
@@ -543,9 +495,8 @@ describeDb("calendar completion", () => {
 
   describe("the repositories the calendar reads through", () => {
     it("splits a window into plain rows, series and overrides", async () => {
-      // The seed positions everything relative to `now()` in each profile's own
-      // timezone, so the current week is always populated: one weekly series
-      // with an `until`, one moved occurrence and one cancelled one.
+      // The seed positions everything relative to `now()`, so the current week
+      // always holds a weekly series with an `until`, a moved and a cancelled occurrence.
       const timezone = ianaTimeZone("America/New_York");
       const today = todayIn(timezone, nowInstant());
       const week = weekRange(today, 1, timezone);
@@ -564,7 +515,6 @@ describeDb("calendar completion", () => {
       expect(rows.series.length).toBeGreaterThan(0);
       expect(rows.overrides.length).toBeGreaterThan(0);
 
-      // The three predicates are disjoint: no row is counted as two things.
       for (const block of rows.blocks) {
         expect(block.kind === "event" ? block.recurrence : null).toBeNull();
         expect(block.kind === "event" ? block.seriesId : null).toBeNull();
@@ -595,9 +545,6 @@ describeDb("calendar completion", () => {
       const scheduled = await tasks.listUnscheduledFor(owner, ownerId);
       expect(scheduled.map((task) => task.id)).not.toContain(taskId);
 
-      // The same task with its blocks removed is unscheduled again — which is
-      // the set difference the repository does in memory, because PostgREST
-      // cannot express `not exists (select …)`.
       await owner.from("calendar_blocks").delete().eq("task_id", taskId);
       const unscheduled = await tasks.listUnscheduledFor(owner, ownerId);
       expect(unscheduled.map((task) => task.id)).toContain(taskId);

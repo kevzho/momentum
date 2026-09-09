@@ -6,37 +6,10 @@ import { focusMinutesByWeekday } from "./focus";
 import type { AnalyticsPeriod } from "./period";
 
 /**
- * The insight layer: deterministic sentences computed from the aggregations
- * above. No model, no randomness, no stored state — the same period produces
- * the same words every time.
- *
- * **Domain Rule 8 is the whole design of this file**, in three parts.
- *
- * *Correlation, never causation.* Every sentence reports something that was
- * measured and stops there. "You completed 81% of blocks scheduled before 4 PM
- * and 62% of those scheduled later" is a description of two numbers. "You work
- * better in the morning" is a claim about why, which observational data of this
- * kind cannot support — the user may schedule their easiest work early, or
- * their hardest, and nothing here can tell the difference. So no sentence in
- * this file contains a "because", a "so", or a comparative about the person.
- *
- * *Never a characterisation.* The subject of every sentence is the work, the
- * hour or the estimate — never the user's character. There is no "productive",
- * no "consistent", no "focused" as an adjective for a person, and nothing that
- * grades a period (Domain Rule 7). `insights.test.ts` enforces the vocabulary.
- *
- * *Sample-size gating.* A pattern from three data points is noise, and showing
- * noise as a finding is worse than showing nothing. Each kind declares the
- * minimum evidence it needs in `INSIGHT_THRESHOLDS`; below it the insight is
- * **suppressed entirely** rather than shown with a caveat, because a hedged
- * sentence is still a sentence the user will read as a finding. A new account
- * therefore produces an empty array, which is the correct output and the thing
- * the page's empty state renders.
- *
- * Two further floors keep a *sufficiently sampled* triviality from speaking: a
- * difference below `MIN_RATE_DIFFERENCE`, a deviation below
- * `MIN_ESTIMATE_DEVIATION`, or a weekday leader inside `MIN_WEEKDAY_MARGIN` of
- * the runner-up is not a pattern worth naming.
+ * Deterministic insight sentences (Domain Rule 8). Every sentence reports
+ * what was measured, never why, and never characterises the user;
+ * `insights.test.ts` enforces the vocabulary. Each kind is suppressed entirely
+ * below its `INSIGHT_THRESHOLDS` sample size rather than hedged.
  */
 
 export const INSIGHT_KINDS = [
@@ -48,24 +21,18 @@ export const INSIGHT_KINDS = [
 export type InsightKind = (typeof INSIGHT_KINDS)[number];
 
 export interface Insight {
-  /** Stable across renders of the same period, so React keys and tests can rely on it. */
+  /** Stable across renders of the same period. */
   id: string;
   kind: InsightKind;
-  /** The sentence, ready to render. Reports what was measured; never why. */
+  /** The sentence, ready to render. */
   text: string;
   /** How many observations stand behind it. */
   sampleSize: number;
-  /** The minimum this kind required. Kept so a surface can state the basis if it wants to. */
+  /** The minimum this kind required. */
   threshold: number;
 }
 
-/**
- * The minimum evidence each kind needs. Deliberately values, not magic numbers
- * at the call site: they are a product decision, they are the thing a reviewer
- * should argue with, and the tests assert against these names rather than
- * against literals, so raising a bar cannot silently break a test that was
- * really checking the gate exists.
- */
+/** The minimum evidence each kind needs; tests assert against these names. */
 export const INSIGHT_THRESHOLDS = {
   /** Work blocks in the period, and the minimum on each side of the cutoff. */
   timeOfDay: { blocks: 20, perSide: 8 },
@@ -80,10 +47,10 @@ export const INSIGHT_THRESHOLDS = {
 /** The wall-clock hour the time-of-day comparison splits on: 4 PM. */
 export const TIME_OF_DAY_CUTOFF_HOUR = 16;
 
-/** Below a ten-point gap, two completion rates are not telling the user anything. */
+/** Below this gap, two completion rates are not a pattern. */
 export const MIN_RATE_DIFFERENCE = 0.1;
 
-/** Below a tenth off, an estimate was accurate; naming it would manufacture a finding. */
+/** Below this deviation, an estimate was accurate. */
 export const MIN_ESTIMATE_DEVIATION = 0.1;
 
 /** A weekday leader inside this margin of the runner-up is a tie, not a pattern. */
@@ -99,12 +66,7 @@ export interface InsightInput {
   projects: readonly ProjectFact[];
 }
 
-/**
- * Every insight the period earns, in a stable order.
- *
- * Returns `[]` when nothing clears its threshold — the ordinary case for a new
- * account, and not an error.
- */
+/** Every insight the period earns, in a stable order. `[]` when nothing clears its threshold. */
 export function buildInsights(input: InsightInput): Insight[] {
   const found: Insight[] = [];
   for (const build of [
@@ -119,17 +81,7 @@ export function buildInsights(input: InsightInput): Insight[] {
   return found;
 }
 
-/* -------------------------------------------------------------------------- */
-/* The four kinds                                                             */
-/* -------------------------------------------------------------------------- */
-
-/**
- * Completion rates for work blocks scheduled either side of 4 PM.
- *
- * Two rates, reported side by side. The sentence does not say which is
- * "better", does not order them as an improvement or a decline, and draws no
- * conclusion about when the user should schedule anything.
- */
+/** Completion rates for work blocks scheduled either side of the cutoff, reported side by side. */
 function timeOfDayInsight(input: InsightInput): Insight | null {
   const split = blocksByStartHour(
     input.workBlocks,
@@ -159,14 +111,7 @@ function timeOfDayInsight(input: InsightInput): Insight | null {
   };
 }
 
-/**
- * The project whose completed work ran furthest from its estimates.
- *
- * One insight, not one per project: a list of six deviations is a table, and
- * the panel is for the thing worth noticing. "Took more time than estimated" is
- * a measurement of two recorded numbers, and the sentence stops there — it does
- * not say the estimate was wrong, or that the user is bad at estimating.
- */
+/** The one project whose completed work ran furthest from its estimates. */
 function estimateGapInsight(input: InsightInput): Insight | null {
   const { tasks: minimum } = INSIGHT_THRESHOLDS.estimateGap;
   const names = new Map<Uuid, string>(input.projects.map((project) => [project.id, project.name]));
@@ -205,13 +150,7 @@ function estimateGapInsight(input: InsightInput): Insight | null {
   };
 }
 
-/**
- * The weekday holding the most recorded focus time.
- *
- * A statement about where the minutes fell, not about the user's rhythm. It
- * speaks only when the leader is clearly ahead of the runner-up, because
- * naming a day that won by four minutes would invent a pattern.
- */
+/** The weekday holding the most recorded focus time; speaks only when clearly ahead of the runner-up. */
 function focusWeekdayInsight(input: InsightInput): Insight | null {
   const { sessions: minimum, perWeekday } = INSIGHT_THRESHOLDS.focusWeekday;
   const byWeekday = focusMinutesByWeekday(input.focusSessions, input.period, input.timezone);
@@ -235,7 +174,7 @@ function focusWeekdayInsight(input: InsightInput): Insight | null {
   };
 }
 
-/** How much of the scheduled work was marked done. A count, stated plainly. */
+/** How much of the scheduled work was marked done. */
 function blockCompletionInsight(input: InsightInput): Insight | null {
   const totals = blockTotals(input.workBlocks, input.period, input.timezone);
   const { blocks: minimum } = INSIGHT_THRESHOLDS.blockCompletion;
@@ -252,16 +191,7 @@ function blockCompletionInsight(input: InsightInput): Insight | null {
   };
 }
 
-/* -------------------------------------------------------------------------- */
-/* Words and numbers                                                          */
-/* -------------------------------------------------------------------------- */
-
-/**
- * The seven day names. A label table, not date arithmetic — the same private
- * constant `scheduling/find-time.ts` keeps for the same reason: it resolves no
- * date, so it has no timezone to get wrong and no business in
- * `@momentum/core/time`.
- */
+// A label table, not date arithmetic; `scheduling/find-time.ts` keeps the same one.
 const WEEKDAY_NAMES: Record<Weekday, string> = {
   0: "Sunday",
   1: "Monday",
@@ -272,12 +202,12 @@ const WEEKDAY_NAMES: Record<Weekday, string> = {
   6: "Saturday",
 };
 
-/** `0.8125` → `"81%"`. Whole percentages: a decimal place implies a precision none of this has. */
+/** `0.8125` → `"81%"`. */
 function percent(value: number): string {
   return `${Math.round(value * 100)}%`;
 }
 
-/** `16` → `"4 PM"`. The hour alone, since the cutoff is always on the hour. */
+/** `16` → `"4 PM"`. */
 function hourLabel(hour: number): string {
   const wrapped = ((hour % 24) + 24) % 24;
   const meridiem = wrapped < 12 ? "AM" : "PM";

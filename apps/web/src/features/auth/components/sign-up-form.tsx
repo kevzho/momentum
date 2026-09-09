@@ -9,31 +9,21 @@ import { FormField, FormMessage } from "@/features/auth/components/form-field";
 import { useResultFocus } from "@/features/auth/components/use-result-focus";
 import { PASSWORD_MIN_LENGTH } from "@/features/auth/schemas";
 
-/**
- * One of exactly two places the browser's own timezone is read
- * (docs/ARCHITECTURE.md §10): here, to seed the new profile. It is read after
- * mount so the server and client render the same markup, and it is sent as a
- * suggestion — `handle_new_user()` keeps it only if Postgres recognises it,
- * and from then on every date boundary resolves in the *profile* timezone
- * (Domain Rule 4).
- */
-/** Nothing to subscribe to: the browser's timezone does not change mid-session. */
+// One of the two sanctioned reads of the browser timezone (docs/ARCHITECTURE.md);
+// it only seeds the new profile, which is the source of truth from then on.
 const NEVER_CHANGES = () => () => {};
 
 function readTimeZone(): string {
   try {
     return Intl.DateTimeFormat().resolvedOptions().timeZone;
   } catch {
-    // Leave it empty; the profile starts at UTC and Settings can correct it.
+    // Empty: the profile starts at UTC and Settings can correct it.
     return "";
   }
 }
 
 function useBrowserTimeZone(): string {
-  // The server snapshot is empty, so the server and the first client render
-  // agree and React swaps in the real value after hydration — the same shape
-  // `useNow` uses for every other time-dependent value
-  // (docs/ARCHITECTURE.md §10).
+  // Empty server snapshot so server and first client render agree.
   return useSyncExternalStore(NEVER_CHANGES, readTimeZone, () => "");
 }
 

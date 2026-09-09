@@ -10,14 +10,9 @@ import { PROGRESS_COPY, progressLabel } from "@/features/gamification/copy";
 import type { QuestRow } from "@/features/gamification/types";
 
 /**
- * A period's quests: what each asks for, how far through it you are, and — only
- * once it is actually met — a Claim control.
- *
- * The bar is the progress the server computed from the same rows it will check
- * a claim against, so the control cannot be offered for something the database
- * would then refuse. A quest that is not finished shows no button rather than a
- * disabled one with an explanation: there is nothing to explain, the day is
- * still going.
+ * The bar is the progress the server computed from the same rows it will
+ * check a claim against. A quest that is not finished shows no button rather
+ * than a disabled one.
  */
 export function QuestList({
   quests,

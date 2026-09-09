@@ -16,22 +16,10 @@ import {
 import { requireSession } from "@/lib/auth/session";
 
 /**
- * The six things a user can do to a focus session.
- *
- * Every one of them is a single RPC, because every one of them is a trusted
- * write: `focus_sessions` and `focus_pauses` are client-read-only, and
- * `20260907130000_focus_functions.sql` is the only path into them
- * (Domain Rule 15). There is no repository `insert` to call here and that is
- * deliberate — an action that could insert a session is an action that could
- * choose when it started.
- *
- * **Nothing here sends a time, and nothing sends an XP amount.** The whole
- * payload of "finish" is an id. What the session measured and what it earned
- * are computed by the database from rows it stamped itself (Domain Rules 6, 15).
- *
- * Every one is idempotent, so the retry a failure toast offers is safe: a start
- * carries its own id, and the other five converge on the state they name rather
- * than refusing a second call (Domain Rule 17).
+ * Focus session mutations. Each is a single RPC into the trusted focus
+ * functions: `focus_sessions` and `focus_pauses` are client-read-only, and the
+ * database stamps every time and decides every XP amount, so nothing here sends
+ * either. All are idempotent, so the failure toast's retry is safe.
  */
 
 export async function startFocusSession(input: unknown): Promise<ActionResult<FocusSession>> {
@@ -50,41 +38,20 @@ export async function resumeFocusSession(input: unknown): Promise<ActionResult<F
   return lifecycle(input, (supabase, id) => focus.resume(supabase, id));
 }
 
-/**
- * The user says they were interrupted.
- *
- * Nothing infers one. The application cannot see the user's window, their
- * phone or the person who walked in, and a count it guessed at would look
- * measured while being invented (Domain Rule 8's spirit). It costs nothing:
- * marking an interruption removes no time and no points (Domain Rule 7).
- */
+/** Interruptions are marked by the user, never inferred; marking one removes no time or points. */
 export async function markFocusInterruption(input: unknown): Promise<ActionResult<FocusSession>> {
   return lifecycle(input, (supabase, id) => focus.markInterruption(supabase, id));
 }
 
-/**
- * Finishing: the measured minutes reach the session, the linked task and — once
- * — the XP ledger.
- */
+/** The measured minutes reach the session, the linked task and, once, the XP ledger. */
 export async function finishFocusSession(input: unknown): Promise<ActionResult<FocusSession>> {
   return lifecycle(input, (supabase, id) => focus.finish(supabase, id));
 }
 
-/**
- * Ending early.
- *
- * The minutes are still recorded, on the session and on the task: work done is
- * work done, and Domain Rule 3 calls that number the product's most valuable
- * long-term signal. What ending early forgoes is the XP, and nothing that was
- * already earned is taken back (Domain Rule 7).
- */
+/** Ending early still records the minutes on the session and task; only the XP is forgone. */
 export async function endFocusSession(input: unknown): Promise<ActionResult<FocusSession>> {
   return lifecycle(input, (supabase, id) => focus.abandon(supabase, id));
 }
-
-/* -------------------------------------------------------------------------- */
-/* Plumbing                                                                   */
-/* -------------------------------------------------------------------------- */
 
 type Lifecycle = (
   supabase: Awaited<ReturnType<typeof requireSession>>["supabase"],
@@ -102,14 +69,7 @@ async function lifecycle(
   return attempt(() => operation(supabase, parsed.data.id));
 }
 
-/**
- * The reads a focus mutation invalidates.
- *
- * `/tasks` and `/today` are not precautionary: finishing a session moves the
- * linked task's `actual_minutes`, which the task list and its detail sheet
- * both render. A task still showing yesterday's total after a session that
- * just credited it is the silent divergence Domain Rule 11 forbids.
- */
+/** Finishing moves the linked task's `actual_minutes`, which `/tasks` and `/today` render. */
 function revalidateFocusSurfaces(): void {
   refresh();
   revalidatePath("/tasks");
@@ -145,14 +105,7 @@ function isDatabaseError(value: unknown): value is DatabaseError {
   );
 }
 
-/**
- * Messages for the refusals a focus interaction can actually cause.
- *
- * Each says what happened and what to do about it. None of them characterises
- * the user, and none mentions XP — a session that earned nothing is not a
- * failed session, and telling someone so at the moment they stop working would
- * be exactly the moralising Domain Rule 7 forbids.
- */
+/** Messages for the refusals a focus interaction can cause; none characterises the user or mentions XP. */
 const CONSTRAINT_MESSAGES: Record<string, string> = {
   focus_planned_chk: "A session is between 1 and 240 minutes.",
   focus_actual_range_chk: "A session cannot record negative time.",
@@ -177,8 +130,7 @@ function describe(error: unknown): { code: ActionErrorCode; message: string } {
     case "23503":
       return { code: "not_found", message: "That task no longer exists." };
     case "23505":
-      // `focus_sessions_active_uniq`: one live session per account, which is
-      // what stops two tabs double-counting the same half hour.
+      // `focus_sessions_active_uniq`: one live session per account.
       return {
         code: "conflict",
         message: "A focus session is already running. Finish or end it before starting another.",
@@ -186,7 +138,7 @@ function describe(error: unknown): { code: ActionErrorCode; message: string } {
     case "23514":
       return { code: "validation", message: constraintMessage(error.message) };
     case "22023":
-      // "This session has already ended", written for a person to read.
+      // e.g. "This session has already ended": already user-readable.
       return { code: "validation", message: error.message };
     default:
       return {

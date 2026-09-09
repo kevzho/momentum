@@ -5,17 +5,7 @@ import { formatDuration } from "@momentum/core/time";
 
 import { APPROXIMATE_PREFIX, CAPACITY } from "@/features/planning/copy";
 
-/**
- * The three lines of the capacity display (specs/05-week-planning.md):
- *
- *     PLANNED             18h 35m
- *     AVAILABLE          ~12h 10m
- *     UNSCHEDULED WORK     4h 20m
- *
- * Numbers only. AVAILABLE carries a tilde because it is what the working
- * window leaves open once commitments are subtracted — an estimate of the
- * week, not a promise about it.
- */
+/** The three lines of the capacity display. AVAILABLE carries a tilde because it is an estimate. */
 export function CapacitySummary({ capacity }: { capacity: WeekCapacity }) {
   const headingId = React.useId();
 

@@ -2,10 +2,7 @@ import * as React from "react";
 import { cn } from "cn";
 import { XIcon } from "lucide-react";
 
-/**
- * A removable token: a parsed quick-add value, an active filter. Removal is a
- * real button so it is reachable by keyboard.
- */
+/** A removable token. Removal is a real button so it is reachable by keyboard. */
 function Chip({
   children,
   onRemove,

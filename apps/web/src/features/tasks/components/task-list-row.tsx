@@ -2,33 +2,27 @@
 
 import * as React from "react";
 import { cn } from "@momentum/ui/lib/utils";
-import { CalendarClockIcon, FlagIcon, GripVerticalIcon, ListTreeIcon } from "lucide-react";
+import {
+  ArchiveRestoreIcon,
+  CalendarClockIcon,
+  FlagIcon,
+  GripVerticalIcon,
+  ListTreeIcon,
+} from "lucide-react";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 
 import { formatCoverage, formatCoverageShort, type Coverage } from "@momentum/core/tasks";
 import { formatLocalDate } from "@momentum/core/time";
 import type { LocalDate, Task } from "@momentum/core/types";
 
+import { Button } from "@momentum/ui/components/button";
 import { Checkbox } from "@momentum/ui/components/checkbox";
 import { ProjectDot } from "@momentum/ui/components/project-dot";
 
 import type { ProjectSummary } from "@/features/tasks/types";
 
-/**
- * One row of the task list.
- *
- * `TaskRow` in `@momentum/ui` is the presentational row and stays that: this is
- * the app-side row that adds what only the task manager has — selection, the
- * roving tab stop, the drag handle and its keyboard equivalent, and the
- * coverage number. It does not use `TaskRow` itself because the interaction
- * model differs at the root element (one tab stop for the whole row, not a
- * separate button), and wrapping would have meant a control inside a control.
- *
- * The row shows **due date and coverage side by side and labelled differently**
- * — "Fri" under Due, "45m / 2h 15m" under Scheduled — because they are
- * different concepts and a UI that ran them together would imply they are the
- * same (Domain Rule 1).
- */
+// Not built on `@momentum/ui`'s `TaskRow`: the root element here is the single
+// tab stop, and wrapping would nest a control inside a control.
 export interface TaskRowData {
   task: Task;
   project: ProjectSummary | null;
@@ -61,6 +55,7 @@ export function TaskListRow({
   selectionActive,
   pending,
   onToggleComplete,
+  onUnarchive,
   onOpen,
   onToggleSelected,
   onFocusRow,
@@ -76,6 +71,8 @@ export function TaskListRow({
   selectionActive: boolean;
   pending: boolean;
   onToggleComplete: (completed: boolean) => void;
+  /** An archived row offers this in place of completion. */
+  onUnarchive: () => void;
   onOpen: () => void;
   onToggleSelected: (additive: boolean) => void;
   onFocusRow: () => void;
@@ -83,13 +80,14 @@ export function TaskListRow({
 }) {
   const { task, project, coverage, blockCount, subtaskCount, completedSubtaskCount } = data;
   const completed = task.status === "completed";
+  const archived = task.status === "archived";
 
-  // Destructured at the hook call, as `features/planning/components/planning-task-row.tsx` does: reading
-  // `draggable.setNodeRef` further down would be a ref access during render.
+  // Destructured at the hook call: reading `draggable.setNodeRef` later would
+  // be a ref access during render.
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: `task:${task.id}`,
     data: { type: "task-row", taskId: task.id, index },
-    disabled: completed,
+    disabled: completed || archived,
   });
   const { setNodeRef: setDropRef, isOver } = useDroppable({
     id: `task-slot:${task.id}`,
@@ -114,22 +112,10 @@ export function TaskListRow({
         registerRef(node);
         setDropRef(node);
       }}
-      // One tab stop for the whole list: arrow keys move between rows, Tab
-      // leaves the list. Seventeen tasks should not be seventeen Tab presses.
+      // Roving tab stop: one for the whole list.
       tabIndex={focused ? 0 : -1}
-      /*
-       * Deliberately NOT `role="option"`, and the row is not a `button`.
-       *
-       * Both of those roles are "children presentational" in ARIA, which flattens
-       * every control inside them out of the accessibility tree — and this row
-       * holds two real checkboxes, so a screen reader would be left with
-       * neither. That is precisely the `nested-interactive` defect Phase 3's
-       * review found on calendar blocks, so it is not repeated here.
-       *
-       * A plain list item, focusable for the roving cursor, named by its title
-       * and described by its state, keeps every control reachable and the
-       * selection announced.
-       */
+      // Deliberately not `role="option"` or a `button`: both are
+      // children-presentational in ARIA and would hide the row's checkboxes.
       aria-labelledby={`task-title-${task.id}`}
       aria-describedby={selected ? `task-state-${task.id}` : undefined}
       data-task-id={task.id}
@@ -137,7 +123,6 @@ export function TaskListRow({
       data-over={isOver || undefined}
       onFocus={onFocusRow}
       onClick={(event) => {
-        // A modifier-click extends the selection; a plain click opens the task.
         if (event.metaKey || event.ctrlKey || event.shiftKey) {
           event.preventDefault();
           onToggleSelected(true);
@@ -151,17 +136,14 @@ export function TaskListRow({
         selected && "bg-accent/60 hover:bg-accent/70",
         isOver && "border-t border-t-primary",
         pending && "opacity-60",
-        // The row travels with the pointer over its neighbours, so it needs an
-        // opaque ground: translucent, its title overprints the row beneath.
+        // Opaque ground while dragging, or the title overprints the row beneath.
         isDragging && "bg-background shadow-md ring-1 ring-border hover:bg-background",
       )}
       style={
         transform ? { transform: `translate3d(0, ${transform.y}px, 0)`, zIndex: 1 } : undefined
       }
     >
-      {/* The drag handle. Every drag has a keyboard path (Domain Rule 10): the
-          list's own Alt+↑/↓ moves the focused row, and the hint lives in the
-          list's description rather than on each of a hundred rows. */}
+      {/* Drag handle; the keyboard path is the list's Alt+↑/↓. */}
       <span
         {...listeners}
         {...attributes}
@@ -170,15 +152,13 @@ export function TaskListRow({
         tabIndex={-1}
         className={cn(
           "-ml-1 flex size-4 shrink-0 cursor-grab items-center justify-center text-muted-foreground/0 transition-colors duration-fast group-hover:text-muted-foreground/60",
-          completed && "invisible",
+          (completed || archived) && "invisible",
         )}
       >
         <GripVerticalIcon className="size-3.5" />
       </span>
 
-      {/* Revealed on hover, on focus, while any row is selected — and always on
-          a coarse pointer, where there is no hover, no modifier-click and no X
-          key to reach a selection by. */}
+      {/* Always visible on a coarse pointer, which has no hover or modifier-click. */}
       <span
         className={cn(
           "shrink-0",
@@ -197,21 +177,42 @@ export function TaskListRow({
       </span>
 
       <span className="shrink-0" onClick={(event) => event.stopPropagation()}>
-        <Checkbox
-          checked={completed}
-          aria-disabled={pending || undefined}
-          onCheckedChange={(next) => {
-            if (pending) return;
-            onToggleComplete(next === true);
-          }}
-          aria-label={completed ? `Reopen "${task.title}"` : `Complete "${task.title}"`}
-        />
+        {archived ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            className="-my-1 size-6"
+            aria-disabled={pending || undefined}
+            onClick={() => {
+              if (pending) return;
+              onUnarchive();
+            }}
+          >
+            <ArchiveRestoreIcon className="size-3.5" aria-hidden="true" />
+            <span className="sr-only">Unarchive &quot;{task.title}&quot;</span>
+          </Button>
+        ) : (
+          <Checkbox
+            checked={completed}
+            aria-disabled={pending || undefined}
+            onCheckedChange={(next) => {
+              if (pending) return;
+              onToggleComplete(next === true);
+            }}
+            aria-label={completed ? `Reopen "${task.title}"` : `Complete "${task.title}"`}
+          />
+        )}
       </span>
 
       <span className="flex min-w-0 flex-1 items-center gap-1.5">
         <span
           id={`task-title-${task.id}`}
-          className={cn("truncate text-sm", completed && "text-muted-foreground line-through")}
+          className={cn(
+            "truncate text-sm",
+            completed && "text-muted-foreground line-through",
+            archived && "text-muted-foreground",
+          )}
         >
           {task.title}
         </span>
@@ -256,7 +257,7 @@ export function TaskListRow({
         ) : null}
       </span>
 
-      {/* Scheduled, and separately Due. Two columns, never one string. */}
+      {/* Scheduled and Due are different concepts: two columns, never one string. */}
       <span
         data-slot="numeric"
         className="hidden w-24 shrink-0 text-right text-xs text-muted-foreground @lg:inline"

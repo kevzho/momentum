@@ -32,22 +32,9 @@ import type { TodayItem } from "@/features/today/types";
 import { useOpenerFocus } from "@/lib/use-opener-focus";
 
 /**
- * Next Up's Reschedule control.
- *
- * The calendar is where a week is arranged; this is the one move a person makes
- * without leaving the day — "not now, at four" — so it is three fields and a
- * button rather than a second grid. It commits the same wall-clock
- * `DaySpan` a drag on the board commits, through the same action, so the two
- * routes cannot produce different rows (Domain Rule 10: a pointer gesture and
- * its keyboard equivalent are one mutation).
- *
- * A dialog rather than a popover because it holds a form with three fields and
- * an error message, and because Radix's focus management is what makes the
- * whole interaction reachable by keyboard. `useOpenerFocus` returns focus to
- * the control that opened it rather than to `<body>`.
- *
- * Wall clock in, wall clock out. The client never asserts an instant; the
- * server converts with the profile timezone (Domain Rule 4).
+ * Next Up's Reschedule control. It commits the same wall-clock `DaySpan` a
+ * drag on the board commits, through the same action; the client never asserts
+ * an instant. `useOpenerFocus` returns focus to the opener rather than `<body>`.
  */
 export function RescheduleDialog({
   entry,
@@ -158,8 +145,7 @@ function RescheduleForm({
       endMinutes: startMinutes + length,
     };
     onReschedule(entry, next);
-    // The same sentence the board speaks for the same result, from the same
-    // module, so a keyboard user hears what a pointer user hears.
+    // The same announcement the board makes, so keyboard and pointer users hear the same thing.
     announce(droppedMessage(entry.item.title, next));
     onClose();
   }
@@ -172,8 +158,7 @@ function RescheduleForm({
       : null;
 
   return (
-    // `noValidate`: the inline messages say what to do about a bad value; the
-    // browser's own bubbles would pre-empt them.
+    // `noValidate`: the browser's own bubbles would pre-empt the inline messages.
     <form noValidate onSubmit={handleSubmit} className="flex flex-col gap-3">
       <div className="flex flex-col gap-1.5">
         <Label htmlFor={`${ids}-date`}>{TODAY_COPY.reschedule.date}</Label>
@@ -242,7 +227,7 @@ function RescheduleForm({
   );
 }
 
-/** Wall clock, always: a day reads 00:00 to 24:00 whether or not its clock moved. */
+/** Wall clock: a day reads 00:00 to 24:00 whether or not its clock moved. */
 const MINUTES_PER_DAY: Minutes = 1440;
 
 function minimumMessage(minutes: Minutes): string {

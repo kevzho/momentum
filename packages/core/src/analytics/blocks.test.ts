@@ -26,11 +26,6 @@ describe("blockTotals", () => {
     });
   });
 
-  /**
-   * Elapsed minutes, not the clock face. A block drawn 01:00–02:00 on the
-   * fall-back morning occupies two real hours of the user's day, and capacity
-   * maths that believed the label would be an hour short.
-   */
   it("counts the minutes a block really consumed across a fall-back hour", () => {
     const totals = blockTotals(
       [block({ date: "2026-11-01", hour: 1, minutes: 60 })],

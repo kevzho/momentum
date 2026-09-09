@@ -9,13 +9,8 @@ import { PageHeader } from "@momentum/ui/components/page-header";
 import { ANALYTICS_COPY } from "@/features/analytics/copy";
 
 /**
- * What a new account sees.
- *
- * A designed page rather than six charts of flat zero — an axis with nothing
- * under it looks like a bug, and a 0% habit rate on day one would be the
- * product's first statement about a user who has not done anything yet
- * (Domain Rule 7). The range control is absent because there is nothing to
- * switch between, and the one action points at the page where the data starts.
+ * What a new account sees, rather than six charts of flat zero: a 0% habit
+ * rate on day one would be the product's first statement about the user.
  */
 export function AnalyticsEmpty() {
   return (

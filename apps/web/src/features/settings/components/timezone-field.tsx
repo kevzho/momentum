@@ -19,18 +19,10 @@ import { Popover, PopoverContent, PopoverTrigger } from "@momentum/ui/components
 import { timeZoneOptions } from "@/features/settings/timezones";
 
 /**
- * The profile timezone, as a searchable list of every IANA zone.
- *
- * A plain `Select` of four hundred rows is not a control anyone can use, so
- * this is the command primitive inside a popover: type "auck" and pick
- * `Pacific/Auckland`. The trigger is a real button with the combobox role, the
- * list is `cmdk`'s (arrow keys, Enter, Escape), and Radix hands focus back to
- * the trigger when the popover closes — a keyboard user is never dropped on
- * `<body>` (Domain Rule 10).
- *
- * While the write is in flight the trigger is `aria-disabled` and its handler
- * refuses to open, rather than natively disabled: the browser blurs a control
- * the moment it is disabled, and this one is focused when the write starts.
+ * A searchable list of every IANA zone: the command primitive inside a
+ * popover. While the write is in flight the trigger is `aria-disabled` rather
+ * than natively disabled: the browser blurs a control the moment it is
+ * disabled, and this one is focused when the write starts.
  */
 export function TimezoneField({
   id,

@@ -7,18 +7,9 @@ import { PanelLeftIcon } from "lucide-react";
 import { Button } from "@momentum/ui/components/button";
 
 /**
- * A persistent column beside the content — the calendar's Plan panel. Not a
- * modal and not an overlay: it takes real layout space, collapses to nothing,
- * and is always in the tab order while open.
- *
- * Below `lg` it collapses out of the way; that width uses `SideSheet` instead.
- *
- * Closing unmounts the panel, and the close button is inside it, so the button
- * the user just pressed disappears from under the focus ring. This is not a
- * modal, so there is no Radix focus scope to restore anything: without
- * `returnFocusTo` the browser drops focus on `<body>` and a keyboard user
- * restarts from the top of the shell (Domain Rule 10). Callers pass a ref to
- * the control that re-opens the panel.
+ * A persistent, non-modal column beside the content. Closing unmounts the
+ * panel and its own close button, and there is no Radix focus scope to restore
+ * focus, so `returnFocusTo` keeps a keyboard user off `<body>`.
  */
 function SidePanel({
   title,
@@ -43,8 +34,7 @@ function SidePanel({
 }) {
   function close(): void {
     onOpenChange(false);
-    // React commits the unmount only after this handler returns, so focus is
-    // moved while the panel is still mounted and simply stays where it lands.
+    // The unmount commits after this handler returns, so focus moved here stays put.
     const target = returnFocusTo?.current ?? null;
     if (target !== null && target.isConnected) target.focus();
   }

@@ -1,18 +1,10 @@
 import type { QuestMetric } from "@momentum/core/types";
 
 /**
- * Every string the progression surface can show.
- *
- * One file, for the reason `features/habits/copy.ts` is one file: Domain Rule 7
- * is a rule about *language*, and a rule about language can only be enforced
- * where the language lives. `copy.test.ts` reads this module and the feature's
- * own source and fails on the vocabulary the rule forbids — "lazy",
- * "unproductive", "failure", "behind", "streak lost", "missed".
- *
- * The vocabulary this surface does use: a quest is **open** until it is
- * **done**; a cap is **reached**, never exceeded or breached; an achievement is
- * **not yet unlocked**, never failed. Nothing here tells the user what kind of
- * person their week made them.
+ * Every string the progression surface can show. `copy.test.ts` reads this
+ * module and the feature's own source and fails on forbidden vocabulary: a
+ * quest is open until done, a cap is reached (never exceeded), an achievement
+ * is not yet unlocked (never failed).
  */
 
 export const PROGRESS_COPY = {
@@ -112,7 +104,7 @@ export const METRIC_LABELS: Record<QuestMetric, string> = {
   blocks_completed: "Scheduled blocks completed",
 };
 
-/** "3 of 5 tasks completed" — the one place a progress phrase is built. */
+/** "3 of 5 tasks completed": the one place a progress phrase is built. */
 export function progressLabel(metric: QuestMetric, value: number, target: number): string {
   return `${value} of ${target} · ${METRIC_LABELS[metric].toLowerCase()}`;
 }

@@ -1,6 +1,5 @@
 import { expect, signIn, test } from "./fixtures";
 
-/** Workflow 15 — the command palette. */
 test.describe("Command palette", () => {
   test.beforeEach(async ({ page }) => {
     await signIn(page);
@@ -16,8 +15,7 @@ test.describe("Command palette", () => {
     await expect(search).toBeFocused();
 
     await search.fill("habits");
-    // The match list is fuzzy, so the navigation command is chosen by name
-    // rather than by whichever row the palette happens to select first.
+    // The match list is fuzzy, so the navigation command is chosen by name.
     await palette.getByRole("option", { name: "Habits", exact: true }).click();
 
     await expect(page).toHaveURL(/\/habits/);

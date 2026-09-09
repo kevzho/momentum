@@ -19,16 +19,7 @@ import type {
   CandidateSpan,
 } from "@/features/calendar/types";
 
-/**
- * The grid's job is to put the right thing in the right place: the day column
- * the wall clock says it belongs to, the offset its minutes map to, and a width
- * that survives an overlap. These go through the real projection rather than
- * hand-written segments, because "which column does 23:30 Monday belong to" is
- * exactly the question that must not be answered twice.
- *
- * UTC keeps the arithmetic in the assertions readable; the timezone-sensitive
- * cases are the projection's and `@momentum/core/time`'s own suites.
- */
+// UTC keeps the arithmetic readable; timezone cases are the projection's own suite.
 const TZ = ianaTimeZone("UTC");
 const WEEK: LocalDate[] = [
   "2026-09-07",
@@ -111,7 +102,6 @@ function renderGrid(
   return { ...view, spec, settings, callbacks };
 }
 
-/** The same mapping the grid uses, spelled out, so the test checks it rather than repeating it. */
 function expectedTopPx(minutes: number, dayStartMinutes: number): number {
   return ((minutes - dayStartMinutes) / 60) * DEFAULT_GRID_SPEC.hourHeightPx;
 }
@@ -126,7 +116,7 @@ describe("WeekGrid", () => {
 
   it("rules the default window by the hour, not by the snap increment", () => {
     renderGrid([]);
-    // 05:00 through 23:00 inclusive: nineteen lines, not seventy-six cells.
+    // 05:00 through 23:00 inclusive.
     expect(screen.getAllByText(/^\d{2}:00$/)).toHaveLength(19);
     expect(screen.getByText("05:00")).toBeDefined();
     expect(screen.queryByText("04:00")).toBeNull();
@@ -239,7 +229,6 @@ describe("WeekGrid", () => {
     expect(preview).not.toBeNull();
     expect(preview?.textContent).toContain("13:00 – 14:00");
     expect(preview?.style.top).toBe(`${expectedTopPx(13 * 60, spec.dayStartMinutes)}px`);
-    // A preview is not a thing on the board: nothing to click, nothing to read.
     expect(preview?.getAttribute("aria-hidden")).toBe("true");
   });
 
@@ -267,12 +256,6 @@ describe("WeekGrid", () => {
   });
 });
 
-/**
- * The candidate outline's caption names where the held block would land. On
- * entering a keyboard mode the candidate *is* the block's own position, and a
- * caption there only overprints the block's title; it appears once there is a
- * second position to name.
- */
 describe("the candidate outline's caption", () => {
   const block = makeItem({ id: "block-1", title: "Gym" });
   const own: CandidateSpan = {

@@ -30,5 +30,5 @@ export type Weekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
 export const WEEKDAYS: readonly Weekday[] = [0, 1, 2, 3, 4, 5, 6];
 
-/** Primary keys are UUIDs. Plain string alias: ids are opaque, and branding every id adds friction without catching a real class of bug. */
+/** Primary keys are UUIDs; deliberately unbranded. */
 export type Uuid = string;

@@ -12,13 +12,6 @@ import {
 } from "@/features/calendar/optimistic";
 import type { CalendarItem, DaySpan, PlanTask } from "@/features/calendar/types";
 
-/**
- * The overlay is what the board renders while a write is in flight, so what it
- * says has to be what the server will say a moment later. These pin the places
- * where the two could disagree without anything failing: the DST reading of a
- * span, the reach of a completion, and which kinds own a title.
- */
-
 const TZ: IanaTimeZone = ianaTimeZone("America/New_York");
 const ID = "3f1a2b6c-9d4e-4a7b-8c5d-1e2f3a4b5c6d";
 
@@ -65,15 +58,8 @@ function workItem(id: string, overrides: Partial<CalendarItem> = {}): CalendarIt
 }
 
 describe("the wall-clock span an optimistic row is built from", () => {
-  /*
-   * 02:00–03:00 does not exist on 2026-03-08 in New York. `fromLocal` moves a
-   * reading inside the gap forward by the gap's width, and for a span that
-   * straddles the gap's far edge that moves the start further than the end —
-   * 02:30 to 03:00 resolves to 03:30 and 03:00, in that order. The server keeps
-   * the drawn length there; an overlay that resolved both ends and stopped
-   * would build an inverted row, which `splitByLocalDay` drops and the grid
-   * never draws.
-   */
+  // 02:00–03:00 does not exist on 2026-03-08 in New York. 02:30–03:00 resolves
+  // to 03:30 and 03:00 via `fromLocal`, i.e. inverted; the server keeps the drawn length.
   const GAP_SPAN: DaySpan = {
     date: localDate("2026-03-08"),
     startMinutes: 150,
@@ -88,7 +74,6 @@ describe("the wall-clock span an optimistic row is built from", () => {
     expect(block.endAt).toBe(server.endAt);
     expect(block.startAt).toBe("2026-03-08T07:30:00.000Z");
     expect(block.endAt).toBe("2026-03-08T08:00:00.000Z");
-    // The length the user drew, not a negative one that renders as nothing.
     expect(durationMinutes(block.startAt, block.endAt)).toBe(30);
   });
 
@@ -122,10 +107,6 @@ describe("the completion patch", () => {
   };
 
   it("reopens the task on every block of it, not only the one that was toggled", () => {
-    // Domain Rule 13 is about the *task*: while it is complete its incomplete
-    // blocks read as settled and count as free time. The server restores all of
-    // them; leaving the siblings stale would draw them settled and subtract
-    // them from capacity for the whole round trip.
     const items = [workItem("block-1"), workItem("block-2")];
 
     const next = applyPatch(items, REOPEN, TZ);

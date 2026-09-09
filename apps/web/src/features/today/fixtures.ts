@@ -14,21 +14,8 @@ import { buildTimeline, type TimelineSource } from "@/features/today/agenda";
 import type { TodayHabit, TodayPageData, TodayProject, TodayTask } from "@/features/today/types";
 
 /**
- * Fixtures for the Today feature's tests.
- *
- * They live here rather than inside one test file because five suites need the
- * same page — the agenda, the optimistic overlay, the copy guard and two
- * component suites — and a `TodayPageData` assembled four times would be four
- * chances for a test to pass against a shape the server does not send.
- *
- * Nothing outside a test imports this module. It is deliberately in the feature
- * directory anyway, so the Domain Rule 7 copy guard scans the strings in it as
- * well: a fixture is where a phrase gets invented and then copied into a
- * component.
- *
- * The timezone is New York throughout, because it is the one every other suite
- * in the repository uses for DST and because a UTC-only fixture cannot catch
- * the class of defect Phases 3 and 4 each found once.
+ * Test fixtures, kept in the feature directory so the copy guard scans their
+ * strings too. New York throughout, so DST defects are catchable.
  */
 
 export const TZ: IanaTimeZone = ianaTimeZone("America/New_York");
@@ -52,10 +39,6 @@ export function at(date: string, hours: number, minutes = 0, tz: IanaTimeZone = 
 }
 
 export const PROJECT: TodayProject = { name: "Research", color: "amber" };
-
-/* -------------------------------------------------------------------------- */
-/* Calendar items                                                             */
-/* -------------------------------------------------------------------------- */
 
 const BASE_EVENT: Omit<CalendarItem, "id" | "blockId"> = {
   kind: "event",
@@ -114,10 +97,6 @@ export function habitItem(overrides: Partial<CalendarItem> & { id: string }): Ca
   };
 }
 
-/* -------------------------------------------------------------------------- */
-/* Tasks and habits                                                           */
-/* -------------------------------------------------------------------------- */
-
 const BASE_TASK: Omit<TodayTask, "id"> = {
   title: "Draft the literature review",
   priority: 2,
@@ -173,10 +152,6 @@ export function todayHabit(overrides: Partial<TodayHabit> & { habit: Habit }): T
     ...overrides,
   };
 }
-
-/* -------------------------------------------------------------------------- */
-/* The page                                                                   */
-/* -------------------------------------------------------------------------- */
 
 /** Builds the timeline the way the server does, so tests never hand-place a row. */
 export function timelineOf(items: readonly CalendarItem[], project: TodayProject | null = null) {

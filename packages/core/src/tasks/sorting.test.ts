@@ -37,11 +37,7 @@ function task(id: string, overrides: Partial<Task> = {}): Task {
 
 const ids = (tasks: readonly Task[]): string[] => tasks.map((t) => t.id);
 
-/**
- * The list as it reads once a reorder's writes are applied — which is the only
- * assertion that means anything about a reorder. A returned number is not a
- * position; where the row lands after `sortTasks` is.
- */
+/** The list as it reads once a reorder's writes are applied. */
 function applied(list: readonly Task[], changes: readonly TaskOrder[]): Task[] {
   const orders = new Map(changes.map((change) => [change.id, change.sortOrder]));
   return sortTasks(
@@ -106,10 +102,6 @@ describe("sortTasks", () => {
     expect(ids(sortTasks(list, "estimate"))).toEqual(["second", "first"]);
   });
 
-  /**
-   * The behaviour a plain comparator gets wrong. Reversing "due date" must not
-   * float every undated task to the top and bury the ones with deadlines.
-   */
   it("keeps missing values last in BOTH directions", () => {
     const list = [
       task("none"),
@@ -138,7 +130,6 @@ describe("sortTasks", () => {
 
     const tied = [task("c"), task("a"), task("b")];
     expect(ids(sortTasks(tied, "priority"))).toEqual(["a", "b", "c"]);
-    // Sorting twice cannot move a row that nothing distinguishes.
     expect(ids(sortTasks(sortTasks(tied, "priority"), "priority"))).toEqual(["a", "b", "c"]);
   });
 
@@ -177,11 +168,6 @@ describe("sortOrdersForMove", () => {
     expect(sortOrdersForMove([task("only")], "only", 0)).toEqual([]);
   });
 
-  /*
-   * The state of every new account's list: `sort_order` defaults to 0, so a
-   * list nobody has reordered is one long tie and the interior drop is the
-   * ordinary case rather than an edge one.
-   */
   it("lands the row on the drop index in a run of equal orders, in both directions", () => {
     const flat = [task("a"), task("b"), task("c"), task("d"), task("e")];
 
@@ -205,8 +191,7 @@ describe("sortOrdersForMove", () => {
   });
 
   it("spreads only the tied run, leaving it between the rows around it", () => {
-    // Displayed as first(-10), a, b, c, last(10): the three tied rows are the
-    // only ones that may be renumbered, and only inside that gap.
+    // Only the three tied rows may be renumbered, and only inside the gap.
     const list = [
       task("first", { sortOrder: -10 }),
       task("a"),
@@ -225,7 +210,6 @@ describe("sortOrdersForMove", () => {
   });
 
   it("leaves an already-spread list bisecting with a single write", () => {
-    // Every reorder of a list whose orders have diverged is still one row.
     let current = [...spread];
     for (let pass = 0; pass < 10; pass += 1) {
       const last = current[current.length - 1] as Task;

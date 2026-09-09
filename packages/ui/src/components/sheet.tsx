@@ -54,11 +54,8 @@ function SheetContent({
   return (
     <SheetPortal>
       <SheetOverlay />
-      {/* `safe-overlay`: a sheet is `fixed` and pinned to two or three edges of
-          the viewport, so it is outside the application frame's own safe-area
-          padding and has to carry its own — otherwise a left drawer's title
-          slides under the iOS status bar. Insets only; a sheet's real padding
-          lives on its header, body and footer. */}
+      {/* `safe-overlay`: a fixed sheet is outside the frame's safe-area padding
+          and must carry its own, or its title slides under the iOS status bar. */}
       <SheetPrimitive.Content
         data-slot="sheet-content"
         data-side={side}

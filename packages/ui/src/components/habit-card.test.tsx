@@ -59,8 +59,6 @@ describe("HabitCard", () => {
     );
 
     const cells = container.querySelectorAll("[data-slot=habit-day]");
-    // A met day carries a check path; an unfinished one is dashed; a plain open
-    // day is neither. Turning the page greyscale leaves all three legible.
     expect(cells[0]?.querySelector("svg path")).not.toBeNull();
     expect(cells[1]?.className).not.toContain("border-dashed");
     expect(cells[2]?.className).toContain("border-dashed");
@@ -125,9 +123,7 @@ describe("HabitCard", () => {
       />,
     );
 
-    // A quick second press while the first is still in flight used to read the
-    // optimistic "done" and dispatch an un-record. Click covers Enter and Space
-    // too: a button's activation is a click, whichever key fired it.
+    // A button's activation is a click whichever key fired it, so this covers Enter and Space.
     const button = screen.getByRole("button");
     fireEvent.click(button);
     fireEvent.keyDown(button, { key: "Enter" });
@@ -146,8 +142,6 @@ describe("HabitCard", () => {
       />,
     );
 
-    // The button (or the static box) is the target; the ring is a child of it,
-    // so the strip stays dense on a laptop and tappable on a phone.
     for (const box of container.querySelectorAll("li > *")) {
       expect(box.className).toContain("pointer-coarse:size-10");
       expect(box.querySelector("[data-slot=habit-day]")?.className).toContain("size-5");
@@ -165,7 +159,6 @@ describe("HabitCard", () => {
       />,
     );
 
-    // Domain Rule 7: a low rate is a number, not a verdict.
     expect(container.textContent?.toLowerCase()).not.toMatch(
       /missed|failed|behind|lazy|broken|streak lost/,
     );

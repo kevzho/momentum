@@ -29,19 +29,7 @@ import { SegmentedControl } from "@momentum/ui/components/segmented-control";
 import { FOCUS_COPY, describePreset, describeStart } from "@/features/focus/copy";
 import type { FocusTaskOption } from "@/features/focus/types";
 
-/**
- * The focus screen at rest: how long, on what, and one button.
- *
- * The four choices `specs/07-focus-mode.md` names are one control — three
- * presets and Custom — because they are one question. Choosing Custom reveals
- * the minutes field and nothing else moves, so the layout does not jump between
- * the two shapes of the same decision.
- *
- * The task picker offers "no task", and that is a real option rather than an
- * empty state: a session with no task still measures and still records, it just
- * has no task's `actual_minutes` to move. Saying so under the control is
- * cheaper than letting someone discover it afterwards.
- */
+/** The focus screen at rest: length, task and Start. "No task" is a real option; the session still records. */
 
 const CUSTOM = "custom";
 
@@ -57,11 +45,7 @@ export interface SessionSetupProps {
   /** Pre-selected from `?minutes=`, when the link came from a calendar block. */
   initialMinutes: Minutes | null;
   pending: boolean;
-  /**
-   * Focus lands here when a session ends. The timer panel is replaced by this
-   * one, so the control the user pressed no longer exists; the view moves focus
-   * to Start on that transition and nowhere else (Domain Rule 10).
-   */
+  /** Receives focus on the transition out of a live session (the pressed control has unmounted), and only then. */
   startControlRef?: React.RefObject<HTMLButtonElement | null>;
   onStart: (input: { plannedMinutes: Minutes; taskId: Uuid | null }) => void;
 }
@@ -76,11 +60,7 @@ export function SessionSetup({
   startControlRef,
   onStart,
 }: SessionSetupProps) {
-  /*
-   * A block's own length arrives as a number, and it is only sometimes one of
-   * the presets — a 45-minute block is a custom length that the user did not
-   * have to type. Both the choice and the number are seeded from it.
-   */
+  // A block's length is only sometimes a preset; both the choice and the custom value are seeded from it.
   const seeded = initialMinutes ?? DEFAULT_MINUTES;
   const [choice, setChoice] = React.useState<LengthChoice>(
     () => presetForMinutes(seeded)?.id ?? CUSTOM,
@@ -165,13 +145,7 @@ export function SessionSetup({
         </p>
       </div>
 
-      {/*
-        `aria-disabled`, never the native attribute. The browser blurs an element
-        the moment it is disabled, so a Start button that disabled itself on
-        press would drop a keyboard user on `<body>` by working — the defect the
-        Phase 5 audit found at four other sites (Domain Rule 10). The handler
-        refuses instead, which is what makes the attribute truthful.
-      */}
+      {/* `aria-disabled`, never native `disabled`: the browser blurs a disabled element, dropping focus on `<body>`. The handler refuses instead. */}
       <Button
         ref={startControlRef}
         type="button"
@@ -184,8 +158,7 @@ export function SessionSetup({
         <PlayIcon aria-hidden="true" />
         {pending
           ? FOCUS_COPY.starting
-          : // The button promises a length only while it has one: an emptied
-            // custom field must not read "Start 0 minutes".
+          : // An emptied custom field must not read "Start 0 minutes".
             startable
             ? describeStart(plannedMinutes)
             : FOCUS_COPY.start}
@@ -194,13 +167,7 @@ export function SessionSetup({
   );
 }
 
-/**
- * What is already known about the task, stated plainly.
- *
- * Estimate and measured time are shown side by side and never merged: they are
- * different facts, and the gap between them is the signal Domain Rule 3 exists
- * to protect.
- */
+/** Project, estimate and measured time, side by side and never merged. */
 function describeSelected(task: FocusTaskOption): string {
   const parts: string[] = [];
   if (task.projectName !== null) parts.push(task.projectName);

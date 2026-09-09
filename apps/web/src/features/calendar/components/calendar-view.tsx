@@ -91,20 +91,9 @@ import { useNow } from "@/lib/time/use-now";
 import { useUserSettings } from "@/lib/time/user-settings";
 
 /**
- * The calendar board: the one client island for the whole surface
- * (docs/ARCHITECTURE.md §5).
- *
- * It owns three things and delegates everything else. **Composition** — the
- * `DndContext`, the grid, the Plan panel and the editor, wired to each other.
- * **The optimistic overlay** — one `useOptimistic` over the week's items, so
- * every mutation shows immediately and every failure rolls back through the
- * same path (Domain Rule 11). **The routing of intent to actions** — the grid
- * and the panel report what the user did; this decides which server action that
- * is.
- *
- * What it deliberately does not own: date maths (`@momentum/core/time` through
- * `projection.ts`), geometry (`@momentum/core/calendar`), how a drag resolves
- * (`use-calendar-dnd.ts`), or what anything looks like.
+ * The calendar board: the one client island for the surface. It owns
+ * composition, the optimistic overlay over the week's items, and the routing
+ * of intent to server actions; date maths, geometry and drag resolution live elsewhere.
  */
 
 /** One mutation: what to show immediately, what to persist, and what to say when it lands. */
@@ -114,12 +103,7 @@ interface CalendarMutation {
   itemId: string | null;
   taskId: Uuid | null;
   run: () => Promise<ActionResult<unknown>>;
-  /**
-   * Announced only once the server has agreed. Announcing on the gesture reads
-   * well and lies: a failed write rolls the block back, and a screen-reader
-   * user who has already been told it was deleted has no way to learn it was
-   * not (Domain Rule 11 — a failure has to be as visible as the success).
-   */
+  /** Announced only once the server has agreed; a failed write rolls back and the user must not have been told otherwise. */
   announcement?: string;
   /** Runs on success only, for the same reason. */
   onDone?: () => void;
@@ -132,7 +116,7 @@ export function CalendarView({
 }: {
   data: CalendarWeekData;
   params: CalendarParams;
-  /** The palette's "Add event" intent, honoured once (features/calendar/navigation.ts). */
+  /** The palette's "Add event" intent, honoured once. */
   newEvent?: boolean;
 }) {
   const router = useRouter();
@@ -140,32 +124,22 @@ export function CalendarView({
   const profile = useUserSettings();
   const { timezone, weekStart, snapMinutes } = profile;
 
-  // "Today" comes from the server, per request; this is what makes it keep
-  // coming as the day rolls over on a tab left open (docs/ARCHITECTURE.md §10).
+  // "Today" comes from the server per request; this keeps it coming as the day rolls over.
   useMidnightRollover(timezone);
   const now = useNow();
 
-  /*
-   * The Plan panel: beside the calendar from `lg` up, open by default; a sheet
-   * over it below, closed until asked for. Two states rather than one, because
-   * the two presentations have opposite resting states and a phone that
-   * hydrates with the panel "open" would wake up under a modal.
-   */
+  // Two states for the Plan panel: the wide panel rests open, the narrow
+  // sheet rests closed, and a phone must not hydrate under a modal.
   const wide = useWideViewport();
   const [planOpen, setPlanOpen] = React.useState(true);
   const [planSheetOpen, setPlanSheetOpen] = React.useState(false);
   const planVisible = wide ? planOpen : planSheetOpen;
   const setPlanVisible = wide ? setPlanOpen : setPlanSheetOpen;
-  // The Plan panel's own header button hides it, which removes the pressed
-  // control from the page. This toggle is the one thing that survives the
-  // close and brings the panel back, so it is where focus goes — otherwise the
-  // browser leaves it on `<body>` and a keyboard user tabs from the top of the
-  // shell again (Domain Rule 10).
+  // The panel's own close button disappears with it, so focus returns here.
   const planToggle = React.useRef<HTMLButtonElement>(null);
   const [draft, setDraft] = React.useState<BlockDraft | null>(null);
   const [touched, setTouched] = React.useState<TouchedIds>(EMPTY_TOUCHED);
-  // "Add to week" is a server-side plan, not an optimistic row (see
-  // `addHabitToWeekAt`), so its in-flight state is tracked on its own.
+  // "Add to week" is not optimistic (see `addHabitToWeekAt`), so its in-flight state is separate.
   const [pendingHabits, setPendingHabits] = React.useState<ReadonlySet<Uuid>>(new Set());
   const [, startHabitTransition] = React.useTransition();
 
@@ -185,13 +159,7 @@ export function CalendarView({
     onError: (_error, mutation) => setTouched((current) => mark(current, mutation, false)),
   });
 
-  /*
-   * A mutation marks the ids it touches so their controls read as pending, and
-   * unmarks them when it settles — either way, because a failed write is just
-   * as finished as a successful one. The hook hands the input back to both
-   * callbacks, which is what makes "which ids" answerable without a second
-   * bookkeeping structure.
-   */
+  // Marks the touched ids as pending; both settle callbacks unmark them.
   const mutate = React.useCallback(
     (mutation: CalendarMutation) => {
       setTouched((current) => mark(current, mutation, true));
@@ -199,10 +167,6 @@ export function CalendarView({
     },
     [run],
   );
-
-  /* ---------------------------------------------------------------------- */
-  /* Projection                                                             */
-  /* ---------------------------------------------------------------------- */
 
   const spec = React.useMemo(
     () => resolveGridSpec(items, data.days, timezone, DEFAULT_GRID_SPEC, snapMinutes),
@@ -223,21 +187,14 @@ export function CalendarView({
     () => buildAllDay(items, data.days, timezone),
     [items, data.days, timezone],
   );
-  /*
-   * The opening scroll offset. Computed from the server's items rather than the
-   * optimistic ones, and applied by the grid only on mount — the grid is keyed
-   * on the displayed range below, so "on mount" means "once per week", and
-   * creating a 06:00 block cannot yank the view back to the morning.
-   */
+  // The opening scroll offset, from the server's items and applied only on
+  // mount (the grid is keyed on the range), so creating an early block cannot
+  // yank the view.
   const rangeKey = `${data.rangeStart}:${params.view}`;
   const scrollToMinutes = React.useMemo(
     () => initialScrollMinutes(data.items, data.days, timezone, spec),
     [data.items, data.days, timezone, spec],
   );
-
-  /* ---------------------------------------------------------------------- */
-  /* Intent → action                                                        */
-  /* ---------------------------------------------------------------------- */
 
   const openItem = React.useCallback(
     (item: CalendarItem) => setDraft({ mode: "edit", item, span: spanOf(item, timezone) }),
@@ -250,12 +207,9 @@ export function CalendarView({
       const occurrence = item.occurrence;
       const blockId = item.blockId;
 
-      // Every occurrence of a series moves by writing an override, whether or
-      // not it already has one — `writeOverride` upserts on
-      // `(series_id, occurrence_date)`. Branching on `blockId === null` instead
-      // would send an *already edited* occurrence down the plain-block path and
-      // rewrite the override row as if it were an ordinary event, losing the
-      // link to the series it replaces (§11).
+      // Every occurrence moves through the override path, whether or not it
+      // already has one; branching on `blockId === null` would rewrite an
+      // existing override as an ordinary event.
       mutate(
         occurrence !== null
           ? {
@@ -322,11 +276,8 @@ export function CalendarView({
       const blockId = item.blockId;
 
       if (occurrence !== null) {
-        // A cancelled override, not a deleted row: the series still owns the
-        // slot, and the occurrence comes back if the cancellation is removed.
-        // This is the right path for an *already overridden* occurrence too —
-        // deleting its override row would not remove the occurrence, it would
-        // resurrect it at the rule's own time.
+        // A cancelled override, not a deleted row — also for an already
+        // overridden occurrence, whose row deletion would resurrect it.
         mutate({
           patch: { kind: "delete", id: item.id },
           itemId: item.id,
@@ -347,10 +298,7 @@ export function CalendarView({
         taskId: null,
         announcement: deletedMessage(item.title),
         run: () => deleteBlock({ id: blockId }),
-        // Delete is a single keystroke on a focused block, so it needs a way
-        // back — offered once the row is really gone, not before. The block
-        // returns with its original id, which is what makes undo a plain insert
-        // rather than a special case (Domain Rule 17).
+        // Undo, offered once the row is really gone; the block returns with its original id.
         onDone: restorable(item)
           ? () =>
               toast.info("Block deleted", {
@@ -366,9 +314,8 @@ export function CalendarView({
     (item: CalendarItem) => {
       const completed = item.completedAt === null;
       const blockId = item.blockId;
-      // Domain Rule 13, both directions. Completing the task is offered only on
-      // the block that finishes it; reopening it is offered on any block of a
-      // task that is already complete, because that block is now work again.
+      // Completing the task is offered only on the block that finishes it;
+      // reopening it on any block of a completed task.
       const alsoTask = completed
         ? (item.work?.completesTask ?? false)
         : item.work?.taskCompletedAt != null;
@@ -387,8 +334,7 @@ export function CalendarView({
             completed,
             alsoCompleteTask: completed && alsoTask,
             alsoUncompleteTask: !completed && alsoTask,
-            // Routes a habit block to the function that also records the
-            // habit's day (Phase 6). Null for every other kind.
+            // Routes a habit block to the function that also records the habit's day.
             habitId: item.habitId,
           }),
       });
@@ -400,15 +346,8 @@ export function CalendarView({
     setDraft({ mode: "create", span });
   }, []);
 
-  /*
-   * "Add event", arriving from the command palette as `?new=event`.
-   *
-   * The draft opens on the first day of the range that is not already past —
-   * today, when today is on screen — at the next whole hour, clamped inside the
-   * grid. The intent is then dropped from the URL with `replace`, so a reload
-   * or a back button does not reopen an editor the user has dismissed, and the
-   * effect cannot fire twice for one command.
-   */
+  // "Add event" from the command palette. The intent is dropped from the URL
+  // with `replace`, so reload/back do not reopen a dismissed editor.
   const handledNewEvent = React.useRef(false);
   React.useEffect(() => {
     if (!newEvent || handledNewEvent.current) return;
@@ -440,17 +379,9 @@ export function CalendarView({
     [data.plan, mutate, timezone],
   );
 
-  /**
-   * "Add to week" from the drawer's HABITS section (Phase 6).
-   *
-   * Not optimistic, and not a `mutate`: the action asks the *server* what the
-   * week is missing and creates however many blocks that is, so there is no
-   * single row to draw ahead of the answer — an overlay here would have to
-   * re-derive the plan on the client and would disagree with the server the
-   * first time the two saw different existing blocks. `refresh()` inside the
-   * action brings the new blocks back, and the row reads as pending until it
-   * does (Domain Rule 11: the failure is still surfaced).
-   */
+  // Not optimistic: the server decides which blocks the week is missing, so
+  // there is no row to draw ahead of the answer. The row reads as pending
+  // until `refresh()` brings the blocks back.
   const addHabitToWeekAt = React.useCallback(
     (habitId: Uuid) => {
       const weekStartDate = data.days[0];
@@ -519,25 +450,14 @@ export function CalendarView({
       setDraft(null);
       const moved = !sameSpan(spanOf(item, timezone), span);
 
-      /*
-       * An occurrence has times of its own and nothing else. Editing its
-       * content is the recurring-event editor, an explicit non-goal of this
-       * phase (specs/03-weekly-calendar.md), and `blockId` is null for one that
-       * has never been overridden — so sending it to `updateBlock` would fail
-       * validation on a null id rather than doing something useful. Its times
-       * go through the override path, which is the whole of what Phase 3
-       * promises for a recurring block — and the editor offers it nothing but
-       * its times, so nothing typed can be lost here.
-       */
+      // An occurrence has times of its own and nothing else; `blockId` is null
+      // until overridden, so `updateBlock` is never the right path for one.
       if (item.occurrence !== null) {
         if (moved) reschedule(item, span, savedMessage(values.title));
         return;
       }
 
-      // Content and times are two writes because they are two concerns: a work
-      // block's title belongs to its task and never moves, while its time is
-      // the block's own (Domain Rules 1 and 2). Sending both as one update
-      // would let an edit to a title rewrite a schedule.
+      // Content and times are two writes, so an edit to a title cannot rewrite a schedule.
       mutate({
         patch: {
           kind: "content",
@@ -552,13 +472,9 @@ export function CalendarView({
         run: () =>
           updateBlock({
             id: blockId,
-            // Only an event carries a title of its own. `values.title` for a
-            // work or habit block is the *parent's* name, resolved on read, so
-            // sending it would stamp a copy into `calendar_blocks.title` — from
-            // then on the block shows that frozen string and a rename of the
-            // task or habit never reaches it (Domain Rule 2). Omitting the key
-            // leaves the column at `''`, which is what makes the parent's name
-            // the only one there is.
+            // Only an event owns its title. For a work or habit block
+            // `values.title` is the parent's name; sending it would freeze a
+            // copy into the column and stop the block tracking renames.
             ...(item.kind === "event" ? { title: values.title } : {}),
             description: values.description,
             color: values.color,
@@ -583,10 +499,6 @@ export function CalendarView({
   );
 
   const dnd = useCalendarDnd({ settings, callbacks, items });
-
-  /* ---------------------------------------------------------------------- */
-  /* Chrome                                                                 */
-  /* ---------------------------------------------------------------------- */
 
   const previous = calendarHref(shiftAnchor(params, weekStart, -1), params.view, data.today);
   const next = calendarHref(shiftAnchor(params, weekStart, 1), params.view, data.today);
@@ -639,8 +551,7 @@ export function CalendarView({
                   ref={planToggle}
                   variant="ghost"
                   size="icon-sm"
-                  // A pressed toggle for the panel, which stays; a control
-                  // that opens a dialog for the sheet, which is one.
+                  // A pressed toggle for the panel; a dialog opener for the sheet.
                   aria-pressed={wide ? planOpen : undefined}
                   aria-haspopup={wide ? undefined : "dialog"}
                   aria-expanded={wide ? undefined : planSheetOpen}
@@ -659,14 +570,8 @@ export function CalendarView({
       />
 
       <DndContext
-        /*
-         * An explicit id, because dnd-kit derives its own from a module-level
-         * counter rather than React's `useId`. The server process has usually
-         * rendered the calendar before, so its counter is ahead of a freshly
-         * loaded client's, and every draggable's `aria-describedby` comes back
-         * pointing at a different node than the server sent — a hydration
-         * mismatch React reports and does not patch up.
-         */
+        // An explicit id: dnd-kit derives its own from a module-level counter,
+        // which drifts between server and client and causes a hydration mismatch.
         id="calendar"
         sensors={dnd.sensors}
         collisionDetection={dnd.collisionDetection}
@@ -728,8 +633,6 @@ export function CalendarView({
     </PageContainer>
   );
 }
-
-/* -------------------------------------------------------------------------- */
 
 /** What follows the pointer: the block itself, or a chip for a task being scheduled. */
 export function DragGhost({
@@ -809,16 +712,9 @@ function toggle<T>(set: ReadonlySet<T>, value: T | null, active: boolean): Reado
 }
 
 /**
- * Whether Undo can really put this block back.
- *
- * A work block is re-created by `scheduleTask` and a plain event by
- * `createBlock`, both with their original id. A **habit** block has neither
- * path — `createBlock` only makes events, so "undoing" one would replace a
- * generated habit block with a plain event and quietly sever the habit link
- * (Domain Rule 13: a habit block always has a habit). Habit block generation is
- * Phase 6's, so Phase 3 offers no undo for one rather than offering a wrong
- * one. An occurrence is not deleted at all — it is cancelled — so it has
- * nothing to restore either.
+ * Whether Undo can really put this block back. A habit block has no create
+ * path (`createBlock` only makes events, and re-creating it as one would
+ * sever the habit link); an occurrence is cancelled, not deleted.
  */
 function restorable(item: CalendarItem): boolean {
   return item.occurrence === null && (item.kind === "event" || item.kind === "work");
@@ -828,10 +724,7 @@ function sameSpan(a: DaySpan, b: DaySpan): boolean {
   return a.date === b.date && a.startMinutes === b.startMinutes && a.endMinutes === b.endMinutes;
 }
 
-/**
- * A task appears in exactly one of the drawer's sections (`PlanningData`), so
- * the first match is the only one.
- */
+/** A task appears in exactly one section (`PlanningData`), so the first match is the only one. */
 function findPlanTask(plan: CalendarWeekData["plan"], taskId: Uuid): PlanTask | null {
   return (
     plan.overdue.find((task) => task.id === taskId) ??
@@ -841,23 +734,13 @@ function findPlanTask(plan: CalendarWeekData["plan"], taskId: Uuid): PlanTask | 
   );
 }
 
-/* -------------------------------------------------------------------------- */
-/* The palette's "Add event"                                                  */
-/* -------------------------------------------------------------------------- */
-
-/** An hour, the length a new event opens at before the user says otherwise. */
 const NEW_EVENT_MINUTES = 60;
-/** Where a draft opens on a day that is not today, and before the clock is known. */
+/** Where a draft opens on a day that is not today, or before the clock is known. */
 const NEW_EVENT_FALLBACK_START = 9 * 60;
 
 /**
- * Where "Add event" puts its draft: the next whole hour today, or nine o'clock
- * on the first day of a range that has not started yet, clamped so the block
- * fits inside the grid the user is looking at.
- *
- * It is a suggestion — the editor opens on it with the date and both times
- * editable — so it is chosen to be the fewest keystrokes from right, not to be
- * clever.
+ * Where "Add event" puts its draft: the next whole hour today, or 09:00 on the
+ * first day of a range that has not started, clamped inside the grid.
  */
 function defaultCreateSpan(
   days: readonly LocalDate[],

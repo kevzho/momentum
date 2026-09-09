@@ -1,16 +1,28 @@
 import { describe, expect, it } from "vitest";
 
-import { DEFAULT_VIEW, TAB_VIEWS, parseTaskParams, taskHref } from "@/features/tasks/view-params";
+import {
+  DEFAULT_VIEW,
+  NEW_PROJECT_HREF,
+  TAB_VIEWS,
+  parseTaskParams,
+  taskHref,
+} from "@/features/tasks/view-params";
 
 const PROJECT = "11111111-1111-4111-8111-111111111111";
 const TASK = "22222222-2222-4222-8222-222222222222";
 
 describe("parseTaskParams", () => {
   it("defaults to the inbox with nothing open", () => {
-    expect(parseTaskParams({})).toEqual({ view: DEFAULT_VIEW, projectId: null, taskId: null });
+    expect(parseTaskParams({})).toEqual({
+      view: DEFAULT_VIEW,
+      projectId: null,
+      taskId: null,
+      newProject: false,
+    });
   });
 
-  it("reads each of the six views", () => {
+  it("reads each of the seven views", () => {
+    expect(TAB_VIEWS).toContain("archived");
     for (const view of [...TAB_VIEWS]) {
       expect(parseTaskParams({ view }).view).toBe(view);
     }
@@ -18,7 +30,14 @@ describe("parseTaskParams", () => {
       view: "project",
       projectId: PROJECT,
       taskId: null,
+      newProject: false,
     });
+  });
+
+  it("reads the palette's new-project intent, and only that value", () => {
+    expect(parseTaskParams({ new: "project" }).newProject).toBe(true);
+    expect(parseTaskParams({ new: "habit" }).newProject).toBe(false);
+    expect(NEW_PROJECT_HREF).toBe("/tasks?new=project");
   });
 
   it("falls back rather than erroring on a hand-edited or stale URL", () => {

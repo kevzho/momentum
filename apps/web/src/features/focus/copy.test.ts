@@ -60,8 +60,7 @@ describe("the focus surface's sentences", () => {
   });
 
   it("reports the awarded points against the cap over the cap's own window", () => {
-    // The ledger caps focus XP over a rolling 24 hours, not a calendar day
-    // (docs/DOMAIN_RULES.md §21); the sentence names the window it measured.
+    // The ledger caps focus XP over a rolling 24 hours, not a calendar day.
     expect(describeXpInCapWindow(120)).toBe(
       `120 of ${FOCUS_XP.dailyCap} points from focus in the last 24 hours.`,
     );
@@ -69,31 +68,12 @@ describe("the focus surface's sentences", () => {
   });
 });
 
-/* -------------------------------------------------------------------------- */
-/* Domain Rule 7 — nothing punitive                                           */
-/* -------------------------------------------------------------------------- */
-
 const PUNITIVE =
   /\b(lazy|failed?|failure|missed|behind|unproductive|bad|poor|broken|slacking|excuse|guilt|shame|wasted|abandoned|give up|gave up)\b/i;
 
-/* -------------------------------------------------------------------------- */
-/* specs/07 — the UI claims no capability the app does not have               */
-/* -------------------------------------------------------------------------- */
-
 /**
- * The claims Momentum cannot make true.
- *
- * It is a web page. It cannot block a site, close an app, silence a
- * notification, play a sound at you, or see what you are doing in another
- * window — and native notifications and a menu-bar timer are explicit non-goals
- * of this phase (they are Phase 15's). A focus screen is exactly where a user
- * expects some of that, which is why the spec calls it out and why this test
- * scans the feature's *source* as well as its strings: a sentence typed into a
- * component is a sentence `FOCUS_COPY` cannot see.
- *
- * The patterns are deliberately about capability claims rather than about the
- * word "block", which this product uses constantly and correctly for a span of
- * calendar time.
+ * Capability claims a web page cannot make true. The patterns target claims
+ * rather than the bare word "block", which the product uses for a calendar span.
  */
 const FABRICATED = [
   /block(?:s|ing|ed)?\s+(?:out\s+)?(?:websites?|sites?|apps?|distractions?|notifications?|the internet)/i,

@@ -8,7 +8,7 @@ import {
   uniqueName,
 } from "./fixtures";
 
-/** Workflows 2, 3 and 7 — create, edit and complete a task. */
+/** Create, edit and complete a task. */
 test.describe("Tasks", () => {
   test.beforeEach(async ({ page }) => {
     await signIn(page);

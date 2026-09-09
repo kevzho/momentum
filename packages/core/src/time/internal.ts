@@ -1,27 +1,14 @@
 import type { Instant, LocalDate } from "../types/scalars";
 import { instant, localDate } from "./scalars";
 
-/**
- * The numeric representations the branded scalars are built on, and the
- * conversions between them.
- *
- * Internal to `@momentum/core/time`: `index.ts` deliberately does not
- * re-export this file. Every public function in the module takes and returns
- * branded scalars, and the moment a caller outside is handed a raw
- * millisecond number it becomes possible to do date maths in a component —
- * which is exactly what Domain Rule 5 exists to prevent.
- */
+/** Internal to `@momentum/core/time`; deliberately not re-exported, so raw milliseconds never leave the module. */
 
 export const MS_PER_SECOND = 1_000;
 export const MS_PER_MINUTE = 60_000;
 export const MS_PER_DAY = 86_400_000;
 export const MINUTES_PER_DAY = 1_440;
 
-/**
- * `Date.parse` is safe here in a way it is not in application code: an
- * `Instant` is already canonical UTC (`…Z`), so the parse cannot pick up the
- * host timezone. That guarantee is the whole reason the brand exists.
- */
+/** `Date.parse` is safe here: an `Instant` is canonical UTC, so the host timezone cannot leak in. */
 export function epochOf(i: Instant): number {
   const ms = Date.parse(i);
   if (Number.isNaN(ms)) {
@@ -30,13 +17,7 @@ export function epochOf(i: Instant): number {
   return ms;
 }
 
-/**
- * `toISOString()` already emits the canonical `YYYY-MM-DDTHH:mm:ss.sssZ`
- * spelling, so `instant()` here is validating rather than converting. It is
- * kept because it is the module's single door onto the brand, and because a
- * NaN or out-of-range millisecond becomes a typed error at the point of
- * construction instead of an "Invalid Date" surfacing somewhere downstream.
- */
+/** Throws on a non-finite or out-of-range millisecond value rather than producing "Invalid Date" downstream. */
 export function instantFromEpoch(ms: number): Instant {
   if (!Number.isFinite(ms)) {
     throw new TypeError(`Not a finite epoch millisecond value: ${String(ms)}`);
@@ -44,11 +25,7 @@ export function instantFromEpoch(ms: number): Instant {
   return instant(new Date(ms).toISOString());
 }
 
-/**
- * `Date.UTC` maps two-digit years onto 1900–1999, so a year like `0099` would
- * silently become 1999. `LocalDate` permits four-digit years from `0000`, so
- * the legacy behaviour is corrected rather than assumed away.
- */
+/** `Date.UTC` maps two-digit years onto 1900–1999; `LocalDate` permits years from `0000`, so that is corrected. */
 export function utcMs(
   year: number,
   month: number,
@@ -75,12 +52,7 @@ export function localDateFields(date: LocalDate): { year: number; month: number;
   };
 }
 
-/**
- * The UTC midnight that represents a `LocalDate` as a point on the number
- * line. It is a coordinate for arithmetic, not an instant: the real instant a
- * local day starts at is `startOfDay(date, tz)`, which is a different number
- * in every zone.
- */
+/** The UTC midnight of a `LocalDate`: a coordinate for arithmetic, not the instant the local day starts (`startOfDay`). */
 export function utcMsOfLocalDate(date: LocalDate): number {
   const { year, month, day } = localDateFields(date);
   return utcMs(year, month, day);

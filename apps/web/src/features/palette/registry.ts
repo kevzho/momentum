@@ -5,39 +5,19 @@ import { PRIMARY_NAV, SETTINGS_NAV, type NavItem } from "@/lib/nav";
 import { calendarCommands } from "@/features/calendar/commands";
 import { focusCommands } from "@/features/focus/commands";
 import { habitCommands } from "@/features/habits/commands";
+import { projectCommands } from "@/features/projects/commands";
 import { taskCommands } from "@/features/tasks/commands";
 import { defineCommands, type CommandSource, type PaletteCommand } from "@/features/palette/types";
 
-/**
- * The command registry (docs/ARCHITECTURE.md §7: "module-level registry +
- * context").
- *
- * A feature declares its commands in its own `features/<feature>/commands.ts`
- * and registers the source here — one import and one line. Nothing under
- * `features/palette/components` mentions a task, a habit or a focus session,
- * so adding a command to an existing feature touches exactly one file and
- * adding a whole new feature's commands touches two.
- *
- * Registration is keyed by feature name, which makes it idempotent: a module
- * evaluated twice (a hot reload, a test importing it again) replaces its own
- * entry instead of duplicating every command in it.
- */
-
+// Keyed by feature name so a module evaluated twice (hot reload, a test
+// re-import) replaces its entry instead of duplicating its commands.
 const SOURCES = new Map<string, CommandSource>();
 
 export function registerCommands(source: CommandSource): void {
   SOURCES.set(source.feature, source);
 }
 
-/**
- * Navigation is **derived** from the navigation registry rather than declared.
- *
- * `lib/nav.ts` is already the one list the sidebar, the mobile drawer and the
- * top bar's section name read (Phase 1). Deriving the palette's `Go to`
- * commands from it means a route added there is reachable by ⌘K on the same
- * commit — a route that exists in one place and not the other is the exact
- * failure that registry was built to prevent.
- */
+// Derived from `lib/nav.ts` so a route added there is reachable by ⌘K.
 function navigationCommands(): CommandSource {
   const items: readonly NavItem[] = [...PRIMARY_NAV, SETTINGS_NAV];
 
@@ -56,6 +36,7 @@ function navigationCommands(): CommandSource {
 
 registerCommands(navigationCommands());
 registerCommands(taskCommands);
+registerCommands(projectCommands);
 registerCommands(calendarCommands);
 registerCommands(habitCommands);
 registerCommands(focusCommands);

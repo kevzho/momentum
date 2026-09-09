@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { summariseFocus } from "@momentum/core/focus";
 import { addDays, ianaTimeZone, instant, localDate } from "@momentum/core/time";
@@ -10,24 +10,7 @@ import { FOCUS_COPY } from "@/features/focus/copy";
 import type { FocusPageData, FocusTaskOption } from "@/features/focus/types";
 import type { ActionResult } from "@/lib/actions/result";
 
-/**
- * The focus page, from the island down.
- *
- * What is worth asserting here — and cannot be asserted anywhere else — is the
- * *contract with the server*: what the client sends when a user presses each
- * control. Domain Rules 6 and 15 say the client may send an id and a length and
- * nothing else, and this is the only place that claim is checked against the
- * code that actually runs.
- *
- * The countdown maths is `packages/core/src/focus/timer.test.ts`; the loop that
- * calls it is `use-focus-timer.test.tsx`.
- */
-
-/**
- * The six actions, stubbed with the real signature — one `unknown` argument in,
- * an `ActionResult` out — so the assertions below are about what the component
- * actually sends, not about a convenience shape invented here.
- */
+/** The actions, stubbed with the real signature so the assertions are about what the component sends. */
 type FocusAction = (input: unknown) => Promise<ActionResult<null>>;
 
 const actions = vi.hoisted(() => {
@@ -54,6 +37,9 @@ vi.mock("@/features/focus/actions", () => actions);
 
 vi.mock("@/lib/report-error", () => ({ reportError: vi.fn() }));
 const { reportError } = await import("@/lib/report-error");
+
+vi.mock("@/lib/notifications/focus-notification", () => ({ notifyFocusEnded: vi.fn() }));
+const { notifyFocusEnded } = await import("@/lib/notifications/focus-notification");
 
 const { FocusView } = await import("@/features/focus/components/focus-view");
 
@@ -149,9 +135,9 @@ describe("the resting focus screen", () => {
     if (!isRecord(input)) return;
     expect(input.plannedMinutes).toBe(50);
     expect(input.taskId).toBe(TASK.id);
-    // Domain Rule 17: a client-generated id, so a retry is idempotent.
+    // A client-generated id, so a retry is idempotent.
     expect(input.id).toMatch(/^[0-9a-f-]{36}$/);
-    // Domain Rules 6 and 15: no timestamp, and no XP amount.
+    // No timestamp, and no XP amount.
     expect(Object.keys(input).sort()).toEqual(["id", "plannedMinutes", "projectId", "taskId"]);
   });
 
@@ -218,11 +204,7 @@ describe("the resting focus screen", () => {
     expect(screen.getByRole("button", { name: "Start 25 minutes" })).toBeTruthy();
   });
 
-  /*
-   * The other half of "on !ok or throw" (docs/DOMAIN_RULES.md §19): a call that
-   * rejects — offline, aborted, a 5xx — must reach the same toast, not the
-   * route's error boundary.
-   */
+  // A call that rejects must reach the same toast, not the route's error boundary.
   it("treats a rejected call as a failed one, with the same toast and a Retry", async () => {
     actions.startFocusSession.mockRejectedValueOnce(new TypeError("Failed to fetch"));
     actions.pauseFocusSession.mockRejectedValueOnce(new TypeError("Failed to fetch"));
@@ -246,7 +228,7 @@ describe("the resting focus screen", () => {
     expect(screen.getByRole("button", { name: "Start 25 minutes" })).toBeTruthy();
     expect(reportError).toHaveBeenCalledTimes(1);
 
-    // Retry sends the same session id (Domain Rule 17).
+    // Retry sends the same session id.
     options.action.onClick();
     await waitFor(() => expect(actions.startFocusSession).toHaveBeenCalledTimes(2));
     const [first, second] = actions.startFocusSession.mock.calls.map(([input]) => input);
@@ -254,7 +236,7 @@ describe("the resting focus screen", () => {
 
     unmount();
 
-    // And the live session's own controls, which used to blank the page mid-session.
+    // And the live session's own controls.
     render(
       <ErrorBoundary section="Focus">
         <FocusView data={pageOf({ live: liveOf() })} />
@@ -321,8 +303,7 @@ describe("the running focus screen", () => {
       await waitFor(() => expect(action).toHaveBeenCalledTimes(1));
       await waitFor(() => expect(control.getAttribute("aria-disabled")).toBe("false"));
 
-      // The whole payload: an id. No timestamp (Domain Rule 15) and no amount
-      // (Domain Rule 6).
+      // The whole payload: an id. No timestamp and no amount.
       expect(action.mock.calls[0]?.[0]).toEqual({ id: sessionOf().id });
     }
   });
@@ -358,17 +339,61 @@ describe("the running focus screen", () => {
   });
 });
 
-/* -------------------------------------------------------------------------- */
-/* Domain Rule 10 — no control drops focus by working                          */
-/* -------------------------------------------------------------------------- */
+/** Preference and permission are covered in `lib/notifications/focus-notification.test.tsx`; this is when the page asks, and with what. */
+describe("the planned time running out", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: false });
+    vi.setSystemTime(Date.parse(SERVER_NOW));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function hidePage(hidden: boolean): void {
+    vi.spyOn(document, "visibilityState", "get").mockReturnValue(hidden ? "hidden" : "visible");
+  }
+
+  it("asks for a notification with the task's title while the page is hidden", () => {
+    hidePage(true);
+    // Started ten minutes before the server rendered: fifteen minutes left.
+    render(<FocusView data={pageOf({ live: liveOf() })} />);
+
+    act(() => {
+      vi.advanceTimersByTime(15 * 60_000);
+    });
+
+    expect(notifyFocusEnded).toHaveBeenCalledTimes(1);
+    expect(notifyFocusEnded).toHaveBeenCalledWith(TASK.title);
+  });
+
+  it("names the length when there is no task", () => {
+    hidePage(true);
+    render(<FocusView data={pageOf({ live: { ...liveOf(), task: null } })} />);
+
+    act(() => {
+      vi.advanceTimersByTime(15 * 60_000);
+    });
+
+    expect(notifyFocusEnded).toHaveBeenCalledWith("25 minutes");
+  });
+
+  it("asks for nothing while the page is visible", () => {
+    hidePage(false);
+    render(<FocusView data={pageOf({ live: liveOf() })} />);
+
+    act(() => {
+      vi.advanceTimersByTime(15 * 60_000);
+    });
+
+    expect(notifyFocusEnded).not.toHaveBeenCalled();
+  });
+});
 
 /**
- * jsdom does not implement the browser's blur-on-disable, so
- * `document.activeElement` cannot discriminate here — the same limitation the
- * Phase 5 audit recorded. These tests pin the *mechanism* instead: the native
- * attribute is absent, `aria-disabled` carries the state, and the handler
- * refuses while a write is in flight, which is what makes that attribute
- * truthful rather than decorative.
+ * jsdom does not implement blur-on-disable, so `document.activeElement` cannot
+ * discriminate; these pin the mechanism instead: no native attribute,
+ * `aria-disabled` carries the state, and the handler refuses while pending.
  */
 describe("the focus controls keep the keyboard", () => {
   it("never natively disables the button that causes the transition", () => {

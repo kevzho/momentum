@@ -1,10 +1,7 @@
 import type { ProjectColor } from "./project";
 import type { IanaTimeZone, Instant, LocalDate, Uuid, Weekday } from "./scalars";
 
-/**
- * Every time-bound thing on the board is a calendar block. One table, one range
- * query, one drag mechanic, one overlap check (docs/ARCHITECTURE.md §4).
- */
+/** Every time-bound thing on the board is a calendar block: one table, one overlap check. */
 export const BLOCK_KINDS = ["event", "work", "habit"] as const;
 export type BlockKind = (typeof BLOCK_KINDS)[number];
 
@@ -12,9 +9,8 @@ export const RECURRENCE_FREQUENCIES = ["daily", "weekly"] as const;
 export type RecurrenceFrequency = (typeof RECURRENCE_FREQUENCIES)[number];
 
 /**
- * Constrained recurrence model (docs/ARCHITECTURE.md §11). Occurrences keep the
- * wall-clock time of the series in `timezone`, so a 09:00 class stays at 09:00
- * across DST. Only `event` blocks may recur.
+ * Occurrences keep the wall-clock time of the series in `timezone`, so a 09:00
+ * class stays at 09:00 across DST. Only `event` blocks may recur.
  */
 export interface Recurrence {
   freq: RecurrenceFrequency;
@@ -86,9 +82,8 @@ export interface HabitBlock extends BlockBase {
 export type CalendarBlock = EventBlock | WorkBlock | HabitBlock;
 
 /**
- * A single expanded instance of a recurring event, produced at query time for a
- * requested window. Virtual until the user edits it, at which point an override
- * row is written (docs/ARCHITECTURE.md §11).
+ * A single expanded instance of a recurring event. Virtual until the user
+ * edits it, at which point an override row is written.
  */
 export interface Occurrence {
   /** Stable id `${seriesId}:${occurrenceDate}` for keys and optimistic state. */

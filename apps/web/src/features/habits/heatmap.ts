@@ -6,18 +6,10 @@ import type { HeatmapWeek } from "@momentum/ui/components/habit-heatmap";
 import { DAY_STATE_LABELS } from "@/features/habits/copy";
 
 /**
- * A habit's history, laid out as the heatmap's columns.
- *
- * The grid is built from the same `habitDay` the week strip uses, so the two
- * views of the same day can never disagree — the heatmap is the week strip
- * repeated, not a second interpretation of the rows.
- *
- * Columns run week-start first, in the *user's* week shape, so the top row of
- * the grid is the same weekday all the way across whichever start they chose
- * (Domain Rule 4). Days outside `[from, to]` are `null` rather than "free": a
- * cell for a day the range does not cover would be a claim about it.
- *
- * Pure, and takes every boundary as a parameter — it reads no clock.
+ * A habit's history as the heatmap's columns, built from the same `habitDay`
+ * the week strip uses. Columns run week-start first in the user's week shape;
+ * days outside `[from, to]` or before `trackedFrom` are `null`, not "free".
+ * Pure: every boundary is a parameter.
  */
 export function buildHeatmap(input: {
   habit: HabitSchedule;

@@ -5,18 +5,6 @@ import { addMinutes } from "../time/duration";
 import type { Instant } from "../types/scalars";
 import { focusTimerState, isLiveFocusStatus, type FocusPauseSpan } from "./timer";
 
-/**
- * The property this whole file exists for: **the answer is a function of the
- * timestamps and `now`, and of nothing else.** No test here calls the timer
- * repeatedly to "advance" it, because advancing is not a thing it does. Each
- * case states a start, some pauses and an instant, and asserts the number.
- *
- * The three failures `specs/07-focus-mode.md` calls out — a backgrounded tab,
- * a reloaded page, a slept machine — are all the same shape from this module's
- * point of view: nobody called it for a while, and then somebody did. They are
- * asserted explicitly anyway, because "the same shape" is the claim being made.
- */
-
 const START = instant("2026-09-07T09:00:00.000Z");
 
 function at(minutes: number, seconds = 0): Instant {
@@ -56,13 +44,6 @@ describe("focusTimerState — elapsed time is derived, never counted", () => {
     expect(focusTimerState(running(), at(7, 0)).actualMinutes).toBe(7);
   });
 
-  /*
-   * The three scenarios the spec names. A throttled tab and a slept machine
-   * differ only in how long nobody asked; a reload differs only in that the
-   * asking process is new. All three reduce to one call with a distant `now`,
-   * and the answer is the full elapsed time — not the number of intervals that
-   * happened to fire.
-   */
   it("is correct after a tab has been backgrounded for five minutes", () => {
     const backgrounded = focusTimerState(running(), at(2));
     const foregrounded = focusTimerState(running(), at(7));
@@ -72,7 +53,6 @@ describe("focusTimerState — elapsed time is derived, never counted", () => {
   });
 
   it("is correct on a page reloaded mid-session", () => {
-    // A fresh process knows only what the database persisted.
     const rehydrated = focusTimerState(running(), at(12, 34));
 
     expect(rehydrated.elapsedSeconds).toBe(754);
@@ -124,7 +104,6 @@ describe("focusTimerState — pause and resume", () => {
     const pauses = [{ pausedAt: at(5), resumedAt: null }];
     const paused = { ...running(pauses), status: "paused" as const };
 
-    // Two readings a quarter of an hour apart, and the same answer.
     expect(focusTimerState(paused, at(6)).elapsedSeconds).toBe(300);
     expect(focusTimerState(paused, at(21)).elapsedSeconds).toBe(300);
     expect(focusTimerState(paused, at(21)).isPaused).toBe(true);
@@ -170,8 +149,6 @@ describe("focusTimerState — pause and resume", () => {
     ];
     const state = focusTimerState(running(pauses), at(10));
 
-    // The first contributes its two minutes inside the session, not twelve;
-    // the second contributes two, not ninety-one.
     expect(state.pausedSeconds).toBe(4 * 60);
     expect(state.elapsedSeconds).toBe(6 * 60);
   });

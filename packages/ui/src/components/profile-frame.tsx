@@ -4,16 +4,8 @@ import { cn } from "cn";
 import { PROFILE_FRAME_KEYS, type ProfileFrameKey } from "@momentum/core/gamification";
 
 /**
- * The first cosmetic collection: a ring around the avatar.
- *
- * Coins buy appearance and nothing else (specs/08-gamification.md), and this is
- * what "appearance" means concretely — two rings, drawn around the same avatar
- * the top bar already showed. Nothing about it changes what the product can do.
- *
- * Written out as an exhaustive `Record`, for the reason `ProjectDot` is: a
- * Tailwind class cannot be assembled at runtime, and a key added to
- * `PROFILE_FRAME_KEYS` without a style here is a type error rather than an
- * invisible purchase.
+ * Exhaustive `Record`: Tailwind classes cannot be assembled at runtime, and a
+ * key added to `PROFILE_FRAME_KEYS` without a style here is a type error.
  */
 const FRAME_RING: Record<ProfileFrameKey, string> = {
   frame_copper: "ring-2 ring-[color-mix(in_oklab,var(--color-amber-600)_80%,transparent)]",

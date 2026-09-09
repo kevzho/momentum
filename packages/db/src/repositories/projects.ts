@@ -1,18 +1,12 @@
-import type { Project, Uuid } from "@momentum/core/types";
+import type { Project, ProjectColor, Uuid } from "@momentum/core/types";
+import { nowInstant } from "@momentum/core/time";
 
 import { rowToProject } from "../mappers/project";
-import type { MomentumClient } from "../types";
+import type { InsertRow, MomentumClient, UpdateRow } from "../types";
 
 /**
- * `projects` — name and colour, which is all anything outside the projects page
- * needs from them.
- *
- * The calendar reads this for two reasons: a block with no colour of its own
- * inherits its project's, and the Plan panel labels a task with the project it
- * belongs to. Both need archived projects too — archiving is how a project ends
- * (`projects.archived_at`), and the tasks and blocks that pointed at it keep
- * pointing at it, so excluding archived rows here would silently drop the
- * colour off historical blocks.
+ * Archived projects are included: historical blocks still inherit their colour.
+ * A list that should hide them filters on `archivedAt` itself.
  */
 export async function listFor(client: MomentumClient, userId: Uuid): Promise<Project[]> {
   const { data, error } = await client
@@ -24,4 +18,79 @@ export async function listFor(client: MomentumClient, userId: Uuid): Promise<Pro
 
   if (error) throw error;
   return data.map(rowToProject);
+}
+
+export async function findById(client: MomentumClient, id: Uuid): Promise<Project | null> {
+  const { data, error } = await client.from("projects").select("*").eq("id", id).maybeSingle();
+
+  if (error) throw error;
+  return data === null ? null : rowToProject(data);
+}
+
+/** `id` comes from the client so a retried insert collides with itself. */
+export interface NewProject {
+  id?: Uuid;
+  userId: Uuid;
+  name: string;
+  color?: ProjectColor;
+}
+
+export interface ProjectPatch {
+  name?: string;
+  color?: ProjectColor;
+}
+
+export async function insert(client: MomentumClient, project: NewProject): Promise<Project> {
+  const row: InsertRow<"projects"> = {
+    user_id: project.userId,
+    name: project.name,
+    ...(project.id === undefined ? {} : { id: project.id }),
+    ...(project.color === undefined ? {} : { color: project.color }),
+  };
+
+  const { data, error } = await client.from("projects").insert(row).select("*").single();
+
+  if (error) throw error;
+  return rowToProject(data);
+}
+
+export async function update(
+  client: MomentumClient,
+  id: Uuid,
+  patch: ProjectPatch,
+): Promise<Project> {
+  const row: UpdateRow<"projects"> = {
+    ...(patch.name === undefined ? {} : { name: patch.name }),
+    ...(patch.color === undefined ? {} : { color: patch.color }),
+  };
+
+  const { data, error } = await client
+    .from("projects")
+    .update(row)
+    .eq("id", id)
+    .select("*")
+    .single();
+
+  if (error) throw error;
+  return rowToProject(data);
+}
+
+/**
+ * Archiving hides the project from every list and touches nothing else: its
+ * tasks keep their `project_id`, and blocks keep inheriting its colour.
+ */
+export async function setArchived(
+  client: MomentumClient,
+  id: Uuid,
+  archived: boolean,
+): Promise<Project> {
+  const { data, error } = await client
+    .from("projects")
+    .update({ archived_at: archived ? nowInstant() : null })
+    .eq("id", id)
+    .select("*")
+    .single();
+
+  if (error) throw error;
+  return rowToProject(data);
 }

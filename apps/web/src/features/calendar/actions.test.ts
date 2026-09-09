@@ -3,18 +3,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { instant } from "@momentum/core/time";
 import type { CalendarBlock } from "@momentum/core/types";
 
-/**
- * The completion control on a block reaches two different database functions,
- * and which one it reaches is decided here.
- *
- * A habit block's completion is two facts in one transaction — the span was
- * executed, and the habit was done on the block's own local date — while
- * `complete_block` deliberately does only the first (Domain Rule 13). Routing a
- * habit block to `complete_block` would mark it done and record nothing, which
- * is the "completing a habit calendar block records exactly one completion"
- * criterion failing in the quietest possible way.
- */
-
 const { completeMock, uncompleteMock, completeHabitMock, uncompleteHabitMock, refreshMock } =
   vi.hoisted(() => ({
     completeMock: vi.fn(),
@@ -111,8 +99,6 @@ describe("setBlockCompletion", () => {
     await setBlockCompletion(input);
     await setBlockCompletion(input);
 
-    // The database function is the thing that makes this one completion; the
-    // action's job is only to keep asking for the same thing (Domain Rule 17).
     expect(completeHabitMock).toHaveBeenCalledTimes(2);
     expect(completeHabitMock.mock.calls[0]).toEqual(completeHabitMock.mock.calls[1]);
   });

@@ -6,15 +6,6 @@ import type { FocusSession, FocusSessionStatus } from "../types/focus";
 import type { Instant, LocalDate, Uuid } from "../types/scalars";
 import { summariseFocus } from "./history";
 
-/**
- * Totals, and which day a session lands on.
- *
- * The interesting cases are all timezone cases, which is why this suite runs
- * twice like every other file in `@momentum/core`: a session at 23:40 New York
- * is the *next* UTC day, and counting it there would put "today's" minutes on
- * tomorrow for every user west of Greenwich.
- */
-
 const NEW_YORK = ianaTimeZone("America/New_York");
 const TODAY = localDate("2026-09-07");
 const WEEK = weekOf(TODAY, 1).days;

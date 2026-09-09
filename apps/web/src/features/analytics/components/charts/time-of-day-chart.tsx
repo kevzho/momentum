@@ -26,17 +26,10 @@ interface Row {
 }
 
 /**
- * Chart 6 — the hours of the day completions fall in.
- *
- * Twenty-four buckets always, including the empty ones: an axis showing only
- * the hours with data would make four scattered completions look like a
- * routine. The hours are the user's own wall clock, so on the two days a year a
- * clock moves, the skipped hour is empty and the repeated one holds both passes
- * — which is what an axis labelled with clock readings should show.
- *
- * The bars are completions. The hidden table carries the recorded focus minutes
- * for the same hour beside them, because they are two different measures of
- * "when the day was worked" and putting both on one axis would need two scales.
+ * Twenty-four buckets always, including empty ones. Hours are the user's wall
+ * clock, so on a DST day the skipped hour is empty and the repeated one holds
+ * both passes. The hidden table carries focus minutes beside the completions;
+ * putting both on one axis would need two scales.
  */
 export function TimeOfDayChart({
   completions,

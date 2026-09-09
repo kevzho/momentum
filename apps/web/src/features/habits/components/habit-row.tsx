@@ -26,22 +26,10 @@ import {
 import type { HabitView, HabitsPageData } from "@/features/habits/types";
 
 /**
- * One habit in the list.
- *
- * The week strip's cells are buttons: clicking a day records or un-records it,
- * which is "completion can be recorded from the habits page" with no extra
- * surface to open. Only the three days the database will accept — yesterday,
- * today and tomorrow — are pressable, and the rest render as plain cells, so
- * the user is never shown a control that must fail (the same principle as
- * Domain Rule 13's labelling of a block's control).
- *
- * Every cell carries its date and state as text, and the states differ in shape
- * as well as in hue, so the week reads without colour (`HabitCard`).
- *
- * A cell that says it is disabled refuses the press. `HabitCard` marks a cell
- * `aria-disabled` while this row is writing; the handler here is the other
- * half of that promise, so a quick second press cannot read the optimistic
- * "done" and un-record the day the first press just recorded (Domain Rule 11).
+ * One habit in the list. Only the days the database will accept (yesterday,
+ * today, tomorrow) are pressable. While the row is writing, the handler refuses
+ * presses to match `HabitCard`'s `aria-disabled`, so a quick second press cannot
+ * read the optimistic "done" and un-record the day.
  */
 export interface HabitRowProps {
   view: HabitView;
@@ -56,11 +44,7 @@ export interface HabitRowProps {
   onDelete: (view: HabitView) => void;
 }
 
-/**
- * The window `record_habit_completion` accepts, mirrored here so the UI offers
- * exactly what the database will take (Domain Rule 4 — both sides resolve it in
- * the user's timezone, and `today` was resolved once on the server).
- */
+/** The window `record_habit_completion` accepts; `today` is the server-resolved profile-timezone date. */
 export function isRecordable(date: LocalDate, today: LocalDate): boolean {
   return date >= addDays(today, -1) && date <= addDays(today, 1);
 }
@@ -78,14 +62,8 @@ export function HabitRow({
 }: HabitRowProps) {
   const archived = view.habit.archivedAt !== null;
 
-  /*
-   * A menu item's action runs once the menu has closed and handed focus back
-   * to its trigger — not from `onSelect`, where the focused element is the
-   * item that is about to unmount. A surface opened from `onSelect` would
-   * record `<body>` as the place to return to and drop a keyboard user there
-   * on close (Domain Rule 10). The close hook is the moment that works; the
-   * bulk action bar uses the same shape for the same reason.
-   */
+  // A menu item's action runs from `onCloseAutoFocus`, not `onSelect`: a surface
+  // opened while the item is unmounting records `<body>` as its opener.
   const triggerRef = React.useRef<HTMLButtonElement | null>(null);
   const chosen = React.useRef<(() => void) | null>(null);
   const choose = React.useCallback((action: () => void) => {

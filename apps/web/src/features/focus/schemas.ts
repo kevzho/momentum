@@ -3,29 +3,15 @@ import { z } from "zod";
 import { MAX_PLANNED_MINUTES, MIN_PLANNED_MINUTES } from "@momentum/core/focus";
 
 /**
- * The focus feature's input schemas.
- *
- * Note what is not here: no timestamps and no XP amount. The database stamps
- * every time a session carries and decides every point it earns
- * (Domain Rules 6, 15), so there is nothing for a schema to validate — the
- * client's whole vocabulary is "start one this long, on this task", and then
- * an id.
- *
- * `plannedMinutes` mirrors `focus_planned_chk` rather than inventing a second
- * opinion about it, so a length this schema accepts is a row Postgres will
- * store.
+ * Focus input schemas. No timestamps and no XP amount: the database stamps and
+ * decides both. `plannedMinutes` mirrors `focus_planned_chk`.
  */
 
 const uuid = z.uuid("That is not a valid id.");
 
 /**
- * Starting a session.
- *
- * The id is client-generated (Domain Rule 17). It matters more here than
- * almost anywhere else in the product: a start whose response is lost leaves a
- * *live* session behind, and a retry that minted a fresh id would be told the
- * account already has one — a conflict over a session the user is in the middle
- * of. With the id, the retry finds its own row and the user carries on.
+ * The id is client-generated: a start whose response is lost leaves a live
+ * session behind, and a retry with a fresh id would be refused as a conflict.
  */
 export const startFocusSessionInput = z.object({
   id: uuid,

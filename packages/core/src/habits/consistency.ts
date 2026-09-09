@@ -11,24 +11,10 @@ import {
 } from "./model";
 
 /**
- * Consistency, not streaks (Domain Rule 7).
- *
- * A missed day lowers a rate. It deletes nothing, resets nothing to zero, and
- * costs no XP. The best streak is computed here because it is a fact worth
- * showing; nothing in the product is allowed to make it the thing the user is
- * afraid of losing, which is why `currentStreak` is reported beside it rather
- * than instead of it.
- *
- * **One rule governs every rate in this file: a period that has not finished is
- * excluded from the denominator unless it has already been met.** Today, and
- * the week in progress, cannot pull a rate down — there is still time. Once
- * met, they count, so the number moves the moment the user earns it. That rule
- * is what makes "consistency" a description of what happened rather than a
- * running judgement of what has not happened yet.
- *
- * `trackedFrom` is the habit's own start (its creation date in the user's
- * timezone). A habit created on Thursday is not 0% for the Monday it did not
- * exist on.
+ * Consistency, not streaks (Domain Rule 7). One rule governs every rate here:
+ * a period that has not finished (today, the week in progress) is excluded
+ * from the denominator unless it has already been met. Nothing before
+ * `trackedFrom` is expected of a habit.
  */
 
 /** Met over expected. `value` is null when the window contains nothing to measure. */
@@ -49,15 +35,14 @@ export interface HabitWindow {
 export interface HabitStatsInput {
   habit: HabitSchedule;
   completions: readonly HabitCompletionLike[];
-  /** Today in the user's timezone (Domain Rule 4). */
+  /** Today in the user's timezone. */
   today: LocalDate;
-  /** The user's week-start preference (Domain Rule 4). */
+  /** The user's week-start preference. */
   weekStart: Weekday;
   /** The habit's first tracked date; nothing before it is expected of it. */
   trackedFrom: LocalDate;
 }
 
-/** The four numbers the habits surface shows (specs/06-habits.md). */
 export interface HabitStats {
   /** The headline rate: a rolling 30 days. */
   consistency: HabitRate;
@@ -91,19 +76,12 @@ export function habitStats(input: HabitStatsInput): HabitStats {
   };
 }
 
-/**
- * The rate over an explicit window — the one function every number above is
- * built from, so "weekly" and "monthly" cannot come to mean different things.
- */
+/** The rate over an explicit window; every number above is built from it. */
 export function rateOver(input: HabitStatsInput, window: HabitWindow): HabitRate {
   return cadenceOf(input.habit.frequencyType) === "per-week"
     ? weeklyRate(input, window)
     : dailyRate(input, window);
 }
-
-/* -------------------------------------------------------------------------- */
-/* Per-day cadence                                                            */
-/* -------------------------------------------------------------------------- */
 
 function dailyRate(input: HabitStatsInput, window: HabitWindow): HabitRate {
   const { habit, today, trackedFrom } = input;
@@ -117,8 +95,7 @@ function dailyRate(input: HabitStatsInput, window: HabitWindow): HabitRate {
     if (!isScheduledOn(habit, date)) continue;
 
     const reached = (amounts.get(date) ?? 0) >= target;
-    // Today is not over. It counts only once it has been met, so an unfinished
-    // day can raise the rate but never lower it.
+    // Today is not over: it counts only once met.
     if (date >= today && !reached) continue;
 
     expected += 1;
@@ -128,22 +105,10 @@ function dailyRate(input: HabitStatsInput, window: HabitWindow): HabitRate {
   return toRate(met, expected);
 }
 
-/* -------------------------------------------------------------------------- */
-/* Per-week cadence                                                           */
-/* -------------------------------------------------------------------------- */
-
 /**
- * Weeks, in the user's own week shape.
- *
- * A week that began before the habit did is skipped entirely rather than
- * pro-rated: "three times a week" said nothing about the three days of that
- * week the habit was not yet being tracked, and inventing a smaller target for
- * it would be inventing data. A habit younger than one week therefore reports
- * no rate at all — which `HabitRate.value === null` says honestly, instead of
- * showing 0%.
- *
- * The week in progress follows the same rule as today: it counts only once the
- * target is reached.
+ * A week that began before the habit did is skipped rather than pro-rated, so
+ * a habit younger than one week reports `value: null`. The week in progress
+ * counts only once the target is reached.
  */
 function weeklyRate(input: HabitStatsInput, window: HabitWindow): HabitRate {
   const { habit, today, weekStart, trackedFrom } = input;
@@ -183,23 +148,12 @@ function achievedInWeek(
   return achieved;
 }
 
-/* -------------------------------------------------------------------------- */
-/* Streaks                                                                    */
-/* -------------------------------------------------------------------------- */
-
 export interface HabitStreaks {
   best: number;
   current: number;
 }
 
-/**
- * Consecutive met periods, counted over the habit's whole tracked history.
- *
- * The unfinished period at the end — today, or the week in progress — never
- * breaks a streak. It extends one when it has been met and is otherwise
- * skipped, so a streak of nine days is still nine at breakfast and ten by
- * bedtime, and never nine-then-zero-then-ten.
- */
+/** Consecutive met periods over the whole tracked history. The unfinished period at the end never breaks a streak. */
 export function habitStreaks(input: HabitStatsInput): HabitStreaks {
   const { habit, today, weekStart, trackedFrom } = input;
   const amounts = amountsByDate(input.completions);
@@ -238,15 +192,7 @@ export function habitStreaks(input: HabitStatsInput): HabitStreaks {
   return { best, current };
 }
 
-/* -------------------------------------------------------------------------- */
-/* Window helpers                                                             */
-/* -------------------------------------------------------------------------- */
-
-/**
- * Every date in the window, clipped to the habit's tracked history and to
- * today — dates the habit did not exist for and dates that have not happened
- * are not evidence of anything.
- */
+/** Every date in the window, clipped to the habit's tracked history and to today. */
 function datesIn(window: HabitWindow, trackedFrom: LocalDate, today: LocalDate): LocalDate[] {
   const from = window.from < trackedFrom ? trackedFrom : window.from;
   const to = window.to > today ? today : window.to;
@@ -267,13 +213,7 @@ function weekStartsIn(window: HabitWindow, weekStart: Weekday): LocalDate[] {
   return starts;
 }
 
-/**
- * The first day of `date`'s month.
- *
- * String surgery on a `YYYY-MM-DD`, not date arithmetic: the first of the month
- * is a fact about the string, and parsing it into a `Date` to read it back out
- * is exactly the round trip Domain Rule 4 warns about.
- */
+/** The first day of `date`'s month. String surgery, so no `Date` round trip. */
 function startOfMonth(date: LocalDate): LocalDate {
   return `${date.slice(0, 7)}-01` as LocalDate;
 }

@@ -7,10 +7,6 @@ import { dayBounds, intervalMinutes, intervalOfSlot } from "./intervals";
 import type { Commitment, PlanningContext, PlanningTask } from "./types";
 
 /**
- * Capacity under the fixture zones the time module uses
- * (docs/ARCHITECTURE.md §10). Fixture-driven, no mocks; the suite runs twice,
- * under `TZ=UTC` and `TZ=America/Los_Angeles`.
- *
  *   America/New_York  week of Mon 2026-09-07; today is Wed 2026-09-09
  *                     2026-03-08 spring forward, 2026-11-01 fall back (Sundays)
  *   America/Santiago  2026-09-06 spring forward at midnight (the day starts 01:00)
@@ -165,11 +161,9 @@ describe("remainingMinutesOf", () => {
 describe("per-day workload", () => {
   it("sums planned block by block while available subtracts merged coverage", () => {
     const day = dayOf([event("meeting", WED, 540, 660), work("essay", "t", WED, 600, 720)], WED);
-    // Two claims on 10:00–11:00: planned counts the hour twice.
     expect(day.plannedMinutes).toBe(240);
     expect(day.eventMinutes).toBe(120);
     expect(day.workMinutes).toBe(120);
-    // Coverage is 09:00–12:00 once: three of the eight working hours are gone.
     expect(day.workingMinutes).toBe(480);
     expect(day.availableMinutes).toBe(300);
   });
@@ -247,7 +241,7 @@ describe("week totals", () => {
     const capacity = capacityOf([event("mon", MON, 540, 660), event("thu", THU, 540, 600)]);
     expect(capacity.plannedMinutes).toBe(180);
     expect(capacity.workingMinutes).toBe(4 * 480 + 240);
-    // Wed 480 + Thu 420 + Fri 240; Mon's and Tue's open time is gone.
+    // Wed 480 + Thu 420 + Fri 240.
     expect(capacity.availableMinutes).toBe(480 + 420 + 240);
   });
 
@@ -344,8 +338,7 @@ describe("DST fixture days", () => {
     expect(intervalMinutes(dayBounds(transition, SANTIAGO))).toBe(1380);
 
     const ctx = context({ timezone: SANTIAGO, days: [before, transition], today: before });
-    // 00:00–02:00 drawn on the transition day: the day starts at 01:00, so
-    // the block is one elapsed hour and all of it belongs to that day.
+    // 00:00–02:00 drawn on the transition day is one elapsed hour, all of it that day's.
     const morning = commitment({
       id: "morning",
       ...intervalOfSlot({ date: transition, startMinutes: 0, endMinutes: 120 }, SANTIAGO),
@@ -353,8 +346,7 @@ describe("DST fixture days", () => {
     expect(dayOf([morning], before, ctx).plannedMinutes).toBe(0);
     expect(dayOf([morning], transition, ctx).plannedMinutes).toBe(60);
 
-    // 23:00 Saturday to 02:00 Sunday: two elapsed hours, one on each side of
-    // the day boundary at 01:00.
+    // 23:00 Saturday to 02:00 Sunday: two elapsed hours, one each side of the 01:00 boundary.
     const overnight = commitment({
       id: "overnight",
       startAt: at(before, 1380, SANTIAGO),

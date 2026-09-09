@@ -4,15 +4,9 @@ import { instant, localDate } from "@momentum/core/time";
 import type { CalendarBlock, Habit } from "@momentum/core/types";
 
 /**
- * "Add to week" writes real `calendar_blocks` rows for one week — habits do not
- * use the recurrence model, and this is the whole of their calendar generation
- * (docs/ARCHITECTURE.md §11).
- *
- * The plan itself is `planHabitWeek` and is exhaustively covered in
- * `@momentum/core/habits`. What this file covers is the part only the action
- * can get wrong: reading what is already there, converting wall clock to
- * instants with the *profile's* timezone, and writing rows that carry no title
- * of their own.
+ * `planHabitWeek` itself is covered in `@momentum/core/habits`; this covers what
+ * only the action can get wrong: reading existing blocks, converting wall clock
+ * to instants in the profile timezone, and writing rows with no title.
  */
 
 const { findByIdMock, listForHabitsMock, insertMock, refreshMock } = vi.hoisted(() => ({
@@ -39,11 +33,7 @@ vi.mock("@/lib/auth/session", () => ({
     }),
 }));
 
-/*
- * The action reads the clock for "today" — the one place it may (Domain Rule
- * 4 puts the boundary in the profile timezone, not the process one). Fixing it
- * to a Monday makes the whole displayed week plannable.
- */
+// Fixing "today" to a Monday makes the whole displayed week plannable.
 const NOW = new Date("2026-09-07T15:00:00.000Z");
 
 const HABIT_ID = "11111111-1111-4111-8111-111111111111";
@@ -123,8 +113,7 @@ describe("addHabitToWeek", () => {
     await addHabitToWeek({ habitId: HABIT_ID, weekStartDate: WEEK_START });
 
     for (const [, block] of insertMock.mock.calls) {
-      // A habit block renders its habit's name, resolved at read time, so the
-      // two can never drift (docs/DOMAIN_RULES.md §19).
+      // A habit block renders its habit's name at read time, so it carries no title.
       expect(block.title).toBeUndefined();
       expect(block.kind).toBe("habit");
       expect(block.habitId).toBe(HABIT_ID);
@@ -181,12 +170,8 @@ describe("addHabitToWeek", () => {
   });
 
   it("keeps the habit's wall-clock time across a DST transition", async () => {
-    /*
-     * 2026-03-08 is the US spring-forward Sunday. A 07:00 habit is at 07:00 on
-     * both sides of it — 12:00Z before, 11:00Z after — because the block is
-     * placed from a wall-clock reading in the profile timezone and never from a
-     * fixed offset (Domain Rules 4 and 16's shared premise).
-     */
+    // 2026-03-08 is the US spring-forward Sunday: a 07:00 habit is 12:00Z before
+    // it and 11:00Z after, because the block is placed from wall clock, not a fixed offset.
     vi.setSystemTime(new Date("2026-03-02T15:00:00.000Z"));
     findByIdMock.mockResolvedValue(habitOf({ activeDays: [1, 3, 5, 0] }));
 

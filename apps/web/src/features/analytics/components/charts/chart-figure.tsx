@@ -10,21 +10,10 @@ import { ANALYTICS_COPY } from "@/features/analytics/copy";
 import { CHART_HEIGHT } from "@/features/analytics/components/charts/chart-theme";
 
 /**
- * The frame every visualization on this page sits in.
- *
- * It exists to make one requirement structural rather than remembered: **the
- * numbers are in the accessibility tree, always.** The drawing is marked
- * `aria-hidden` — an SVG of bars is noise to a screen reader even when Recharts
- * labels it — and the same data is rendered beside it as a real `<table>`, kept
- * off screen with `sr-only`. A reader gets a caption, column headers and rows;
- * a sighted user gets the chart. Neither is a reduced version of the other,
- * because both are generated from the same array.
- *
- * The chart itself renders only after hydration. Recharts measures the DOM to
- * lay out an axis, so there is nothing meaningful for it to draw on the server;
- * the placeholder holds exactly the chart's height, so the figure does not move
- * when it arrives. The table is present from the first byte either way, which
- * means the page's *content* never depends on JavaScript.
+ * The frame every chart sits in. The drawing is `aria-hidden` and the same
+ * data is rendered beside it as an `sr-only` `<table>`, both from the same
+ * array. The chart renders only after hydration (Recharts measures the DOM);
+ * the placeholder holds the chart's height so the figure does not move.
  */
 
 export interface ChartTableColumn<T> {
@@ -41,11 +30,7 @@ export interface ChartFigureProps<T> {
   rows: readonly T[];
   columns: readonly ChartTableColumn<T>[];
   rowKey: (row: T, index: number) => string;
-  /**
-   * A line under the chart stating what it does not cover. Rendered inside the
-   * figure and read after the table, so the qualification cannot be separated
-   * from the numbers it qualifies.
-   */
+  /** A line under the chart stating what it does not cover; read after the table. */
   footer?: string;
   children: React.ReactNode;
 }
@@ -62,9 +47,8 @@ export function ChartFigure<T>({
   children,
 }: ChartFigureProps<T>) {
   const hydrated = useIsHydrated();
-  // A `figure` takes its accessible name from its caption only in some name
-  // computations; naming it from the heading explicitly is what makes every
-  // chart addressable by title in the accessibility tree, and in a test.
+  // A `figure` takes its name from its caption only in some name computations;
+  // naming it from the heading makes every chart addressable by title.
   const headingId = React.useId();
 
   return (

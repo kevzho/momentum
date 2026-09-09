@@ -11,12 +11,6 @@ import {
   xpCapWindow,
 } from "./xp";
 
-/**
- * The task award, including the case that matters most: a day that has already
- * hit its cap. The cap bounds the reward and nothing else — the task still
- * completes, and nothing already earned is touched (Domain Rules 3, 7).
- */
-
 const BASE = {
   priority: 3 as const,
   projectId: null,
@@ -93,7 +87,6 @@ describe("taskXpAward", () => {
     const cap = XP_DAILY_CAPS.task as number;
     let total = 0;
     for (let i = 0; i < 500; i += 1) {
-      // The exploit, in a loop: create and complete rows as fast as possible.
       total += taskXpAward({ ...BASE, priority: 1, taskXpAwardedToday: total }).amount;
     }
     expect(total).toBe(cap);
@@ -105,8 +98,7 @@ describe("the tunables", () => {
     expect(XP_DAILY_CAPS.task).toBeGreaterThan(0);
     expect(XP_DAILY_CAPS.habit_completion).toBeGreaterThan(0);
     expect(XP_DAILY_CAPS.focus_session).toBeGreaterThan(0);
-    // Quests, weekly goals and achievements are bounded by their definitions
-    // rather than by a cap, which is why they are deliberately absent.
+    // Quests, weekly goals and achievements are bounded by their definitions.
     expect(XP_DAILY_CAPS.quest).toBeUndefined();
     expect(XP_DAILY_CAPS.weekly_goal).toBeUndefined();
     expect(XP_DAILY_CAPS.achievement).toBeUndefined();

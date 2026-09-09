@@ -7,12 +7,7 @@ import { Button } from "@momentum/ui/components/button";
 
 import { reportError } from "@/lib/report-error";
 
-/**
- * Section-level boundary: one failing panel must not blank the page around it
- * (docs/ARCHITECTURE.md §15). Route-level failures are handled by the
- * `error.tsx` files, which Next mounts for us; this is for the independent
- * panels inside a route.
- */
+/** Section-level boundary for independent panels inside a route; `error.tsx` handles route-level failures. */
 interface ErrorBoundaryProps {
   children: React.ReactNode;
   /** Names the failing region in the fallback: "Next up", "Plan". */

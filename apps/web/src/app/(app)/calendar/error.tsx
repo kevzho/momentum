@@ -9,10 +9,6 @@ import { PageContainer } from "@momentum/ui/components/page-container";
 
 import { reportError } from "@/lib/report-error";
 
-/**
- * A route boundary for one of the two heaviest surfaces: a failure here keeps
- * the shell, the sidebar and every other route usable (docs/ARCHITECTURE.md §15).
- */
 export default function CalendarError({
   error,
   reset,

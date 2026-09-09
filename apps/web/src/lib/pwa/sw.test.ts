@@ -2,13 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import { loadServiceWorker, ORIGIN, response } from "@/lib/pwa/sw-harness";
 
-/**
- * The service worker's contract, asserted against the real `public/sw.js`.
- *
- * The organising claim of the file is that a stale worker serving an old bundle
- * is worse than no worker, so most of what is checked here is what the worker
- * refuses to do.
- */
+// Asserted against the real `public/sw.js`. Most of what is checked is what
+// the worker refuses to do.
 
 describe("service worker — what it never touches", () => {
   it("passes through a server action, so an offline mutation still fails", async () => {
@@ -19,10 +14,8 @@ describe("service worker — what it never touches", () => {
 
     const action = sw.request("/today", { method: "POST", mode: "same-origin" });
 
-    // Not answered at all: no `respondWith`, so the browser's own fetch runs
-    // and rejects. That rejection is what `useOptimisticAction` turns into the
-    // `unavailable` toast — a worker that answered here would be the "silently
-    // swallowed" mutation specs/12-pwa.md forbids.
+    // Not answered at all: no `respondWith`, so the browser's own fetch runs and
+    // rejects, which `useOptimisticAction` turns into the `unavailable` toast.
     expect(await sw.fetchEvent(action)).toBe("passthrough");
     expect(sw.strategyFor(action)).toBe("passthrough");
   });
@@ -194,8 +187,8 @@ describe("service worker — immutable assets", () => {
     const missing = sw.request("/_next/static/chunks/gone-1234.js", { mode: "cors" });
     const answer = await sw.fetchEvent(missing);
 
-    // The error is handed back — but not stored. A cached 404 under a
-    // content-hashed URL would be permanent for the life of the build.
+    // Handed back but not stored: a cached 404 under a content-hashed URL would
+    // be permanent for the life of the build.
     expect((answer as { body: string }).body).toBe(
       `error:${ORIGIN}/_next/static/chunks/gone-1234.js`,
     );

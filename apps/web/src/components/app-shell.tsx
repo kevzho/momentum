@@ -12,13 +12,9 @@ import type { SidebarState } from "@/lib/sidebar-state";
 import { UserSettingsProvider, type UserSettings } from "@/lib/time/user-settings";
 
 /**
- * The logged-in application frame: a persistent rail, a top bar, and the
- * routed view. The shell itself is a server component — only the pieces that
- * need browser state (collapse, active route, menus) are client islands
- * (docs/ARCHITECTURE.md §5).
- *
- * The whole frame is exactly the viewport height and only `<main>` scrolls, so
- * the calendar's own scrolling surfaces behave the same on every route.
+ * The logged-in frame: a server component; only the pieces that need browser
+ * state are client islands. The frame is exactly the viewport height and only
+ * `<main>` scrolls.
  */
 export function AppShell({
   sidebarState,
@@ -34,65 +30,46 @@ export function AppShell({
   sidebarState: SidebarState;
   settings: UserSettings;
   account: Account;
-  /**
-   * Level, XP, coins and unlocks, read once per request. It is here rather than
-   * on the progress page because both things that use it are here: the top
-   * bar's indicator, and the celebration — a level earned on /tasks has to be
-   * noticed on /tasks.
-   */
+  // Read here rather than on the progress page because both the top bar's
+  // indicator and the celebration live in the frame.
   progress: ProgressBadge;
-  /** The user's projects: the sidebar's list, Quick Add's picker, the palette's. */
   projects: readonly ProjectSummaryWithCount[];
-  /** Every open task, as the command palette's search index (Phase 11). */
+  /** Every open task, as the command palette's search index. */
   tasks: readonly TaskSummary[];
-  /** Today in the profile timezone, resolved once per request (Domain Rule 4). */
+  /** Today in the profile timezone, resolved once per request. */
   today: LocalDate;
-  /**
-   * The sort order Quick Add creates with: one step below the user's lowest
-   * row, so a capture lands first in the Inbox instead of tying with every
-   * other capture at 0 (Phase 13, AUTH-01).
-   */
+  // One step below the user's lowest row, so a capture lands first in the Inbox
+  // instead of tying with every other capture at 0.
   newTaskSortOrder: number;
   children: React.ReactNode;
 }) {
   return (
     <UserSettingsProvider settings={settings}>
       <SidebarProvider defaultState={sidebarState}>
-        {/* Mounted once, in the frame, so Quick Add is the same two keystrokes
-            on every route — which is what "from anywhere in-app" means. */}
+        {/* Mounted once, in the frame, so Quick Add is the same keystrokes on every route. */}
         <QuickAddProvider
           projects={projects}
           today={today}
           weekStart={settings.weekStart}
           newTaskSortOrder={newTaskSortOrder}
         >
-          {/* Inside Quick Add, because "Add task" is a palette command that
-              opens it — and mounted in the frame for the same reason Quick Add
-              is: ⌘K has to be the same two keystrokes on every route. */}
+          {/* Inside Quick Add, because "Add task" is a palette command that opens it. */}
           <PaletteProvider projects={projects} tasks={tasks} today={today}>
             <ProgressProvider badge={progress} />
-            {/* Seventeen navigation stops sit before the content; a keyboard user
-            gets past them in one key. Visible only when focused. */}
+            {/* Skip link past the navigation stops. Visible only when focused. */}
             <a
               href="#main-content"
               className="sr-only rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-toast"
             >
               Skip to content
             </a>
-            {/* `safe-frame` on the outer box and `safe-scroll-bottom` on the
-                scroller are the whole of the installed-window handling: the
-                document opts into `viewport-fit=cover` so the app paints under
-                the iOS status bar and home indicator (which is what makes it
-                look installed), and these two give the space back — at the top
-                and sides as frame padding, at the bottom as room after the last
-                row rather than a permanently short scroller. `h-dvh` still
-                measures the whole viewport, so the frame is exactly the window
-                and only `<main>` scrolls, unchanged from Phase 1. */}
+            {/* `safe-frame` and `safe-scroll-bottom` give back the space `viewport-fit=cover`
+                paints under (iOS status bar and home indicator). `h-dvh` still measures the
+                whole viewport, so the frame is exactly the window and only `<main>` scrolls. */}
             <div className="flex h-dvh w-full overflow-hidden safe-frame">
               <Sidebar account={account} projects={projects} />
               <div className="flex min-w-0 flex-1 flex-col">
-                {/* Above the top bar, in the column, so that going offline
-                    costs `<main>` a row and covers no control. */}
+                {/* Above the top bar, in the column, so going offline costs `<main>` a row and covers no control. */}
                 <OfflineNotice />
                 <TopBar account={account} progress={progress} projects={projects} />
                 <main

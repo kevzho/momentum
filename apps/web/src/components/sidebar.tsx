@@ -16,11 +16,7 @@ import { useSidebar } from "@/components/sidebar-context";
 import type { Account } from "@/components/top-bar";
 import { SETTINGS_NAV, isActive } from "@/lib/nav";
 
-/**
- * The desktop rail: 240px expanded, 56px collapsed, persisted across reloads.
- * Hidden below `md`, where `MobileNav` presents the same navigation in a
- * drawer.
- */
+/** The desktop rail: 240px expanded, 56px collapsed. Hidden below `md`, where `MobileNav` takes over. */
 export function Sidebar({
   account,
   projects,

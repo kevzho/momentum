@@ -11,12 +11,6 @@ import {
   workloadScale,
 } from "@/features/planning/components/workload-bars";
 
-/**
- * A bar is a number the eye can compare down the column: every row shares one
- * scale, the working window is drawn behind the planned time, and the row's
- * accessible name states both. Nothing here says whether a day is anything.
- */
-
 const DAYS: readonly LocalDate[] = [
   "2026-09-07",
   "2026-09-08",

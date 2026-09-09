@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import { layoutOverlaps, spansOverlap, type LaidOutSpan } from "./overlap";
 
-/** `at("A", "09:00", "10:00")` — fixtures read as the board does. */
 function at(id: string, start: string, end: string): LaidOutSpan {
   return { id, start: minutesOf(start), end: minutesOf(end) };
 }
@@ -12,7 +11,6 @@ function minutesOf(hhmm: string): number {
   return hours * 60 + minutes;
 }
 
-/** Every ordering of the input, so "order does not matter" is proven, not assumed. */
 function permutations<T>(items: readonly T[]): T[][] {
   if (items.length <= 1) return [[...items]];
   return items.flatMap((item, index) => {
@@ -72,9 +70,7 @@ describe("layoutOverlaps", () => {
   });
 
   it("keeps a chained cluster at one width and reuses a freed column", () => {
-    // A 09:00-10:00, B 09:30-10:30, C 10:00-11:00. A overlaps B and B overlaps C,
-    // but A and C do not: all three are one cluster, two columns wide, and C takes
-    // A's column back.
+    // A overlaps B and B overlaps C, but A and C do not: one cluster, two columns wide.
     const layout = layoutOverlaps([
       at("A", "09:00", "10:00"),
       at("B", "09:30", "10:30"),
@@ -157,7 +153,6 @@ describe("layoutOverlaps", () => {
         expect(layout.get(a.id)?.column).not.toBe(layout.get(b.id)?.column);
       }
     }
-    // Every block is placed, and a column index is always inside its cluster.
     expect(layout.size).toBe(spans.length);
     for (const span of spans) {
       const placement = layout.get(span.id);
@@ -186,8 +181,7 @@ describe("layoutOverlaps", () => {
       { id: "Empty", start: minutesOf("09:30"), end: minutesOf("09:30") },
       { id: "Inverted", start: minutesOf("11:00"), end: minutesOf("10:00") },
     ]);
-    // The empty span is a point inside A, so it is placed beside it rather than
-    // being dropped from the layout.
+    // The empty span is a point inside A, so it is placed beside it.
     expect(layout.get("A")).toEqual({ column: 0, columns: 2 });
     expect(layout.get("Empty")).toEqual({ column: 1, columns: 2 });
     // The inverted span reads as 10:00-11:00, which only touches A: its own cluster.

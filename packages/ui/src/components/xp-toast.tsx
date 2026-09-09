@@ -5,18 +5,7 @@ import { cn } from "cn";
 
 import { useReducedMotion } from "@momentum/ui/hooks/use-reduced-motion";
 
-/**
- * "+12 XP", and what it was for.
- *
- * The smallest piece of feedback in the product, and deliberately so: finishing
- * something moves a number the user cares about, and that is the whole of it.
- * No confetti, no sound, no full-width banner — those are reserved for a level
- * up, an achievement and a weekly goal (docs/DESIGN_SYSTEM.md § Gamification
- * restraint).
- *
- * The value is display-only. XP is computed by trusted server logic and read
- * back from the ledger; nothing here asserts an amount (Domain Rule 6).
- */
+/** Display-only; the amount comes from the ledger and is never asserted here. */
 function XPToast({
   amount,
   reason,

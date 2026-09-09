@@ -57,7 +57,6 @@ describe("toast", () => {
         </AnnouncerProvider>,
       );
 
-      // Sonner's own container is not a live region any more.
       expect(document.querySelector("[data-sonner-toaster]")?.getAttribute("aria-live")).toBe(
         "off",
       );
@@ -76,7 +75,7 @@ describe("toast", () => {
         toast.celebrate({ kind: "goal", title: "Weekly goal reached" });
         await vi.runAllTimersAsync();
       });
-      // Unchanged: the caller that knows about the XP announces it in its own words.
+      // The caller announces XP itself.
       expect(polite?.textContent).toBe("Could not reach the server. Nothing was saved.");
       expect(sonner.custom).toHaveBeenCalledTimes(2);
     } finally {

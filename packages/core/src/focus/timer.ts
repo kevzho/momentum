@@ -3,22 +3,10 @@ import type { FocusSessionStatus } from "../types/focus";
 import { durationSeconds } from "../time/duration";
 
 /**
- * The timer, as arithmetic over persisted timestamps.
- *
- * This module is the answer to the one thing `specs/07-focus-mode.md` says is
- * easy to get wrong. **Nothing here counts.** There is no decrementing
- * counter, no accumulated tick total, and no state that a missed interval
- * could leave behind: every number is recomputed from `startedAt`, the pause
- * records and the instant it is asked about. A tab throttled to one timer a
- * minute, a machine asleep for an hour and a page reloaded mid-session all
- * produce the same answer as a tab that ticked every second, because the
- * answer never depended on the ticking. The interval in the UI decides how
- * often this function is called; it does not contribute to what it returns.
- *
- * Every timestamp it reads was stamped by the database (Domain Rule 15), so
- * the only untrusted input is `now` — and the only thing `now` can do is make
- * the *display* wrong, never the recorded duration, which `finish_focus_session`
- * computes from the same rows with the database's own clock.
+ * The timer as arithmetic over persisted timestamps. Nothing here counts
+ * ticks: every number is recomputed from `startedAt`, the pause records and
+ * `now`, so throttled tabs, sleep and reloads all give the same answer. The
+ * recorded duration comes from `finish_focus_session`, never from here.
  */
 
 export interface FocusPauseSpan {
@@ -44,11 +32,7 @@ export interface FocusTimerState {
   remainingSeconds: number;
   /** Seconds worked beyond the planned length. Focus is not stopped at the bell. */
   overrunSeconds: number;
-  /**
-   * The minutes this session would record if it finished now. Truncated, which
-   * is what `finish_focus_session` does with the same interval — so the number
-   * on screen is the number that will be written, not a rounded neighbour.
-   */
+  /** The minutes this session would record if it finished now. Truncated, as `finish_focus_session` does. */
   actualMinutes: Minutes;
   /** 0..1 of the planned length, clamped. The ring reads this. */
   fraction: number;
@@ -65,18 +49,10 @@ export function isLiveFocusStatus(status: FocusSessionStatus): boolean {
 }
 
 /**
- * The whole timer.
- *
- * The horizon is `endedAt` for a session that has finished and `now` for one
- * that has not, so a completed session's numbers are frozen and asking again
- * an hour later returns the same answer.
- *
- * `now` is clamped up to `startedAt`. The session's start is the database's
- * clock and `now` is usually the browser's; a browser a few seconds behind
- * would otherwise produce a negative elapsed time and a timer that reads more
- * than its own planned length for the first few seconds. Clamping states the
- * only thing that is certainly true — a session cannot have run for less than
- * no time — instead of rendering the skew.
+ * The horizon is `endedAt` for a finished session and `now` otherwise, so a
+ * completed session's numbers are frozen. `now` is clamped up to `startedAt`:
+ * the start is the database's clock and `now` the browser's, and a browser a
+ * few seconds behind would otherwise show a negative elapsed time.
  */
 export function focusTimerState(input: FocusTimerInput, now: Instant): FocusTimerState {
   const horizon = input.endedAt ?? later(input.startedAt, now);
@@ -102,19 +78,9 @@ export function focusTimerState(input: FocusTimerInput, now: Instant): FocusTime
 }
 
 /**
- * Paused time inside the session's own span.
- *
- * Each pause is clipped to `[startedAt, horizon]` before it is counted, which
- * is what makes an *open* pause work: a session paused twenty minutes ago has
- * no `resumed_at`, and its pause runs to the horizon — so the elapsed time
- * stops advancing while the session is paused, and starts again from where it
- * stopped when the resume is recorded (Domain Rule 3: paused time is not time
- * spent).
- *
- * A session can be paused or running but not both, so the spans the database
- * produces never overlap (`focus_pauses_open_uniq` holds the invariant from
- * the other side). They are summed rather than merged, and the clipping means
- * a row from outside the span contributes nothing rather than a negative.
+ * Paused time inside `[startedAt, horizon]`. An open pause (no `resumed_at`)
+ * runs to the horizon. Spans are summed, not merged: `focus_pauses_open_uniq`
+ * guarantees they never overlap.
  */
 function pausedSecondsWithin(
   pauses: readonly FocusPauseSpan[],
@@ -130,11 +96,7 @@ function pausedSecondsWithin(
   return total;
 }
 
-/*
- * `Instant` is canonical ISO-8601 UTC with a fixed number of digits, so string
- * order is chronological order. Comparing them directly keeps this module free
- * of epoch arithmetic, which lives behind `@momentum/core/time` on purpose.
- */
+// `Instant` is canonical fixed-width ISO-8601 UTC, so string order is chronological order.
 function later(a: Instant, b: Instant): Instant {
   return a >= b ? a : b;
 }

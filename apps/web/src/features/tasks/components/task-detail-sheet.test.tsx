@@ -7,18 +7,6 @@ import type { Task } from "@momentum/core/types";
 
 import { TaskDetailSheet } from "@/features/tasks/components/task-detail-sheet";
 
-/**
- * Three promises the sheet makes to a keyboard user.
- *
- * Escape abandons the field it is pressed in — every field here commits on blur,
- * and the one gesture that means "throw this away" must not be the one that
- * saves it. Closing the sheet puts the user back where they came from: it is
- * opened from the URL, so Radix has no trigger to return focus to and would
- * otherwise drop them on `<body>`, losing the list's roving cursor. And a
- * subtask arrow that works does not thereby throw the user out of the row it
- * just moved (Domain Rule 10).
- */
-
 const TODAY = localDate("2026-09-07");
 
 const TASK: Task = {
@@ -42,7 +30,6 @@ const TASK: Task = {
 
 type SheetProps = React.ComponentProps<typeof TaskDetailSheet>;
 
-/** Every prop the sheet needs, so a case only has to state the ones it is about. */
 function sheetProps(overrides: Partial<SheetProps> = {}): SheetProps {
   return {
     task: TASK,
@@ -58,6 +45,7 @@ function sheetProps(overrides: Partial<SheetProps> = {}): SheetProps {
     onToggleComplete: vi.fn(),
     onDelete: vi.fn(),
     onArchive: vi.fn(),
+    onUnarchive: vi.fn(),
     onAddBlock: vi.fn(),
     onUpdateBlock: vi.fn(),
     onRemoveBlock: vi.fn(),
@@ -89,10 +77,8 @@ describe("the title field", () => {
     const onPatch = renderSheet();
     const title = screen.getByLabelText<HTMLInputElement>("Title");
 
-    // Genuinely focused, so the component's own `blur()` really dispatches —
-    // which is the whole defect: it runs synchronously, before React has
-    // re-rendered with the reset draft, so the blur handler still sees the
-    // abandoned text.
+    // Genuinely focused, so a `blur()` in the component would really dispatch
+    // (synchronously, before React re-renders with the reset draft).
     title.focus();
     expect(document.activeElement).toBe(title);
     fireEvent.change(title, { target: { value: "DELETE ME" } });
@@ -110,8 +96,7 @@ describe("the title field", () => {
     fireEvent.change(title, { target: { value: "DELETE ME" } });
     fireEvent.keyDown(title, { key: "Escape" });
 
-    // The flag is the blur handler's only escape hatch; a leaked one would
-    // silently swallow every later commit on the field.
+    // A leaked editing flag would silently swallow every later commit.
     title.focus();
     fireEvent.change(title, { target: { value: "Problem set 5" } });
     fireEvent.blur(title);
@@ -122,7 +107,6 @@ describe("the title field", () => {
 
 describe("closing the sheet", () => {
   it("returns focus to whatever opened it", async () => {
-    /** The list, minimally: a row that opens the sheet and holds the task. */
     function Harness() {
       const [task, setTask] = React.useState<Task | null>(null);
       return (
@@ -146,6 +130,7 @@ describe("closing the sheet", () => {
             onToggleComplete={vi.fn()}
             onDelete={vi.fn()}
             onArchive={vi.fn()}
+            onUnarchive={vi.fn()}
             onAddBlock={vi.fn()}
             onUpdateBlock={vi.fn()}
             onRemoveBlock={vi.fn()}
@@ -164,8 +149,6 @@ describe("closing the sheet", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
 
-    // Back on the row, where the list's arrow keys still work — not on `<body>`
-    // at the top of the shell.
     await waitFor(() => expect(document.activeElement).toBe(row));
   });
 });
@@ -197,22 +180,16 @@ describe("the subtask reorder arrows", () => {
     fireEvent.click(up);
     expect(onMoveSubtask).toHaveBeenCalledWith(SECOND.id, 0);
 
-    // The sheet an instant later: the reorder is in flight, so the shared
-    // `pending` flag is up, and the optimistic overlay has already put the row
-    // at the top. Both conditions used to set `disabled` on this very button.
+    // An instant later: the reorder is in flight and the overlay has already
+    // put the row at the top, so both "disabled" conditions are true.
     view.rerender(
       <TaskDetailSheet
         {...sheetProps({ subtasks: [SECOND, FIRST], pending: true, onMoveSubtask })}
       />,
     );
 
-    /*
-     * The mechanism, not the symptom: jsdom does not implement the browser's
-     * blur-on-disable, so `document.activeElement` cannot tell the fix from the
-     * bug here — it stays on the button either way. What the browser reacts to
-     * is the native attribute, so that is what is asserted. The button is still
-     * the focused one, and it is still focusable.
-     */
+    // jsdom does not implement blur-on-disable, so the native attribute is
+    // what is asserted, not `document.activeElement`.
     expect(document.activeElement).toBe(up);
     expect(up.hasAttribute("disabled")).toBe(false);
     expect(up.getAttribute("aria-disabled")).toBe("true");
@@ -225,16 +202,11 @@ describe("the subtask reorder arrows", () => {
     const up = screen.getByRole("button", { name: 'Move "Read the brief" up' });
     expect(up.getAttribute("aria-disabled")).toBe("true");
 
-    // `aria-disabled` does not stop a click the way the native attribute does,
-    // so the guard in the handler is the whole of the enforcement.
+    // `aria-disabled` does not stop a click; the handler's guard does.
     fireEvent.click(up);
     expect(onMoveSubtask).not.toHaveBeenCalled();
   });
 });
-
-/* -------------------------------------------------------------------------- */
-/* Phase 7 — one of the three routes into a focus session                      */
-/* -------------------------------------------------------------------------- */
 
 describe("Start focus", () => {
   it("links to the focus screen with the task pre-selected", () => {
@@ -245,8 +217,7 @@ describe("Start focus", () => {
   });
 
   it("navigates rather than starting a session, so following it twice starts one", () => {
-    // A link, not a button: a control that started a timer on navigation would
-    // start one every time it was followed, a back button included.
+    // A link, not a button: navigation must not start a session.
     renderSheet();
 
     expect(screen.getByRole("link", { name: "Start focus" }).tagName).toBe("A");
@@ -260,10 +231,6 @@ describe("Start focus", () => {
   });
 });
 
-/* -------------------------------------------------------------------------- */
-/* Phase 13 audit — focus stays where the keyboard put it                       */
-/* -------------------------------------------------------------------------- */
-
 describe("committing without losing the keyboard", () => {
   it("commits on Enter and keeps the field focused", () => {
     const onPatch = renderSheet();
@@ -276,7 +243,7 @@ describe("committing without losing the keyboard", () => {
     expect(onPatch).toHaveBeenCalledWith(TASK.id, { title: "Problem set 5" });
     expect(document.activeElement).toBe(title);
 
-    // The blur that eventually follows does not commit the same text twice.
+    // The blur that follows does not commit the same text twice.
     fireEvent.blur(title);
     expect(onPatch).toHaveBeenCalledTimes(1);
   });
@@ -311,15 +278,14 @@ describe("Escape inside a field", () => {
 
     title.focus();
     fireEvent.change(title, { target: { value: "DELETE ME" } });
-    // Dispatched on the document, the way the browser does it, so Radix's
-    // own capture-phase listener runs too.
+    // Bubbles so Radix's own capture-phase document listener runs too.
     fireEvent.keyDown(title, { key: "Escape", bubbles: true });
 
     expect(onPatch).not.toHaveBeenCalled();
     expect(title.value).toBe("Problem set 4");
     expect(onOpenChange).not.toHaveBeenCalledWith(false);
 
-    // A second Escape, from the field that is no longer editing, closes it.
+    // A second Escape, from a field no longer editing, closes the sheet.
     fireEvent.keyDown(title, { key: "Escape", bubbles: true });
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
   });
@@ -354,8 +320,7 @@ describe("deleting from the sheet", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Delete", hidden: false }));
-    // Two buttons read "Delete" now — the sheet's, hidden behind the modal, and
-    // the dialog's. The dialog's is the one inside the dialog.
+    // Two buttons read "Delete" now: the sheet's (behind the modal) and the dialog's.
     const confirm = [...dialog.querySelectorAll("button")].find(
       (button) => button.textContent === "Delete",
     ) as HTMLButtonElement;
@@ -380,5 +345,30 @@ describe("a refused write", () => {
     );
 
     expect(screen.getByRole("alert").textContent).toBe("An estimate is at most one week.");
+  });
+});
+
+describe("an archived task", () => {
+  it("offers Unarchive in place of Archive, and no completion", async () => {
+    const onUnarchive = vi.fn();
+    render(
+      <TaskDetailSheet
+        {...sheetProps({
+          task: {
+            ...TASK,
+            status: "archived",
+            archivedAt: instant("2026-09-05T10:00:00.000Z"),
+          },
+          onUnarchive,
+        })}
+      />,
+    );
+
+    await screen.findByRole("dialog");
+    expect(screen.queryByRole("button", { name: "Archive" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Complete task" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Unarchive" }));
+    expect(onUnarchive).toHaveBeenCalledWith(TASK.id);
   });
 });

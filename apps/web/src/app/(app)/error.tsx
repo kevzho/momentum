@@ -9,10 +9,7 @@ import { PageContainer } from "@momentum/ui/components/page-container";
 
 import { reportError } from "@/lib/report-error";
 
-/**
- * Content-area boundary: the sidebar and top bar survive, so the user can
- * navigate away instead of reloading a blank application.
- */
+// Content-area boundary: the sidebar and top bar survive.
 export default function AppError({
   error,
   reset,

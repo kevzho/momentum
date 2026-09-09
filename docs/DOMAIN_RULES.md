@@ -355,7 +355,9 @@ once set. A goal created this week remains claimable later — nothing is withdr
 resolved the period from `profiles.timezone`/`week_start`; sweeping those spawned extra
 overlapping assignments that each paid for the same work. `assign_quests` now records the
 timezone a period was resolved in and refuses to create a set whose window overlaps one the
-user already holds — so a timezone/week-start sweep yields no extra quests.
+user already holds — so a timezone/week-start sweep yields no extra quests. `ensure_quest_assignments` returns by the same window rule — every held assignment
+whose window, in the zone it was assigned in, contains now — so the one set a user holds stays
+visible across a timezone change (`20260909150000_quest_visibility.sql`).
 
 **Creation timestamps are the database's (upholds Rule 15).** `created_at` was client-writable
 on every table; it is now stamped on insert and immutable thereafter (`freeze_created_at`),

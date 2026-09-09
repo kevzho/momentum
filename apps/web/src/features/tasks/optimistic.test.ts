@@ -7,13 +7,6 @@ import type { IanaTimeZone, Task } from "@momentum/core/types";
 import { applyTaskPatch, newBlock } from "@/features/tasks/optimistic";
 import type { TasksPageData, TaskWorkBlock } from "@/features/tasks/types";
 
-/**
- * The overlay is what the user sees while a write is in flight, so what it says
- * has to be what the database will say a moment later. These tests pin the
- * places where "obvious" and "correct" differ — cascades, subtask project
- * inheritance, and the fact that completing a task leaves its blocks alone.
- */
-
 const TZ: IanaTimeZone = ianaTimeZone("America/New_York");
 const TODAY = localDate("2026-09-07");
 const PROJECT = "11111111-1111-4111-8111-111111111111";
@@ -259,15 +252,9 @@ describe("work blocks", () => {
     expect(find(after, "essay")).toEqual(find(state(), "essay"));
   });
 
-  /*
-   * The span `fromLocal` alone cannot resolve in order, and the reason this
-   * file resolves both ends through `intervalOfSlot`: on 2026-03-08 in New York
-   * 02:30 does not exist, so the start moves forward to 03:30 while the end
-   * stays at 03:00. Two raw conversions come back inverted — the block draws
-   * backwards and reports -30 minutes against the task's coverage — while the
-   * row the server writes is an ordinary thirty minutes.
-   * Mirrors packages/core/src/scheduling/intervals.test.ts.
-   */
+  // On 2026-03-08 in New York 02:30 does not exist: the start moves to 03:30
+  // while the end stays at 03:00, so two raw `fromLocal` calls come back
+  // inverted. Mirrors packages/core/src/scheduling/intervals.test.ts.
   it("keeps the drawn length for a block moved across the far edge of a spring-forward gap", () => {
     const after = applyTaskPatch(
       state(),
@@ -298,8 +285,7 @@ describe("work blocks", () => {
     expect(created?.minutes).toBe(30);
     expect(created?.startAt).toBe("2026-03-08T07:30:00.000Z");
     expect(created?.endAt).toBe("2026-03-08T08:00:00.000Z");
-    // Still the wall clock the user set: the block reads 02:30 on its day even
-    // though the instants say 03:30 (Domain Rule 5).
+    // Still the wall clock the user set, even though the instants say 03:30.
     expect(created?.startMinutes).toBe(150);
     expect(created?.endMinutes).toBe(180);
   });

@@ -17,27 +17,12 @@ import type { HabitView, HabitsPageData } from "@/features/habits/types";
 import { requireSession } from "@/lib/auth/session";
 
 /**
- * The habits page's one read.
- *
- * Three queries — the habits, their completions over the heatmap range, and the
- * habit blocks in the displayed week — resolved together. Every number the page
- * shows is then computed from that one result by the pure functions in
- * `@momentum/core/habits`: the week strip, the progress bar, consistency, the
- * two success rates, the streaks and the heatmap are all the same rows counted
- * differently, so there is no per-panel query and nothing that can disagree
- * with the panel beside it.
- *
- * "Today", the week and the heatmap range all resolve in `profile.timezone`
- * (Domain Rule 4), once per request. The client is handed dates, never a clock.
+ * The habits page's one read: habits, completions over the heatmap range and
+ * the week's habit blocks. Every displayed number derives from that result via
+ * `@momentum/core/habits`. Dates resolve in `profile.timezone` once per request.
  */
 
-/**
- * How far back the long-range heatmap reaches.
- *
- * Twelve weeks plus the current partial one: long enough to show a habit's
- * shape and a gap in it, short enough that a year of rows is not fetched to
- * render a row that is 700px wide.
- */
+/** Weeks of history read, including the current partial one. */
 export const HEATMAP_WEEKS = 12;
 
 export async function getHabitsPage(): Promise<HabitsPageData> {
@@ -51,18 +36,10 @@ export async function getHabitsPage(): Promise<HabitsPageData> {
 
   const habitRows = await habits.listFor(supabase, userId);
 
-  /*
-   * Completions are read for the whole heatmap range, not for the week, because
-   * every rate on the page is measured over a longer window than the week strip
-   * shows — consistency over 30 days, the month-to-date rate over up to 31.
-   * Twelve weeks covers all of them, so the page is three queries rather than
-   * one per statistic.
-   *
-   * Streaks are the exception and are deliberately measured over the same
-   * range: a "best run" is reported as "the best run in the last twelve weeks",
-   * not as an all-time record, because reading a user's whole history to render
-   * a list row is a cost that grows for ever.
-   */
+  // Completions are read over the whole heatmap range because every rate
+  // (consistency over 30 days, month-to-date) spans more than the week. Streaks
+  // are deliberately measured over the same range — "best run" means best in
+  // the last twelve weeks — so the read never grows with the user's history.
   const [completionRows, blockRows] = await Promise.all([
     habits.listCompletionsBetween(supabase, userId, historyFrom, today),
     blocks.listForHabits(
@@ -114,14 +91,9 @@ interface ToViewInput {
 }
 
 /**
- * One habit, resolved.
- *
- * `trackedFrom` is the later of the habit's creation date and the start of the
- * read range: a habit created on Thursday is not measured against the Monday it
- * did not exist on, and a rate is never computed over rows this query did not
- * fetch. Both clips matter — the first is Domain Rule 7 (nothing is expected of
- * a habit before it existed), the second is simply honesty about the data on
- * hand.
+ * `trackedFrom` is the later of the habit's creation date and the read range
+ * start: nothing is expected of a habit before it existed, and no rate is
+ * computed over rows this query did not fetch.
  */
 function toView(input: ToViewInput): HabitView {
   const { habit, completions, days, today, weekStart, historyFrom, timezone } = input;
@@ -139,10 +111,6 @@ function toView(input: ToViewInput): HabitView {
   };
 }
 
-/* -------------------------------------------------------------------------- */
-/* Grouping                                                                   */
-/* -------------------------------------------------------------------------- */
-
 function groupCompletions(rows: readonly HabitCompletion[]): Map<Uuid, HabitCompletion[]> {
   const byHabit = new Map<Uuid, HabitCompletion[]>();
   for (const row of rows) {
@@ -154,12 +122,9 @@ function groupCompletions(rows: readonly HabitCompletion[]): Map<Uuid, HabitComp
 }
 
 /**
- * Which local dates already carry a block for each habit.
- *
- * The date a block belongs to is the day it *starts* on, resolved in the
- * profile timezone — the same convention the calendar's own reads use. This is
- * what "Add to week" differences against, so pressing it twice tops the week up
- * instead of doubling it.
+ * Local dates already carrying a block, per habit, keyed by the day the block
+ * starts in the profile timezone (the calendar's convention). "Add to week"
+ * differences against this.
  */
 function groupReservedDates(
   rows: readonly CalendarBlock[],

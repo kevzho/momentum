@@ -6,20 +6,19 @@ import type { Profile, WorkingHours } from "@momentum/core/types";
 
 import type { ActionResult } from "@/lib/actions/result";
 
-/**
- * The wiring between the page's controls and its one action.
- *
- * Each control sends a patch naming only its own field; that is the whole
- * contract, and it is what these tests assert. A failed write — one the action
- * returns and one the call rejects alike — goes back to what it was, shows a
- * message and releases the control (Domain Rule 11).
- */
-
-const { errorToast, reportError, updateProfileSettingsMock } = vi.hoisted(() => ({
-  errorToast: vi.fn(),
-  reportError: vi.fn(),
-  updateProfileSettingsMock: vi.fn(),
-}));
+const { errorToast, reportError, updateProfileSettingsMock, notificationPreference } = vi.hoisted(
+  () => ({
+    errorToast: vi.fn(),
+    reportError: vi.fn(),
+    updateProfileSettingsMock: vi.fn(),
+    notificationPreference: {
+      supported: true,
+      enabled: false,
+      permission: "default" as "default" | "granted" | "denied",
+      setEnabled: vi.fn(),
+    },
+  }),
+);
 
 vi.mock("@momentum/ui/components/toast", () => ({
   toast: {
@@ -37,8 +36,11 @@ vi.mock("@/features/settings/actions", () => ({
 
 vi.mock("@/lib/report-error", () => ({ reportError }));
 
-// The theme control belongs to the shell and needs its provider; it is not
-// what this page's wiring is about.
+vi.mock("@/lib/notifications/focus-notification", () => ({
+  useFocusNotificationPreference: () => notificationPreference,
+}));
+
+// The theme control needs the shell's provider.
 vi.mock("@/components/theme-toggle", () => ({
   ThemeToggle: () => null,
 }));
@@ -50,6 +52,10 @@ beforeEach(() => {
   updateProfileSettingsMock.mockReset();
   errorToast.mockClear();
   reportError.mockClear();
+  notificationPreference.supported = true;
+  notificationPreference.enabled = false;
+  notificationPreference.permission = "default";
+  notificationPreference.setEnabled.mockReset().mockResolvedValue(undefined);
 });
 
 const window = (start: string, end: string) => ({ start: localTime(start), end: localTime(end) });
@@ -130,10 +136,8 @@ describe("working hours", () => {
     render(<SettingsView defaults={DEFAULTS} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Remove Monday window 1" }));
-    // The day reads as off the moment the button is pressed…
     expect(screen.getAllByText("Day off")).toHaveLength(3);
 
-    // …and reads as it was once the server has refused.
     await waitFor(() =>
       expect(errorToast).toHaveBeenCalledWith(
         "Momentum could not save that change. Please try again.",
@@ -170,7 +174,7 @@ describe("working hours", () => {
         true,
       ),
     );
-    // The focus list is a different field with its own write; it stays live.
+    // A different field with its own write; it stays live.
     expect(screen.getByRole("button", { name: "Remove Focus window 1" })).toHaveProperty(
       "disabled",
       false,
@@ -228,8 +232,6 @@ describe("timezone", () => {
     const search = await screen.findByRole("combobox", { name: "Search timezones" });
     fireEvent.change(search, { target: { value: "auckland" } });
 
-    // A zone the old four-entry list could not reach (Domain Rule 4: every
-    // date boundary resolves in this setting).
     fireEvent.click(await screen.findByRole("option", { name: "Pacific/Auckland" }));
 
     await waitFor(() =>
@@ -240,7 +242,7 @@ describe("timezone", () => {
         "Pacific/Auckland",
       ),
     );
-    // The list closed and focus went back to the control, not to <body>.
+    // Focus went back to the control, not to <body>.
     expect(screen.queryByRole("option", { name: "Pacific/Auckland" })).toBeNull();
     expect(document.activeElement).not.toBe(document.body);
   });
@@ -265,12 +267,81 @@ describe("timezone", () => {
   });
 });
 
-describe("what the page does not offer", () => {
-  it("has no notification switches, because nothing sends notifications yet", () => {
+describe("focus-end notification", () => {
+  it("is one switch that hands the choice to the preference", () => {
     render(<SettingsView defaults={DEFAULTS} />);
 
-    expect(screen.queryByRole("switch")).toBeNull();
-    expect(screen.queryByText("Notifications")).toBeNull();
+    const switches = screen.getAllByRole("switch");
+    expect(switches).toHaveLength(1);
+    const control = screen.getByRole("switch", { name: "Notify me when a focus session ends" });
+    expect(control).toHaveProperty("disabled", false);
+    expect(control.getAttribute("aria-checked")).toBe("false");
+
+    fireEvent.click(control);
+
+    expect(notificationPreference.setEnabled).toHaveBeenCalledWith(true);
+    // Nothing on the profile: the preference is per-device.
+    expect(updateProfileSettingsMock).not.toHaveBeenCalled();
+  });
+
+  it("reads as on when the preference says so", () => {
+    notificationPreference.enabled = true;
+    notificationPreference.permission = "granted";
+    render(<SettingsView defaults={DEFAULTS} />);
+
+    const control = screen.getByRole("switch", { name: "Notify me when a focus session ends" });
+    expect(control.getAttribute("aria-checked")).toBe("true");
+    expect(control.getAttribute("aria-describedby")).toBeNull();
+
+    fireEvent.click(control);
+
+    expect(notificationPreference.setEnabled).toHaveBeenCalledWith(false);
+  });
+
+  it("is disabled, with the reason, where the browser has no Notification API", () => {
+    notificationPreference.supported = false;
+    render(<SettingsView defaults={DEFAULTS} />);
+
+    const control = screen.getByRole("switch", { name: "Notify me when a focus session ends" });
+    expect(control).toHaveProperty("disabled", true);
+    expect(control.getAttribute("aria-describedby")).toBe("focus-end-notification-note");
+    expect(screen.getByText("This browser does not support notifications.")).toBeDefined();
+  });
+
+  it("says that permission was refused, and leaves the switch live for a retry", () => {
+    notificationPreference.permission = "denied";
+    render(<SettingsView defaults={DEFAULTS} />);
+
+    const control = screen.getByRole("switch", { name: "Notify me when a focus session ends" });
+    expect(control).toHaveProperty("disabled", false);
+    expect(control.getAttribute("aria-checked")).toBe("false");
+    expect(
+      screen.getByText("Notifications are blocked for Momentum in this browser's settings."),
+    ).toBeDefined();
+  });
+
+  it("reports a preference that rejects rather than blanking the page", async () => {
+    notificationPreference.setEnabled.mockRejectedValue(new Error("boom"));
+    render(
+      <ErrorBoundary section="Settings">
+        <SettingsView defaults={DEFAULTS} />
+      </ErrorBoundary>,
+    );
+
+    fireEvent.click(screen.getByRole("switch", { name: "Notify me when a focus session ends" }));
+
+    await waitFor(() => expect(reportError).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+});
+
+describe("data export", () => {
+  it("is a real download link to the export route, not a fetch", () => {
+    render(<SettingsView defaults={DEFAULTS} />);
+
+    const link = screen.getByRole("link", { name: "Download your data" });
+    expect(link.getAttribute("href")).toBe("/api/export");
+    expect(link.hasAttribute("download")).toBe(true);
   });
 });
 
@@ -303,10 +374,8 @@ describe("display name", () => {
     render(<SettingsView defaults={DEFAULTS} />);
 
     const field = screen.getByLabelText<HTMLInputElement>("Display name");
-    // Genuinely focused, so the component's own `blur()` really dispatches —
-    // which is the whole defect: it runs synchronously, before React has
-    // re-rendered with the reset draft, so the blur handler still sees the
-    // abandoned text and would send exactly the edit Escape threw away.
+    // Genuinely focused, so the component's own `blur()` really dispatches
+    // synchronously, before React re-renders with the reset draft.
     field.focus();
     expect(document.activeElement).toBe(field);
     fireEvent.change(field, { target: { value: "DELETE ME" } });
@@ -325,8 +394,7 @@ describe("display name", () => {
     fireEvent.change(field, { target: { value: "DELETE ME" } });
     fireEvent.keyDown(field, { key: "Escape" });
 
-    // The flag is the blur handler's only escape hatch; a leaked one would
-    // silently swallow every later commit on the field.
+    // A leaked flag would silently swallow every later commit on the field.
     field.focus();
     fireEvent.change(field, { target: { value: "D. Ross" } });
     fireEvent.blur(field);
@@ -335,14 +403,6 @@ describe("display name", () => {
   });
 });
 
-/*
- * The other half of "on failure" (docs/ARCHITECTURE.md §8). The action reports
- * an expected failure by returning, but the call itself still rejects when the
- * device is offline, the response is a 5xx, the request is aborted or the
- * action id went stale in a deploy — and React re-throws a rejection out of the
- * transition at the next render, which would hand the boundary a blanked page
- * and leave this hook's pending key on a control with no write behind it.
- */
 describe("when the write rejects instead of returning", () => {
   it("goes back, shows the unreachable message, and releases the control", async () => {
     updateProfileSettingsMock.mockRejectedValue(new TypeError("Failed to fetch"));
@@ -355,8 +415,6 @@ describe("when the write rejects instead of returning", () => {
     fireEvent.click(screen.getByRole("button", { name: "Remove Monday window 1" }));
     expect(screen.getAllByText("Day off")).toHaveLength(3);
 
-    // The server's own `unavailable` wording, so there is one message for
-    // "could not reach the server" whichever side noticed.
     await waitFor(() =>
       expect(errorToast).toHaveBeenCalledWith(
         "Momentum could not reach the server. Your change was not saved.",
@@ -364,17 +422,15 @@ describe("when the write rejects instead of returning", () => {
     );
     await waitFor(() => expect(screen.getAllByText("Day off")).toHaveLength(2));
 
-    // The page is still there; the boundary never saw it.
+    // The boundary never saw it.
     expect(screen.queryByRole("alert")).toBeNull();
 
-    // The pending key is deleted on the caught path too, so the field is live
-    // again rather than disabled forever with no write behind it.
+    // The pending key is deleted on the caught path too.
     expect(screen.getByRole("button", { name: "Remove Monday window 1" })).toHaveProperty(
       "disabled",
       false,
     );
 
-    // Swallowed for the user, not for us.
     expect(reportError).toHaveBeenCalledTimes(1);
   });
 });

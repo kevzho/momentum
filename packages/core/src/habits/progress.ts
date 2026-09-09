@@ -11,19 +11,8 @@ import {
 } from "./model";
 
 /**
- * A habit's week, resolved for display: one state per day, plus the week's own
- * progress toward whatever the habit's target is.
- *
- * The vocabulary is chosen as carefully as the maths. There is no "missed" and
- * no "failed" state anywhere in this module: a scheduled day that has passed
- * without a completion is **`open`**, and a day still ahead is **`ahead`**.
- * Domain Rule 7 rules out language that characterises the user, and a state
- * name leaks into every label, tooltip and screen-reader string that renders
- * it — so the neutral word has to be the one the type offers.
- */
-
-/**
- * What one day looks like.
+ * A habit's week, resolved for display. There is deliberately no "missed" or
+ * "failed" state (Domain Rule 7): state names leak into every label.
  *
  *   met       the day's target was reached
  *   partial   an amount habit recorded something, short of the day's target
@@ -43,14 +32,7 @@ export interface HabitDay {
   target: number | null;
 }
 
-/**
- * One day's state.
- *
- * A per-week habit ("three times a week, any days") asks nothing of a specific
- * date, so its days are `free` until something is recorded on them and `met`
- * after — the day contributed to the week, and there is no sense in which a
- * Tuesday it did not name was skipped.
- */
+/** One day's state. A per-week habit's days are `free` until something is recorded, then `met`. */
 export function habitDay(
   habit: HabitSchedule,
   date: LocalDate,
@@ -83,13 +65,7 @@ export function habitDays(
   return dates.map((date) => habitDay(habit, date, amounts.get(date) ?? 0, today));
 }
 
-/**
- * How far through its target the habit is over a set of dates — the number the
- * card shows as "2 of 3" or "80 of 120 minutes".
- *
- * `achieved` is uncapped so that doing more than the target is visible as more;
- * `fraction` is capped at 1 so a progress bar cannot overflow its track.
- */
+/** Progress toward the target over a set of dates. `achieved` is uncapped; `fraction` is capped at 1. */
 export interface HabitProgress {
   achieved: number;
   target: number;
@@ -129,21 +105,9 @@ function withFraction(achieved: number, target: number): HabitProgress {
 }
 
 /**
- * What one press on a habit's control records for a day.
- *
- * A boolean habit records the day, and nothing else: `record_habit_completion`
- * forces its amount to 1 whatever is sent. An amount habit is *topped up to its
- * target* in one press — the rest of today's target for a per-day habit, and
- * the rest of the week's for a per-week one, which names no per-day target at
- * all (`dailyTargetOf` is null there). Sending 1 toward a two-hour week would
- * record one minute and still call the day done, and the week's rate would then
- * be computed from one-minute days.
- *
- * Never less than 1: a day already past its target still records something
- * rather than nothing, which is what the press asked for.
- *
- * Both surfaces that offer the press — the habits page and Today — call this,
- * so they cannot disagree on what a tap means.
+ * What one press on a habit's control records. A boolean habit records 1; an
+ * amount habit is topped up to the rest of today's target (or the week's, for
+ * a per-week habit). Never less than 1. Both the habits page and Today call this.
  */
 export function amountToRecord(
   habit: HabitSchedule,

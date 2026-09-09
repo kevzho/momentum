@@ -18,9 +18,6 @@ const d = localDate;
 const i = instant;
 
 /**
- * Transition instants read out of the runtime's tz database (see
- * `time/zone.test.ts`), not from memory:
- *
  *   America/New_York  2026-03-08 07:00Z  local 02:00 -> 03:00  (-5 -> -4)
  *                     2026-11-01 06:00Z  local 02:00 -> 01:00  (-4 -> -5)
  *   Pacific/Auckland  2026-09-26 14:00Z  local 02:00 -> 03:00  (+12 -> +13)  southern spring
@@ -160,16 +157,12 @@ describe("daily series", () => {
       recurrence: rule({ freq: "daily", interval: 2 }),
     });
     const occurrences = expandSeries(longRunning, windowOf("2026-09-07", 7, UTC), []);
-    // 2026-01-05 → 2026-09-07 is 245 days, an odd number, so this window's
-    // occurrences land on the even days of the week rather than on its Monday.
+    // 2026-01-05 → 2026-09-07 is 245 days, an odd number.
     expect(datesOf(occurrences)).toEqual(["2026-09-08", "2026-09-10", "2026-09-12"]);
     expect(occurrences.every((occurrence) => occurrence.series === longRunning)).toBe(true);
   });
 
   it("excludes an occurrence that ends exactly as the window opens", () => {
-    // Half-open on the window: the 09-06 09:00–09:15 occurrence is over before
-    // this window starts, and the one whose 09:00 start is the window's own end
-    // belongs to the next page.
     const occurrences = expandSeries(standup, windowOf("2026-09-08", 1, UTC), []);
     expect(datesOf(occurrences)).toEqual(["2026-09-08"]);
   });
@@ -241,7 +234,6 @@ describe("weekly series", () => {
       "2026-09-14",
       "2026-09-21",
     ]);
-    // A later window sees only what is left of the count, not three more.
     expect(datesOf(expandSeries(threeWeeks, windowOf("2026-09-21", 7, UTC), []))).toEqual([
       "2026-09-21",
     ]);
@@ -263,8 +255,7 @@ describe("overrides", () => {
       endAt: "2026-09-14T15:30:00.000Z",
       cancelled: true,
     });
-    // The cancelled occurrence has still consumed its slot: three weeks were
-    // scheduled, one was deleted, and 09-28 must not appear to replace it.
+    // The cancelled occurrence has still consumed its slot; 09-28 must not replace it.
     expect(datesOf(expandSeries(lecture, windowOf("2026-09-07", 35, UTC), [cancelled]))).toEqual([
       "2026-09-07",
       "2026-09-21",
@@ -281,8 +272,7 @@ describe("overrides", () => {
     const occurrences = expandSeries(lecture, windowOf("2026-09-14", 7, UTC), [moved]);
     expect(occurrences).toHaveLength(1);
     expect(occurrences[0]).toMatchObject({
-      // The id stays keyed to the date the rule produced, so a moved occurrence
-      // keeps its identity for React keys and optimistic state.
+      // The id stays keyed to the date the rule produced.
       id: `${SERIES_ID}:2026-09-14`,
       occurrenceDate: "2026-09-14",
       startAt: "2026-09-14T18:00:00.000Z",
@@ -298,8 +288,6 @@ describe("overrides", () => {
       endAt: "2026-09-01T10:00:00.000Z",
       recurrence: rule({ freq: "daily" }),
     });
-    // The 09-06 occurrence is outside a window that starts on 09-07 — until the
-    // user drags it to the Tuesday.
     const moved = override({
       occurrenceDate: "2026-09-06",
       startAt: "2026-09-08T12:00:00.000Z",
@@ -307,7 +295,7 @@ describe("overrides", () => {
     });
     const occurrences = expandSeries(daily, windowOf("2026-09-07", 2, UTC), [moved]);
     expect(datesOf(occurrences)).toEqual(["2026-09-07", "2026-09-08", "2026-09-06"]);
-    // Ordered by the times actually rendered, not by occurrence date.
+    // Ordered by rendered time, not by occurrence date.
     expect(startsOf(occurrences)).toEqual([
       "2026-09-07T09:00:00.000Z",
       "2026-09-08T09:00:00.000Z",
@@ -326,7 +314,6 @@ describe("overrides", () => {
       startAt: "2026-09-20T09:00:00.000Z",
       endAt: "2026-09-20T10:00:00.000Z",
     });
-    // 09-08 leaves the window and does not come back as its original self.
     expect(datesOf(expandSeries(daily, windowOf("2026-09-07", 3, UTC), [moved]))).toEqual([
       "2026-09-07",
       "2026-09-09",
@@ -369,8 +356,7 @@ describe("DST — northern hemisphere", () => {
       expect(minutesFromMidnight(occurrence.startAt, NEW_YORK)).toBe(9 * 60);
       expect(minutesFromMidnight(occurrence.endAt, NEW_YORK)).toBe(10 * 60);
     }
-    // The UTC instants are what move: EST (-5) before the transition, EDT (-4)
-    // after, so the week containing it is 167 hours long, not 168.
+    // The UTC instants are what move; the week containing the transition is 167 hours long.
     expect(startsOf(occurrences)).toEqual([
       "2026-02-16T14:00:00.000Z",
       "2026-02-23T14:00:00.000Z",
@@ -398,17 +384,13 @@ describe("DST — northern hemisphere", () => {
     for (const occurrence of occurrences) {
       expect(minutesFromMidnight(occurrence.startAt, NEW_YORK)).toBe(9 * 60);
     }
-    // 169 hours: the fall-back week is the long one.
     expect(durationMinutes(i("2026-10-26T13:00:00.000Z"), i("2026-11-02T14:00:00.000Z"))).toBe(
       169 * 60,
     );
   });
 
   it("keeps the elapsed duration of an occurrence that spans the gap, moving its end", () => {
-    // 01:00–03:00 daily. On 2026-03-08 the local clock jumps 02:00 → 03:00, so
-    // two elapsed hours from 01:00 land on 04:00 rather than 03:00. The block
-    // keeps the two hours of the user's week it was always going to consume
-    // (Domain Rule 3); its wall-clock end is what gives.
+    // 01:00–03:00 daily: on 2026-03-08 two elapsed hours from 01:00 land on 04:00.
     const nightly = series({
       startAt: "2026-03-06T06:00:00.000Z", // 01:00 EST
       endAt: "2026-03-06T08:00:00.000Z", // 03:00 EST
@@ -464,10 +446,7 @@ describe("DST — southern hemisphere", () => {
 
 describe("a series whose timezone is not the window's", () => {
   it("keeps an occurrence that starts the day before the window and runs into it", () => {
-    // London is +01:00 in September, so a UTC window opens at 01:00 local: the
-    // occurrence dated 09-06 is still running. Starting the walk at the
-    // window's own first local date would drop it, which is what step 2's
-    // one-day margin exists to prevent.
+    // London is +01:00 in September, so a UTC window opens at 01:00 local while the 09-06 occurrence is still running.
     const nightShift = series({
       startAt: "2026-09-01T22:30:00.000Z", // 23:30 BST
       endAt: "2026-09-02T00:30:00.000Z", // 01:30 BST the next day
@@ -476,13 +455,10 @@ describe("a series whose timezone is not the window's", () => {
     const occurrences = expandSeries(nightShift, windowOf("2026-09-07", 1, UTC), []);
     expect(datesOf(occurrences)).toEqual(["2026-09-06", "2026-09-07"]);
     expect(startsOf(occurrences)).toEqual(["2026-09-06T22:30:00.000Z", "2026-09-07T22:30:00.000Z"]);
-    // Not the 09-05 occurrence, which was over before the window opened.
     expect(occurrences).toHaveLength(2);
   });
 
   it("keeps a multi-day occurrence that began several days before the window", () => {
-    // The margin is sized from the series' own length, so a three-day
-    // conference is not dropped from every week of its run but the first.
     const conference = series({
       startAt: "2026-09-04T10:00:00.000Z",
       endAt: "2026-09-07T10:00:00.000Z",
@@ -520,8 +496,7 @@ describe("expandAll", () => {
   });
 
   it("routes each override to its own series", () => {
-    // Both overrides name the same occurrence date; only the series id tells
-    // them apart, and getting that wrong would cancel the wrong block.
+    // Both overrides name the same occurrence date; only the series id tells them apart.
     const overrides = [
       override({
         seriesId: OTHER_SERIES_ID,
@@ -556,7 +531,6 @@ describe("expandAll", () => {
       endAt: "2026-09-07T17:00:00.000Z",
       recurrence: null,
     });
-    // A plain event belongs on the grid as itself; expanding it would draw it twice.
     expect(expandAll([plainEvent], windowOf("2026-09-07", 7, NEW_YORK), [])).toEqual([]);
     expect(expandSeries(plainEvent, windowOf("2026-09-07", 7, NEW_YORK), [])).toEqual([]);
   });

@@ -3,13 +3,6 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { AuthResult } from "@/features/auth/actions";
 
-/**
- * Where the keyboard is after a submission. The submit button is natively
- * disabled while the action runs, which blurs it, so without a hand-off a
- * failed sign-in left focus on `<body>` and the next Tab started from the top
- * of the document (Domain Rule 10).
- */
-
 const { signInMock, requestPasswordResetMock } = vi.hoisted(() => ({
   signInMock: vi.fn(),
   requestPasswordResetMock: vi.fn(),

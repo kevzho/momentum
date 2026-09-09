@@ -13,13 +13,7 @@ import {
   SheetTitle,
 } from "@momentum/ui/components/sheet";
 
-/**
- * The detail surface: task detail, block edit. A sheet rather than a dialog —
- * it does not interrupt the page it came from, it is 480px wide on desktop and
- * full width below `md`, and it always has a title for the accessibility tree.
- *
- * Use this instead of a modal wherever a modal is not genuinely required.
- */
+/** The detail surface. Use this instead of a modal wherever a modal is not genuinely required. */
 function SideSheet({
   open,
   onOpenChange,

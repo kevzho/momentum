@@ -1,6 +1,6 @@
 import { expect, signIn, test } from "./fixtures";
 
-/** Workflows 10, 11 and 12 — start, pause / resume and finish a focus session. */
+/** Start, pause / resume and finish a focus session. */
 test.describe("Focus", () => {
   test.beforeEach(async ({ page }) => {
     await signIn(page);
@@ -40,7 +40,7 @@ test.describe("Focus", () => {
     await timer.getByRole("button", { name: "Finish session" }).click();
     await expect(timer.getByRole("button", { name: /^Start \d+ minutes$/ })).toBeVisible();
 
-    // The finished session heads the history, in the product's own words.
+    // The finished session heads the history.
     const recent = history.getByRole("list").last().getByRole("listitem").first();
     await expect(recent).toContainText("No task — just the timer");
     await expect(recent).toContainText("Finished");

@@ -4,15 +4,9 @@ import { Skeleton } from "@momentum/ui/components/skeleton";
 import { PageHeaderSkeleton, SectionLabelSkeleton } from "@/components/skeletons";
 
 /**
- * Built from the same layout as `ProgressView`, so the skeleton occupies the
- * space the content will occupy and nothing shifts on arrival
- * (docs/ARCHITECTURE.md §15).
- *
- * The numbers mirror the real page: `PageHeader` is a title and a description
- * (46px), the level panel is a `text-sm` row (20) · `Progress` (4) · `text-xs`
- * line (16) at `gap-1.5` inside `py-3` and a border (78px), a section label is
- * one line of `text-xs`, and a quest or goal row is a `text-sm` title row,
- * the bar and a `text-xs` progress line at `gap-1.5` (52px).
+ * Mirrors `ProgressView`'s layout so nothing shifts on arrival: `PageHeader`
+ * (46px), the level panel (78px), a section label (one `text-xs` line), and a
+ * quest or goal row (52px).
  */
 export function ProgressSkeleton() {
   return (

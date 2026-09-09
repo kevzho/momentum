@@ -5,10 +5,8 @@ import { UpdatePasswordForm } from "@/features/auth/components/update-password-f
 
 export const metadata: Metadata = { title: "Set a new password" };
 
-/**
- * Reached from the emailed reset link, which signs the user in first — so this
- * is the one public path `proxy.ts` still allows while authenticated.
- */
+// The emailed reset link signs the user in first, so this is the one public
+// path `proxy.ts` still allows while authenticated.
 export default function UpdatePasswordPage() {
   return (
     <AuthCard

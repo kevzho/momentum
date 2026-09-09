@@ -3,16 +3,8 @@ import type { Route } from "next";
 import { isTaskView, type TaskView } from "@momentum/core/tasks";
 import type { Uuid } from "@momentum/core/types";
 
-/**
- * Which view, which project, which task is open — read from and written to the
- * URL.
- *
- * Navigational state lives in search params (docs/ARCHITECTURE.md §7), which is
- * what makes a view linkable, back-button-able and survivable across a refresh.
- * Sort and filter do *not* live here: the spec asks them to persist within a
- * session, not to be part of the address, and a URL carrying six parameters is
- * not one anybody shares.
- */
+// Navigational state lives in search params; sort and filter do not
+// (see `list-preferences.ts`).
 
 export interface TaskParams {
   view: TaskView;
@@ -20,9 +12,13 @@ export interface TaskParams {
   projectId: Uuid | null;
   /** The task whose detail sheet is open, if any. */
   taskId: Uuid | null;
+  /** The palette's "New project" intent, honoured once by the page. */
+  newProject: boolean;
 }
 
-/** Where `/tasks` lands with no parameters. Inbox is where Quick Add's output goes. */
+/** The task page opens the dialog once, then replaces the URL without it. */
+export const NEW_PROJECT_HREF = "/tasks?new=project" as Route;
+
 export const DEFAULT_VIEW: TaskView = "inbox";
 
 type ParamValue = string | string[] | undefined;
@@ -33,12 +29,8 @@ function first(value: ParamValue): string | null {
 }
 
 /**
- * Anything unrecognised falls back to the default rather than erroring: a
- * hand-edited or stale URL should show the user their tasks, not a 500.
- *
- * A `project` view with no project id is downgraded to the default too — the
- * view has nothing to show and `matchesView` would correctly return nothing,
- * which would read as an empty inbox rather than as a bad link.
+ * Anything unrecognised falls back to the default rather than erroring, and so
+ * does a `project` view with no project id.
  */
 export function parseTaskParams(params: Record<string, ParamValue>): TaskParams {
   const rawView = first(params.view);
@@ -49,13 +41,11 @@ export function parseTaskParams(params: Record<string, ParamValue>): TaskParams 
     view: view === "project" && projectId === null ? DEFAULT_VIEW : view,
     projectId,
     taskId: first(params.task),
+    newProject: first(params.new) === "project",
   };
 }
 
-/**
- * The href for a view. Omits every default, so the common links are short and
- * two routes to the same view produce the same address.
- */
+/** The href for a view. Omits every default so equal views produce equal addresses. */
 export function taskHref(params: Partial<TaskParams>): Route {
   const search = new URLSearchParams();
   const view = params.view ?? DEFAULT_VIEW;
@@ -65,8 +55,7 @@ export function taskHref(params: Partial<TaskParams>): Route {
   if (params.taskId) search.set("task", params.taskId);
 
   const query = search.toString();
-  // A typed route with a query string: `Route` covers the path, and the search
-  // params are the app's own, validated back by `parseTaskParams`.
+  // `Route` covers the path; the search params are validated back by `parseTaskParams`.
   return (query === "" ? "/tasks" : `/tasks?${query}`) as Route;
 }
 
@@ -77,7 +66,15 @@ export const VIEW_LABELS: Record<TaskView, string> = {
   all: "All tasks",
   completed: "Completed",
   project: "Project",
+  archived: "Archived",
 };
 
-/** The five views the toolbar shows as tabs. `project` is reached from the sidebar. */
-export const TAB_VIEWS: readonly TaskView[] = ["inbox", "today", "upcoming", "all", "completed"];
+/** The toolbar's tabs. `project` is reached from the sidebar. */
+export const TAB_VIEWS: readonly TaskView[] = [
+  "inbox",
+  "today",
+  "upcoming",
+  "all",
+  "completed",
+  "archived",
+];

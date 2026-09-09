@@ -10,20 +10,7 @@ import type { QuestRow } from "@/features/gamification/types";
 import { TODAY_COPY } from "@/features/today/copy";
 import { TodaySection } from "@/features/today/components/today-section";
 
-/**
- * Today's quests: what each asks for, how far through it the day is, and — only
- * once it is actually met — a Claim control.
- *
- * Daily only. A week's quests are a week's question and /progress is where a
- * week is looked at; a Today page that listed them would be reporting rather
- * than executing.
- *
- * The bar is the progress the server computed from the same rows the database
- * will check a claim against, so the control is never offered for something
- * that would then be refused (Domain Rule 6). A quest that is not finished
- * shows no button rather than a disabled one with an explanation: there is
- * nothing to explain, the day is still going.
- */
+/** Today's daily quests, with a Claim control only once the server-computed progress is met. */
 export function TodayQuests({
   quests,
   claimingId,

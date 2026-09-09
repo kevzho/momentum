@@ -6,28 +6,22 @@ import type { Task } from "@momentum/core/types";
 
 import type { TasksPageData } from "@/features/tasks/types";
 
-/**
- * The bulk bar acts on what the user can see.
- *
- * Complete, Move and Delete are irreversible from this surface — there is no
- * confirmation and no undo — so the set the bar counts and the set the mutation
- * receives have to be the same set, and both have to be rows that are on screen.
- * A selection made before a filter was typed is not a licence to delete rows the
- * filter has since hidden.
- */
+const { bulkDeleteMock, bulkCompleteMock, bulkMoveMock, reorderTaskMock, archiveTaskMock } =
+  vi.hoisted(() => ({
+    archiveTaskMock: vi.fn(() => Promise.resolve({ ok: true as const, data: null })),
+    bulkDeleteMock: vi.fn(() => Promise.resolve({ ok: true as const, data: { ids: [] } })),
+    bulkCompleteMock: vi.fn(),
+    reorderTaskMock: vi.fn(() => Promise.resolve({ ok: true as const, data: [] })),
+    // Awaited to completion by a test, so it must resolve to a real result;
+    // a bare `vi.fn()` resolves to `undefined` and the hook reads `.ok` off it.
+    bulkMoveMock: vi.fn(() => Promise.resolve({ ok: true as const, data: [] })),
+  }));
 
-const { bulkDeleteMock, bulkCompleteMock, bulkMoveMock, reorderTaskMock } = vi.hoisted(() => ({
-  bulkDeleteMock: vi.fn(() => Promise.resolve({ ok: true as const, data: { ids: [] } })),
-  bulkCompleteMock: vi.fn(),
-  reorderTaskMock: vi.fn(() => Promise.resolve({ ok: true as const, data: [] })),
-  // Unlike its two neighbours, this one is awaited to completion by a test, so
-  // it has to answer in the shape every action answers in — a bare `vi.fn()`
-  // resolves to `undefined` and the hook reads `.ok` off it.
-  bulkMoveMock: vi.fn(() => Promise.resolve({ ok: true as const, data: [] })),
-}));
+const { replaceMock } = vi.hoisted(() => ({ replaceMock: vi.fn() }));
 
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn() }),
+vi.mock("next/navigation", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("next/navigation")>()),
+  useRouter: () => ({ push: vi.fn(), replace: replaceMock, refresh: vi.fn() }),
 }));
 
 vi.mock("@momentum/ui/components/toast", () => ({
@@ -40,11 +34,17 @@ vi.mock("@momentum/ui/components/toast", () => ({
   },
 }));
 
+vi.mock("@/features/projects/actions", () => ({
+  createProject: vi.fn(),
+  updateProject: vi.fn(),
+  archiveProject: vi.fn(),
+}));
+
 vi.mock("@/features/tasks/actions", () => ({
   createTask: vi.fn(),
   updateTask: vi.fn(),
   deleteTask: vi.fn(),
-  archiveTask: vi.fn(),
+  archiveTask: archiveTaskMock,
   reorderTask: reorderTaskMock,
   setTaskCompletion: vi.fn(),
   bulkSetCompletion: bulkCompleteMock,
@@ -97,12 +97,14 @@ const DATA: TasksPageData = {
 function renderView() {
   render(
     <UserSettingsProvider settings={{ timezone: TIMEZONE, weekStart: 1, snapMinutes: 15 }}>
-      <TasksView data={DATA} params={{ view: "all", projectId: null, taskId: null }} />
+      <TasksView
+        data={DATA}
+        params={{ view: "all", projectId: null, taskId: null, newProject: false }}
+      />
     </UserSettingsProvider>,
   );
-  // Sort and filter are module state cached across a session. `beforeEach`
-  // empties the storage behind it; this is the cross-tab event that makes the
-  // store re-read it, so every test starts from the default preferences.
+  // The preferences store caches module state; this cross-tab event makes it
+  // re-read the storage `beforeEach` cleared.
   fireEvent(window, new Event("storage"));
 }
 
@@ -138,8 +140,6 @@ describe("bulk selection", () => {
 
     search("zzz");
 
-    // Nothing is on screen to act on, so there is nothing to act with — the bar
-    // is gone rather than offering Delete over three invisible rows.
     expect(bar()).toBeNull();
     expect(screen.getByText("No tasks match these filters")).toBeDefined();
   });
@@ -161,11 +161,6 @@ describe("bulk selection", () => {
     });
   });
 
-  /**
-   * Deleting cascades to subtasks and work blocks and has no undo, so the bar
-   * asks first — with the count, with what goes, and with Cancel holding focus
-   * so Enter alone cannot delete.
-   */
   it("asks before deleting, defaults to not deleting, and says what cascades", async () => {
     render(
       <UserSettingsProvider settings={{ timezone: TIMEZONE, weekStart: 1, snapMinutes: 15 }}>
@@ -194,7 +189,7 @@ describe("bulk selection", () => {
               ],
             },
           }}
-          params={{ view: "all", projectId: null, taskId: null }}
+          params={{ view: "all", projectId: null, taskId: null, newProject: false }}
         />
       </UserSettingsProvider>,
     );
@@ -211,7 +206,6 @@ describe("bulk selection", () => {
       expect(document.activeElement).toBe(screen.getByRole("button", { name: "Cancel" })),
     );
 
-    // Escape is "no".
     fireEvent.keyDown(document.activeElement as Element, { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(bulkDeleteMock).not.toHaveBeenCalled();
@@ -231,17 +225,8 @@ describe("bulk selection", () => {
   });
 });
 
-/**
- * Where the keyboard goes when the bar disappears out from under it.
- *
- * Every one of the bar's controls empties the selection, and an empty selection
- * is what unmounts the bar — so each of them removes the pressed button as a
- * direct result of being pressed. There is no focus scope to restore anything,
- * so without a handoff the browser leaves focus on `<body>` and the user tabs
- * back from the top of the shell (Domain Rule 10).
- */
 describe("focus after the bar acts", () => {
-  /** The list's key hint: its `aria-describedby`, and the anchor focus returns to. */
+  // The list's key hint: the anchor focus returns to.
   const anchor = () => document.getElementById("task-list-keys");
 
   it("hands focus to the list when a bulk action unmounts the bar", () => {
@@ -269,12 +254,11 @@ describe("focus after the bar acts", () => {
     const remove = screen.getByRole("button", { name: "Delete" });
     remove.focus();
     fireEvent.click(remove);
-    // Through the confirmation: the button that opened it goes with the bar,
-    // so the dialog's own restore has nothing to return to and falls back.
+    // The button that opened the confirmation goes with the bar, so the
+    // dialog's own restore falls back.
     fireEvent.click(await screen.findByRole("button", { name: "Delete 3 tasks" }));
 
-    // The list itself is gone, which is why the anchor sits beside it rather
-    // than inside it: an anchor on the `<ul>` would have unmounted here too.
+    // The list itself is gone; an anchor on the `<ul>` would have unmounted too.
     expect(screen.getByText("No open tasks")).toBeDefined();
     await waitFor(() => expect(document.activeElement).toBe(anchor()));
     expect(document.activeElement).not.toBe(document.body);
@@ -291,13 +275,8 @@ describe("focus after the bar acts", () => {
     const item = await screen.findByRole("menuitem", { name: "No project" });
     fireEvent.click(item, { pointerType: "mouse" });
 
-    /*
-     * The one path with a competitor. An open menu traps focus, so the handoff
-     * the three buttons make from inside their own handler is dragged back into
-     * the menu here and lost when it closes; Radix then aims its restore at a
-     * trigger that went with the bar. The menu's close hook is where this path
-     * has to place focus, and it does so a tick after the click.
-     */
+    // The menu traps focus and Radix's restore aims at a trigger that went
+    // with the bar, so focus is placed from the menu's close hook, a tick later.
     expect(bulkMoveMock).toHaveBeenCalledWith({
       ids: ["11111111-1111-4111-8111-111111111111"],
       projectId: null,
@@ -321,11 +300,6 @@ describe("focus after the bar acts", () => {
   });
 });
 
-/**
- * A keyboard reorder is announced — but only when it happened. A never-reordered
- * list is one long tie at `sortOrder` 0, and a move inside it used to write
- * nothing while the live region still said "moved to position 2".
- */
 describe("announcing a reorder", () => {
   const liveRegion = () =>
     [...document.querySelectorAll("[aria-live]")].map((node) => node.textContent ?? "").join(" ");
@@ -334,7 +308,10 @@ describe("announcing a reorder", () => {
     render(
       <AnnouncerProvider>
         <UserSettingsProvider settings={{ timezone: TIMEZONE, weekStart: 1, snapMinutes: 15 }}>
-          <TasksView data={DATA} params={{ view: "all", projectId: null, taskId: null }} />
+          <TasksView
+            data={DATA}
+            params={{ view: "all", projectId: null, taskId: null, newProject: false }}
+          />
         </UserSettingsProvider>
       </AnnouncerProvider>,
     );
@@ -348,10 +325,66 @@ describe("announcing a reorder", () => {
     expect(reorderTaskMock).not.toHaveBeenCalled();
     expect(liveRegion()).not.toContain("moved to position");
 
-    // Down into the tie: the run is spread, the batch is written, and the
-    // announcement follows the write rather than the keystroke.
+    // Down into the tie: the batch is written and the announcement follows the write.
     fireEvent.keyDown(first, { key: "ArrowDown", altKey: true });
     await waitFor(() => expect(reorderTaskMock).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(liveRegion()).toContain("Read chapter 4 moved to position 2 of 3"));
+  });
+});
+
+describe("the archived view", () => {
+  const ARCHIVED: Task = {
+    ...task("44444444-4444-4444-8444-444444444444", "Old idea"),
+    status: "archived",
+    archivedAt: instant("2026-09-05T10:00:00.000Z"),
+  };
+
+  function renderArchived(view: "all" | "archived") {
+    render(
+      <UserSettingsProvider settings={{ timezone: TIMEZONE, weekStart: 1, snapMinutes: 15 }}>
+        <TasksView
+          data={{ ...DATA, tasks: [...DATA.tasks, ARCHIVED] }}
+          params={{ view, projectId: null, taskId: null, newProject: false }}
+        />
+      </UserSettingsProvider>,
+    );
+    fireEvent(window, new Event("storage"));
+  }
+
+  it("lists archived tasks there and nowhere else, with the count on the tab", () => {
+    renderArchived("all");
+    expect(screen.queryByText("Old idea")).toBeNull();
+    expect(screen.getByRole("link", { name: /^Archived/ }).textContent).toContain("1");
+  });
+
+  it("unarchives from the row, optimistically, through the archive action", async () => {
+    renderArchived("archived");
+    expect(screen.getByText("Old idea")).toBeDefined();
+    expect(screen.queryByRole("checkbox", { name: 'Complete "Old idea"' })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: 'Unarchive "Old idea"' }));
+
+    await waitFor(() => expect(screen.queryByText("Old idea")).toBeNull());
+    expect(archiveTaskMock).toHaveBeenCalledWith({ id: ARCHIVED.id, archived: false });
+  });
+});
+
+describe("the new-project intent", () => {
+  it("opens the project dialog, drops the intent from the URL and has somewhere to return focus", async () => {
+    render(
+      <UserSettingsProvider settings={{ timezone: TIMEZONE, weekStart: 1, snapMinutes: 15 }}>
+        <TasksView
+          data={DATA}
+          params={{ view: "all", projectId: null, taskId: null, newProject: true }}
+        />
+      </UserSettingsProvider>,
+    );
+
+    const dialog = await screen.findByRole("dialog", { name: "New project" });
+    expect(replaceMock).toHaveBeenCalledWith("/tasks?view=all", { scroll: false });
+
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "New task" }));
   });
 });

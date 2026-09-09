@@ -6,11 +6,6 @@ import { candidateDates, MAX_CANDIDATE_STEPS } from "./schedule";
 
 const d = localDate;
 
-/**
- * Candidate-date generation on its own, with no instants in sight. The
- * timezone on the rule is irrelevant here — `candidateDates` never converts —
- * so every case below uses UTC and the DST work happens in `expand.test.ts`.
- */
 function rule(input: Partial<Recurrence> = {}): Recurrence {
   return {
     freq: "weekly",
@@ -23,7 +18,7 @@ function rule(input: Partial<Recurrence> = {}): Recurrence {
   };
 }
 
-/** 2026-09-07 is a Monday; 2026-09-09 a Wednesday. Both are used as anchors below. */
+/** 2026-09-07 is a Monday; 2026-09-09 a Wednesday. */
 const MONDAY = d("2026-09-07");
 const WEDNESDAY = d("2026-09-09");
 
@@ -44,9 +39,7 @@ describe("daily rules", () => {
   });
 
   it("keeps the series' own phase when the range starts months later", () => {
-    // 2026-01-01 → 2026-09-07 is 249 days, an exact multiple of 3, so the range
-    // opens on an occurrence. A generator that restarted its phase at the range
-    // would put these on 09-08/09-11 instead.
+    // 2026-01-01 → 2026-09-07 is 249 days, an exact multiple of 3, so the range opens on an occurrence.
     expect(
       candidateDates(rule({ freq: "daily", interval: 3 }), d("2026-01-01"), {
         from: MONDAY,
@@ -54,7 +47,6 @@ describe("daily rules", () => {
       }),
     ).toEqual(["2026-09-07", "2026-09-10", "2026-09-13"]);
 
-    // One day either side of that, the phase shifts with it.
     expect(
       candidateDates(rule({ freq: "daily", interval: 3 }), d("2026-01-02"), {
         from: MONDAY,
@@ -64,8 +56,6 @@ describe("daily rules", () => {
   });
 
   it("finds the next occurrence when the range opens between two of them", () => {
-    // Every fifth day from the Monday: the range starts on the Wednesday, two
-    // days after an occurrence and three before the next.
     expect(
       candidateDates(rule({ freq: "daily", interval: 5 }), MONDAY, {
         from: d("2026-09-09"),
@@ -110,9 +100,7 @@ describe("weekly rules", () => {
   });
 
   it("counts weeks from the series' own start, not from a Monday", () => {
-    // The documented alignment: week 0 of a Wednesday series is Wed…Tue, so the
-    // Monday of that rule falls five days after the start and belongs to the
-    // first week — not to the calendar week the series began in.
+    // Week 0 of a Wednesday series is Wed…Tue, so its Monday falls five days after the start.
     expect(
       candidateDates(rule({ byWeekday: [1, 3, 5] }), WEDNESDAY, {
         from: WEDNESDAY,
@@ -128,8 +116,6 @@ describe("weekly rules", () => {
   });
 
   it("never emits a date before the series starts", () => {
-    // The Monday two days before a Wednesday series is not an occurrence, even
-    // though it is in the same calendar week and Monday is a listed weekday.
     const dates = candidateDates(rule({ byWeekday: [1, 3] }), WEDNESDAY, {
       from: d("2026-09-01"),
       to: d("2026-09-18"),
@@ -138,9 +124,7 @@ describe("weekly rules", () => {
   });
 
   it("finds an occurrence in a week the range only partly covers", () => {
-    // The range opens on the Wednesday, midway through the series week that
-    // began on Monday. Jumping to the *next* whole week — which rounding the
-    // skip up would do — would lose the Friday entirely.
+    // The range opens midway through a series week; rounding the skip up would lose the Friday.
     expect(
       candidateDates(rule({ byWeekday: [1, 5] }), MONDAY, {
         from: d("2026-09-09"),
@@ -194,9 +178,7 @@ describe("stopping rules", () => {
   });
 
   it("counts the occurrences the range never asked for", () => {
-    // Occurrences 1 and 2 (09-07, 09-14) fall before the range. A count of 3
-    // must still leave exactly one for it, or paging the calendar forward would
-    // keep discovering more of a finite series.
+    // Occurrences 1 and 2 (09-07, 09-14) fall before the range and still consume their slots.
     expect(
       candidateDates(rule({ count: 3 }), MONDAY, { from: d("2026-09-19"), to: d("2026-12-31") }),
     ).toEqual(["2026-09-21"]);
@@ -206,8 +188,7 @@ describe("stopping rules", () => {
   });
 
   it("applies both when a bad write sets count and until together", () => {
-    // The database trigger rejects this pair; expansion still has to be
-    // defensible if one reaches it.
+    // The database trigger rejects this pair; expansion still has to cope.
     expect(
       candidateDates(rule({ count: 4, until: d("2026-09-14") }), MONDAY, {
         from: MONDAY,
@@ -257,8 +238,7 @@ describe("malformed rules", () => {
   });
 
   it("truncates at the iteration cap instead of walking a nonsense range", () => {
-    // A corrupt override date can widen the range by centuries. The walk has to
-    // end, and it has to end having already collected everything near its start.
+    // A corrupt override date can widen the range by centuries.
     const dates = candidateDates(rule({ freq: "daily" }), MONDAY, {
       from: MONDAY,
       to: d("2999-12-31"),
@@ -268,8 +248,7 @@ describe("malformed rules", () => {
   });
 
   it("stays cheap when the series began long before the range", () => {
-    // Started in 1990, asked about one week in 2026: the walk skips to the
-    // range rather than stepping through 13,000 occurrences and hitting the cap.
+    // The walk skips to the range rather than stepping through 13,000 occurrences.
     expect(
       candidateDates(rule({ freq: "daily" }), d("1990-01-01"), {
         from: MONDAY,

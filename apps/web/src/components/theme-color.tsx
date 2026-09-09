@@ -6,22 +6,11 @@ import { useEffect } from "react";
 import { THEME_COLOR } from "@/lib/pwa/app-identity";
 
 /**
- * Keeps `<meta name="theme-color">` on the theme the user is actually looking
- * at.
- *
- * The static tags in `app/layout.tsx` are media-scoped — one for
- * `prefers-color-scheme: light`, one for dark — which is exactly right for the
- * default (`system`) and exactly wrong the moment someone chooses a theme that
- * differs from their OS. On a phone, or in an installed window with a title
- * bar, that shows up as a strip of the wrong colour above the app.
- *
- * So this rewrites the *content* of both tags rather than appending a third:
- * the browser uses the first `theme-color` whose media query matches, so a
- * media-less tag added at the end would lose to a matching one above it.
- * Setting both to the resolved colour makes the media query irrelevant, which
- * is the point — once a theme is resolved, there is nothing left to branch on.
- *
- * The static tags still carry the first paint, before any of this runs.
+ * Keeps `<meta name="theme-color">` on the theme actually on screen. The
+ * static tags in `app/layout.tsx` are media-scoped and wrong the moment a user
+ * chooses a theme that differs from their OS. Both tags' content is rewritten
+ * rather than a third appended: the browser uses the first tag whose media
+ * query matches, so a media-less tag at the end would lose.
  */
 export function ThemeColor() {
   const { resolvedTheme } = useTheme();

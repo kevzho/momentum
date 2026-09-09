@@ -30,17 +30,8 @@ import { taskBlockMinutes } from "@/features/planning/live";
 import { useOpenerFocus } from "@/lib/use-opener-focus";
 
 /**
- * Find Time for one task (specs/05-week-planning.md).
- *
- * The engine is `findTime` in `@momentum/core/scheduling`: a pure function of
- * the live commitments, the profile's working hours and focus windows, the
- * task and the clock. It runs here, in a `useMemo`, on the optimistic week —
- * never in an effect and never on the server — so the candidates reflect the
- * board the user is looking at, including a block dropped a second ago.
- *
- * A candidate's `span` is what one-click Schedule sends, verbatim. The engine
- * snapped it and the action converts it with the profile timezone, so the
- * block the user gets is the block the explanation described.
+ * Find Time for one task. `findTime` runs in a `useMemo` over the optimistic
+ * week, never on the server; a candidate's `span` is sent verbatim.
  */
 
 export interface FindTimeDialogProps {
@@ -74,7 +65,7 @@ export function FindTimeDialog({ task, onClose, ...content }: FindTimeDialogProp
           onOpenAutoFocus={openerFocus.onOpenAutoFocus}
           onCloseAutoFocus={openerFocus.onCloseAutoFocus}
         >
-          {/* Keyed by task: a different task starts from the candidate list again. */}
+          {/* Keyed by task, so a different task starts from the candidate list again. */}
           <FindTimeContent key={task.id} task={task} onClose={onClose} {...content} />
         </DialogContent>
       )}
@@ -99,9 +90,7 @@ function FindTimeContent({
   const ids = React.useId();
   const [mode, setMode] = React.useState<Mode>("candidates");
 
-  // The clock the search counts from is read once, when the dialog opens.
-  // `now` ticks every minute, and a list that reshuffles under the pointer
-  // while the user reads it is worse than one that is a minute old.
+  // Read once on open: `now` ticks every minute and the list must not reshuffle under the pointer.
   const [searchedAt] = React.useState<Instant>(() => now ?? startOfDay(today, settings.timezone));
 
   const result = React.useMemo(
@@ -146,12 +135,7 @@ function FindTimeContent({
 
       {result.note === null ? null : <p className="text-xs text-muted-foreground">{result.note}</p>}
 
-      {/*
-       * Radix focuses the first tabbable element on open, and in this markup
-       * that is the first candidate's Schedule button — or, with no
-       * candidates, the fallback below. The close control sits after the
-       * children in `DialogContent`, so it is never first.
-       */}
+      {/* Radix focuses the first tabbable on open: the first Schedule button, or the fallback below. */}
       {result.candidates.length === 0 ? null : (
         <ol aria-label={FIND_TIME.candidates} className="flex flex-col gap-0.5">
           {result.candidates.map((candidate, index) => {

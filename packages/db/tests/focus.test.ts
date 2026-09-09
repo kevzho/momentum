@@ -12,32 +12,10 @@ import {
 } from "./support/harness";
 
 /**
- * The focus lifecycle, proved against a real database.
- *
- * Everything here is a claim about Postgres rather than about TypeScript, and
- * none of it can be made by a unit test (docs/ARCHITECTURE.md §13):
- *
- * 1. **The tables are client-read-only.** A signed-in client holding its own
- *    JWT cannot insert a session, cannot stamp a `started_at`, and cannot write
- *    an `xp_events` row (Domain Rule 15). If that is not true, nothing else in
- *    this phase means anything.
- * 2. **One live session per account** — a constraint, not a UI convention, so
- *    two tabs cannot double-count.
- * 3. **The measured minutes exclude pauses**, computed by the database from its
- *    own clock.
- * 4. **The award is idempotent.** Finishing a finished session again awards
- *    nothing further and moves no minutes (Domain Rules 6, 17).
- * 5. **The caps hold**, and a sub-minimum session earns nothing.
- *
- * The suite skips itself cleanly without `MOMENTUM_DB_TESTS=1`, so `pnpm test`
- * stays green with no Docker. Run with:
- *   `MOMENTUM_DB_TESTS=1 pnpm test` against a freshly reset stack.
- *
- * Several cases need a session that started in the past, and the client is not
- * allowed to say when a session started — which is the point. They use the
- * admin client to move `started_at` backwards *after* the fact, which is a test
- * harness reaching past the product's own front door, not a path the
- * application has.
+ * The focus lifecycle, proved against a real database. Run with
+ * `MOMENTUM_DB_TESTS=1 pnpm test`. Cases needing a session that started in the
+ * past move `started_at` backwards with the admin client — a harness action,
+ * not a path the application has.
  */
 
 const describeDb = DB_TESTS_ENABLED ? describe : describe.skip;
@@ -69,20 +47,8 @@ describeDb("focus sessions", () => {
   });
 
   afterEach(async () => {
-    /*
-     * Only the sessions *this suite* created.
-     *
-     * It used to delete every session belonging to the owner, which also took
-     * the eight weeks of seeded history with it — and `rls.test.ts` asserts
-     * that the seed leaves each account rows worth protecting, because without
-     * them "the neighbour sees nothing" passes on an empty set and proves
-     * nothing. The two files only ever agreed by accident: they ran in
-     * parallel, and the read sometimes won. Tracking the ids the suite mints
-     * makes the cleanup say what it means.
-     *
-     * Sessions point at the task with `on delete set null`, so they outlive it
-     * and have to go explicitly, and their ledger rows with them.
-     */
+    // Only the sessions this suite minted: `rls.test.ts` relies on the seeded
+    // history. Sessions outlive their task (`on delete set null`).
     for (const sessionId of minted.splice(0)) {
       await admin.from("xp_events").delete().eq("source_id", sessionId);
       await admin.from("focus_sessions").delete().eq("id", sessionId);
@@ -131,11 +97,9 @@ describeDb("focus sessions", () => {
   }
 
   /**
-   * The owner's focus XP inside the rolling 24-hour cap window. The cap
-   * (20260909120100) is measured over `created_at > now() - 24h` rather than a
-   * calendar date in the profile timezone, which a client could reset; on a
-   * freshly reset database the seed's own recent sessions land in this window, so
-   * a test that fills the cap has to account for what is already in it.
+   * The owner's focus XP inside the rolling 24-hour cap window (`created_at >
+   * now() - 24h`, not a profile-local date a client could reset). The seed's
+   * recent sessions land in it, so a cap test must account for what is there.
    */
   async function focusXpInWindow(): Promise<number> {
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
@@ -153,10 +117,6 @@ describeDb("focus sessions", () => {
     if (task === null) throw new Error("fixture task vanished");
     return task.actualMinutes;
   }
-
-  /* ---------------------------------------------------------------------- */
-  /* The tables are written by nothing but the functions                     */
-  /* ---------------------------------------------------------------------- */
 
   it("refuses a direct insert into focus_sessions", async () => {
     const { error } = await owner.from("focus_sessions").insert({
@@ -211,10 +171,6 @@ describeDb("focus sessions", () => {
 
     await expect(focus.finish(neighbour, session.id)).rejects.toMatchObject({ code: "42501" });
   });
-
-  /* ---------------------------------------------------------------------- */
-  /* One live session                                                        */
-  /* ---------------------------------------------------------------------- */
 
   it("stamps started_at itself and starts running", async () => {
     const before = Date.now();
@@ -273,10 +229,6 @@ describeDb("focus sessions", () => {
     expect(retry.startedAt).toBe(first.startedAt);
   });
 
-  /* ---------------------------------------------------------------------- */
-  /* Pause and resume                                                        */
-  /* ---------------------------------------------------------------------- */
-
   it("records a pause span and closes it on resume", async () => {
     const session = await focus.start(owner, {
       id: id(),
@@ -325,10 +277,6 @@ describeDb("focus sessions", () => {
     expect((await focus.markInterruption(owner, session.id)).interruptionCount).toBe(2);
   });
 
-  /* ---------------------------------------------------------------------- */
-  /* Finishing                                                               */
-  /* ---------------------------------------------------------------------- */
-
   it("records the measured minutes on the session and adds them to the task", async () => {
     const session = await focus.start(owner, {
       id: id(),
@@ -355,8 +303,7 @@ describeDb("focus sessions", () => {
     });
     await startedMinutesAgo(session.id, 60);
 
-    // A pause opened 40 minutes ago and still open: 40 minutes of work, then a
-    // 20-minute pause that the finish closes.
+    // 40 minutes of work, then a still-open 20-minute pause the finish closes.
     await focus.pause(owner, session.id);
     const { error } = await admin
       .from("focus_pauses")
@@ -387,7 +334,6 @@ describeDb("focus sessions", () => {
     expect(await xpFor(session.id)).toEqual([27]);
     expect(retry.actualMinutes).toBe(first.actualMinutes);
     expect(third.endedAt).toBe(first.endedAt);
-    // And the task's minutes moved exactly once.
     expect(await actualMinutesOf(taskId)).toBe(25);
   });
 
@@ -422,9 +368,7 @@ describeDb("focus sessions", () => {
   });
 
   it("caps the day across sessions", async () => {
-    // Whatever already sits in the rolling 24h window (the seed's own recent
-    // focus sessions on a fresh reset); the suite's sessions can only fill the
-    // rest of the 300 the window allows.
+    // The seed's recent sessions already sit in the window; only the rest of the 300 is fillable.
     const already = await focusXpInWindow();
     const headroom = Math.max(0, 300 - already);
 
@@ -444,8 +388,6 @@ describeDb("focus sessions", () => {
       awarded += (await xpFor(session.id))[0] ?? 0;
     }
 
-    // Sessions of 120 fill the remaining headroom, then nothing is left: the
-    // rolling window holds the total at 300 however many sessions are run.
     expect(awarded).toBe(headroom);
     expect(await focusXpInWindow()).toBe(300);
     expect(await xpFor(ids[3] as string)).toEqual([]);

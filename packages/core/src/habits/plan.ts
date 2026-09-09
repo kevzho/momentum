@@ -9,29 +9,13 @@ import {
 } from "./model";
 
 /**
- * "Add to week": which calendar blocks a habit's schedule asks for, over one
- * week, given what is already there.
- *
- * This is the whole of Phase 6's calendar generation, and it is deliberately
- * not recurrence (docs/ARCHITECTURE.md §11). It produces wall-clock spans on
- * named dates; the action converts them to instants with the profile timezone
- * and writes ordinary `calendar_blocks` rows, exactly like a task being
- * dragged onto the grid. Nothing is materialized ahead of time and nothing is
- * expanded at read time — the rows are just blocks.
- *
- * Two properties make pressing the button twice safe:
- *
- * - **Dates already carrying a block for this habit are never planned again.**
- *   For the per-day cadence that is a per-date skip; for the per-week cadence
- *   the existing blocks count toward the week's target, so a habit with three
- *   runs a week and one block already placed is planned two more, not three.
- * - **The past is never planned.** A week containing today starts at today; a
- *   week entirely in the past produces nothing. Reserving time that has already
- *   gone by would put a commitment on the board the user cannot keep, and
- *   Domain Rule 7 is why that is not a thing this product does.
+ * "Add to week": the calendar blocks a habit's schedule asks for over one week.
+ * Deliberately not recurrence: the action writes ordinary `calendar_blocks`
+ * rows. Idempotent: occupied dates are never planned again (and count toward a
+ * per-week target), and the past is never planned.
  */
 
-/** One block to create: a wall-clock span on a named day (Domain Rule 4). */
+/** One block to create: a wall-clock span on a named day. */
 export interface HabitBlockPlan {
   date: LocalDate;
   startMinutes: Minutes;
@@ -52,9 +36,7 @@ export function planHabitWeek(input: PlanHabitWeekInput): HabitBlockPlan[] {
   const { habit, days, today, occupied } = input;
   const taken = new Set<LocalDate>(occupied);
 
-  // `>=` on `YYYY-MM-DD` is a date comparison: the format is fixed-width and
-  // big-endian, so lexicographic order is chronological order. No parsing, and
-  // therefore no timezone to get wrong (Domain Rule 5).
+  // Lexicographic order on `YYYY-MM-DD` is chronological order.
   const candidates = days.filter((date) => date >= today);
 
   const chosen =
@@ -66,28 +48,15 @@ export function planHabitWeek(input: PlanHabitWeekInput): HabitBlockPlan[] {
 }
 
 /**
- * How many more sessions a per-week habit still wants this week.
- *
- * `times_per_week` names a number of days, so its target is the session count.
- * `amount_per_week` names a quantity — 120 minutes, 5 problems — which says
- * nothing about how many sittings it takes, so it gets one block and the user
- * places any others themselves. Guessing at a split would be inventing a
- * schedule the habit does not describe.
+ * How many more sessions a per-week habit still wants this week. `amount_per_week`
+ * says nothing about how many sittings it takes, so it gets one block.
  */
 function remainingSessions(habit: HabitSchedule, alreadyPlaced: number): number {
   const wanted = habit.frequencyType === "times_per_week" ? habit.target : 1;
   return Math.max(0, wanted - alreadyPlaced);
 }
 
-/**
- * `count` days chosen from `candidates`, spread as evenly as the remaining days
- * allow and skipping days that already carry a block.
- *
- * Evenly rather than "the first N": three runs a week belong on roughly
- * alternate days, not on Monday, Tuesday and Wednesday. The spread is computed
- * over the days still available, so asking again mid-week fills the gaps rather
- * than restarting at the top of the week.
- */
+/** `count` days from `candidates`, spread evenly over the days still free rather than the first N. */
 function spreadAcrossWeek(
   candidates: readonly LocalDate[],
   taken: ReadonlySet<LocalDate>,
@@ -99,8 +68,7 @@ function spreadAcrossWeek(
 
   const chosen: LocalDate[] = [];
   for (let i = 0; i < count; i += 1) {
-    // Midpoints of `count` equal slices, so two sessions land on the thirds of
-    // the available days rather than both at one end.
+    // Midpoints of `count` equal slices.
     const index = Math.round(((i + 0.5) * free.length) / count - 0.5);
     const date = free[Math.min(index, free.length - 1)];
     if (date !== undefined && !chosen.includes(date)) chosen.push(date);
@@ -108,15 +76,7 @@ function spreadAcrossWeek(
   return chosen;
 }
 
-/**
- * The wall-clock span one generated block occupies.
- *
- * Both halves are optional on a habit (specs/06-habits.md), so both have a
- * documented default. The start is pulled back if the block would otherwise run
- * past midnight: a habit block is a commitment inside one day, and a span that
- * crossed the boundary would render in two columns for no reason the user asked
- * for.
- */
+/** The wall-clock span one generated block occupies; the start is pulled back so it never runs past midnight. */
 function spanOf(habit: HabitSchedule): { startMinutes: Minutes; endMinutes: Minutes } {
   const minutes = habit.estimatedMinutes ?? DEFAULT_HABIT_BLOCK_MINUTES;
   const preferred =

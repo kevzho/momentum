@@ -19,17 +19,7 @@ import {
   type CandidateEvent,
 } from "@/features/calendar/use-calendar-dnd";
 
-/**
- * The candidate maths is where a drag becomes a time, and it is the one part of
- * the interaction layer that a regression can break without anything looking
- * wrong on screen. It is pure, so it is tested directly rather than through a
- * simulated drag.
- *
- * One hour is 60px here, so a pixel is a minute and the arithmetic in each
- * expectation is legible. The production default (56px) is exercised by the
- * geometry module's own suite; what this file asserts is which geometry
- * function each payload reaches and what it is handed.
- */
+// One hour is 60px here, so a pixel is a minute.
 const SPEC: GridSpec = {
   dayStartMinutes: 300, // 05:00
   dayEndMinutes: 1440, // 24:00
@@ -214,14 +204,8 @@ describe("pointerYWithin", () => {
   });
 });
 
-/**
- * A task dragged out of a scrolled Plan panel. dnd-kit's `delta` is scroll-
- * adjusted across the scrollable ancestors of the node the pointer is *over*,
- * and the panel and the grid scroll separately, so once the pointer is on a
- * column `delta.y` carries the panel's scroll offset as if the pointer had
- * moved that far. The candidate has to come from where the pointer actually
- * is, not from that sum.
- */
+// A task dragged out of a scrolled Plan panel: dnd-kit's `delta.y` carries the
+// panel's scroll offset, so the candidate must come from the live pointer.
 describe("candidateFromEvent", () => {
   const DRAWER_SCROLL_TOP = 200;
   const column = { width: 100, height: 1140, top: 300, left: 0, right: 100, bottom: 1440 };
@@ -245,8 +229,7 @@ describe("candidateFromEvent", () => {
   }
 
   it("lands a task from a scrolled panel under the pointer, not the scroll-shifted delta", () => {
-    // The pointer went from 420 to 720 in the viewport: 90 minutes past 05:00
-    // plus 300px, i.e. 12:00 on a 60px hour grid.
+    // 720 in the viewport is 420px into the column, i.e. 12:00.
     const pointer = { x: 60, y: 720 };
     const event = taskDragEvent(300 - DRAWER_SCROLL_TOP);
 
@@ -349,8 +332,6 @@ describe("drag payload spans", () => {
 
 describe("announcement wording", () => {
   it("speaks a span as a day and the page's own 24-hour range, never as pixels or an instant", () => {
-    // The gutter, the block labels and Today's rows all read 07:15; a listener
-    // hears the same clock rather than a translation of it.
     expect(formatSpan({ date: TUE, startMinutes: 540, endMinutes: 600 })).toBe(
       "Tue Sep 8, 09:00 – 10:00",
     );

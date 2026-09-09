@@ -15,42 +15,17 @@ import {
 import type { Commitment, DayInterval, InstantInterval, SlotSpan } from "./types";
 
 /**
- * The interval arithmetic every planning question is built on.
- *
- * Capacity, the four warnings and Find Time all reduce to the same few
- * operations — turn a day's working windows into instants, turn the blocks
- * into busy intervals, subtract one from the other, measure what is left — so
- * they live here once, and the modules above are the questions rather than
- * the arithmetic.
- *
- * Everything below works in **instants** and measures in **elapsed** minutes.
- * That is deliberate: a working window of 09:00–17:00 is eight hours on every
- * day of the year, but a block placed across a DST transition is an hour
- * longer or shorter than its clock reading, and the only representation in
- * which "how much of the week is left" comes out right is the one that adds up
- * real time (Domain Rule 3, docs/ARCHITECTURE.md §10). Wall clock enters at the
- * edges only: windows are converted with `fromLocal`, and a result is read back
- * with `toDayInterval` / `slotOf` for the grid and for the actions.
+ * Interval arithmetic for every planning question. Everything works in
+ * instants and measures elapsed minutes; wall clock enters only at the edges
+ * (`fromLocal` in, `toDayInterval` / `slotOf` out).
  */
 
-/**
- * A leftover gap shorter than this is not somewhere a person can do anything;
- * Find Time's fragmentation criterion counts these, and nothing else in the
- * product should invent a second threshold.
- */
+/** A leftover gap shorter than this counts as a fragment in Find Time. The one threshold; do not invent another. */
 export const MIN_USEFUL_GAP_MINUTES: Minutes = 30;
 
 const MINUTES_PER_DAY: Minutes = 1440;
 
-/* -------------------------------------------------------------------------- */
-/* Instants                                                                   */
-/* -------------------------------------------------------------------------- */
-
-/**
- * Instants are canonical `YYYY-MM-DDTHH:mm:ss.sssZ` strings, so string order
- * is time order. This is written out once so a reader does not have to know
- * that to trust a `<` elsewhere.
- */
+/** Instants are canonical fixed-width UTC strings, so string order is time order. */
 export function compareInstants(a: Instant, b: Instant): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
@@ -62,10 +37,6 @@ export function earlierInstant(a: Instant, b: Instant): Instant {
 export function laterInstant(a: Instant, b: Instant): Instant {
   return a >= b ? a : b;
 }
-
-/* -------------------------------------------------------------------------- */
-/* Intervals                                                                  */
-/* -------------------------------------------------------------------------- */
 
 /** Elapsed minutes; never negative, so an inverted interval simply counts for nothing. */
 export function intervalMinutes(interval: InstantInterval): Minutes {
@@ -84,11 +55,7 @@ export function intersectIntervals(a: InstantInterval, b: InstantInterval): Inst
   return startAt < endAt ? { startAt, endAt } : null;
 }
 
-/**
- * Sorts by start and coalesces anything that overlaps or touches, dropping
- * empty and inverted members. The result is the canonical form every other
- * function here expects of a busy list: ordered, disjoint, non-empty.
- */
+/** Sorts and coalesces overlapping or touching intervals, dropping empty and inverted ones: ordered, disjoint, non-empty. */
 export function mergeIntervals(intervals: readonly InstantInterval[]): InstantInterval[] {
   const ordered = intervals
     .filter((interval) => interval.startAt < interval.endAt)
@@ -107,14 +74,7 @@ export function mergeIntervals(intervals: readonly InstantInterval[]): InstantIn
   return merged;
 }
 
-/**
- * `base` minus `holes`: the parts of the base intervals no hole covers, in
- * start order. Neither input needs to be sorted or disjoint.
- *
- * This is the whole of "free time": the working windows minus the busy
- * intervals. It is also how the fragmentation criterion sees what a candidate
- * would leave behind, by subtracting the candidate from the window it sits in.
- */
+/** `base` minus `holes`, in start order. Neither input needs to be sorted or disjoint. */
 export function subtractIntervals(
   base: readonly InstantInterval[],
   holes: readonly InstantInterval[],
@@ -155,10 +115,6 @@ export function clipIntervals(
   return clipped;
 }
 
-/* -------------------------------------------------------------------------- */
-/* Days and windows                                                           */
-/* -------------------------------------------------------------------------- */
-
 /** The half-open instants of one local day, 23 or 25 hours long on a transition day. */
 export function dayBounds(date: LocalDate, tz: IanaTimeZone): InstantInterval {
   return { startAt: startOfDay(date, tz), endAt: endOfDay(date, tz) };
@@ -173,14 +129,9 @@ export function rangeBounds(days: readonly LocalDate[], tz: IanaTimeZone): Insta
 }
 
 /**
- * Wall-clock windows on a given day, as instants.
- *
- * Each edge goes through `fromLocal`, so a window over a DST gap is shorter
- * in elapsed time than it reads and one over an overlap is longer — which is
- * what a working window *is* on those days: the hours the clock shows. A
- * window whose edges resolve out of order (both inside a gap) is dropped.
- * Overlapping windows are merged, so a duplicated row in the settings does not
- * double the day's capacity.
+ * Wall-clock windows on a day, as instants. A window over a DST gap is shorter
+ * in elapsed time than it reads; one whose edges resolve out of order is
+ * dropped. Overlapping windows are merged.
  */
 export function windowIntervalsOn(
   date: LocalDate,
@@ -214,19 +165,10 @@ export function focusIntervalsOn(
   return windowIntervalsOn(date, focusWindows, tz);
 }
 
-/* -------------------------------------------------------------------------- */
-/* Commitments                                                                */
-/* -------------------------------------------------------------------------- */
-
 /**
- * Whether a block claims time on the calendar.
- *
- * Domain Rule 13: an unexecuted block of a completed task stays on the board
- * as settled and is free time to capacity and Find Time. An all-day item has
- * no span on the grid, and a birthday does not block a working day. Everything
- * else — events, outstanding work, executed work, habit blocks — occupies the
- * time it covers, done or not: an executed block is time that was spent, and
- * the week's planned total should still include it.
+ * Whether a block claims time. An all-day item does not; nor does an
+ * unexecuted block of a completed task (Domain Rule 13). An executed block
+ * still does: the time was spent.
  */
 export function occupiesTime(commitment: Commitment): boolean {
   if (commitment.allDay) return false;
@@ -255,17 +197,11 @@ export function commitmentsOverlapping(
     );
 }
 
-/* -------------------------------------------------------------------------- */
-/* Wall clock ↔ instants                                                      */
-/* -------------------------------------------------------------------------- */
-
 /**
- * An interval read off the clock on the day it starts.
- *
- * `endMinutes` is the end instant's own clock reading plus a day per midnight
- * crossed — never `startMinutes + elapsed`, which is the formula Phase 3's and
- * Phase 4's reviews each caught once. A block drawn 01:00–03:00 on a
- * spring-forward morning is 60 elapsed minutes and still ends at 03:00.
+ * An interval read off the clock on the day it starts. `endMinutes` is the end
+ * instant's own clock reading plus a day per midnight crossed, never
+ * `startMinutes + elapsed`: a 01:00–03:00 block on a spring-forward morning is
+ * 60 elapsed minutes and still ends at 03:00.
  */
 export function toDayInterval(interval: InstantInterval, tz: IanaTimeZone): DayInterval {
   const date = localDateOf(interval.startAt, tz);
@@ -286,13 +222,9 @@ export function slotOf(interval: InstantInterval, tz: IanaTimeZone): SlotSpan {
 }
 
 /**
- * The instants a wall-clock span resolves to — the same rule the server
- * applies in `spanInstants` (`features/calendar/actions.ts`), so a candidate
- * the engine scores is the block the action will write.
- *
- * Both ends go through `fromLocal`. The one span that cannot resolve in order
- * — one straddling the far edge of a spring-forward gap, where the start moves
- * forward further than the end — keeps its drawn length instead.
+ * The instants a wall-clock span resolves to; must match `spanInstants` in
+ * `features/calendar/actions.ts`. A span that cannot resolve in order (the far
+ * edge of a spring-forward gap) keeps its drawn length instead.
  */
 export function intervalOfSlot(slot: SlotSpan, tz: IanaTimeZone): InstantInterval {
   const startAt = fromLocal(slot.date, slot.startMinutes, tz);
@@ -304,18 +236,9 @@ export function intervalOfSlot(slot: SlotSpan, tz: IanaTimeZone): InstantInterva
 
 /**
  * The first instant at or after `at` whose clock reading sits on a snap
- * boundary. Never earlier than `at`: in a fall-back overlap the first
- * occurrence of a reading can precede an instant in the second, and a slot
- * that started in the past would be the result.
- *
- * The boundary is always resolved through `fromLocal` rather than by handing
- * `at` back when its minute already reads one. `minutesFromMidnight` cannot
- * see the seconds and milliseconds an instant carries, and `now` carries them
- * — 14:30:27.456 reads 870 minutes, which is on the 15-minute grid — so
- * returning it unchanged would give the caller a start no wall-clock span
- * resolves to, and Find Time would drop the whole window it opened. A
- * sub-minute remainder on a boundary minute therefore takes the next
- * increment, which is the first boundary genuinely at or after `at`.
+ * boundary; never earlier than `at`. Always resolved through `fromLocal`,
+ * never `at` itself: `at` may carry seconds (14:30:27 reads as 870 minutes),
+ * and a start no wall-clock span resolves to would make Find Time drop the window.
  */
 export function snapInstantUp(at: Instant, snapMinutes: Minutes, tz: IanaTimeZone): Instant {
   const step = Math.max(1, Math.round(snapMinutes));
@@ -330,9 +253,7 @@ export function snapInstantUp(at: Instant, snapMinutes: Minutes, tz: IanaTimeZon
     if (next >= at) return next;
   }
 
-  // Both readings resolved behind `at`, so `at` is in the second pass of a
-  // fall-back overlap and `fromLocal` handed back the first. The clock and
-  // elapsed time run together inside the repeated hour, so stepping forward
-  // by the remaining minutes lands on the second occurrence of the boundary.
+  // Both readings resolved behind `at`: it is in the second pass of a fall-back
+  // overlap. Stepping forward by the remaining minutes lands on the second boundary.
   return addMinutes(at, snapped - minutes);
 }

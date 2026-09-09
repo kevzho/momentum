@@ -9,12 +9,6 @@ import {
   type PlanningTaskRowProps,
 } from "@/features/planning/components/planning-task-row";
 
-/**
- * The row is a button first and a drag source second. What is tested is the
- * keyboard model — `F` and activation open Find Time, `S` opens the manual
- * dialog — and that the whole row reaches a screen reader as one name.
- */
-
 function planTask(overrides: Partial<PlanTask> & Pick<PlanTask, "id" | "title">): PlanTask {
   return {
     priority: 4,
@@ -128,7 +122,6 @@ describe("PlanningTaskRow", () => {
 
     expect(row.getAttribute("aria-disabled")).toBe("true");
     expect(row.getAttribute("data-pending")).toBe("true");
-    // Still in the tab order: a pending row is not removed from the page.
     expect(row.tabIndex).toBe(0);
 
     fireEvent.click(row);

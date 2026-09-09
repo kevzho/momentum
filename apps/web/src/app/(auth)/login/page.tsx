@@ -10,8 +10,7 @@ export const metadata: Metadata = { title: "Sign in" };
 
 export default async function LoginPage({ searchParams }: PageProps<"/login">) {
   const { next, error } = await searchParams;
-  // `proxy.ts` sets `next` when it turns away a signed-out request, so signing
-  // in returns the user to what they were reaching for.
+  // `proxy.ts` sets `next` when it turns away a signed-out request.
   const target = returnableRoute(typeof next === "string" ? next : null);
 
   return (

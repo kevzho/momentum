@@ -1,14 +1,8 @@
 import { Input } from "@momentum/ui/components/input";
 import { Label } from "@momentum/ui/components/label";
 
-/**
- * Label, control, and the field's own errors, wired together.
- *
- * The errors are rendered inside the element `aria-describedby` points at and
- * the input carries `aria-invalid`, so a screen reader announces the problem
- * with the field rather than leaving it to a colour change
- * (docs/DESIGN_SYSTEM.md: never signal state by colour alone).
- */
+// Errors live inside the `aria-describedby` target and the input carries
+// `aria-invalid`, so state is never signalled by colour alone.
 export function FormField({
   name,
   label,
@@ -49,11 +43,7 @@ export function FormField({
   );
 }
 
-/**
- * Form-level feedback: the failure that belongs to no single field, or a
- * confirmation. Focusable by script and not by Tab, so a form can land the
- * keyboard on it after a submission (`useResultFocus`).
- */
+/** Form-level feedback. Focusable by script, not Tab, for `useResultFocus`. */
 export function FormMessage({
   tone,
   children,

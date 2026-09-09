@@ -5,15 +5,7 @@ import { cn } from "@momentum/ui/lib/utils";
 import type { PlanningGoal } from "@/features/calendar/types";
 import { GOAL_DONE, goalLabel, goalTarget } from "@/features/planning/copy";
 
-/**
- * A weekly goal, read-only. Its title — or, when it has none, a phrase built
- * from its metric and target — and a check when it is done.
- *
- * Progress and claiming live on `/progress` (Phase 8), where the week's goals
- * sit beside the quests and the level they feed. They are absent here on
- * purpose: the drawer would need four more reads on the heaviest page in the
- * product to show a number that is one click away.
- */
+/** A weekly goal, read-only. Progress and claiming live on `/progress`, deliberately not here. */
 export function WeeklyGoalRow({ goal }: { goal: PlanningGoal }) {
   const done = goal.completedAt !== null;
 

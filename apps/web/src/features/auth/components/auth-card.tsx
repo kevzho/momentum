@@ -1,11 +1,7 @@
 import Link from "next/link";
 import type { Route } from "next";
 
-/**
- * The frame every auth screen shares: the wordmark, one heading, one line of
- * explanation, the form, and a single way onward. Server-rendered — only the
- * form inside each card is a client island.
- */
+/** The frame every auth screen shares; server-rendered, the form is the client island. */
 export function AuthCard({
   title,
   description,

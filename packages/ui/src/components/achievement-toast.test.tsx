@@ -5,15 +5,6 @@ import { AchievementToast } from "@momentum/ui/components/achievement-toast";
 import { ProfileFrame, FRAME_RING, RENDERED_FRAMES } from "@momentum/ui/components/profile-frame";
 import { XPToast } from "@momentum/ui/components/xp-toast";
 
-/**
- * Celebration, and the accessibility floor under it.
- *
- * The acceptance criterion is specific: `prefers-reduced-motion` suppresses the
- * celebration animation. Suppressing the *message* would be a different and
- * much worse thing, so both halves are asserted — the flourish disappears, the
- * news does not.
- */
-
 function matchMedia(reduce: boolean) {
   vi.stubGlobal(
     "matchMedia",
@@ -68,9 +59,8 @@ describe("AchievementToast", () => {
     matchMedia(true);
     const { container } = render(<AchievementToast kind="level" title="Level 6" />);
 
-    // Not merely a zero-duration animation: the element is not in the tree.
+    // Not a zero-duration animation: the element is not in the tree.
     expect(container.querySelector("[data-slot='flourish']")).toBeNull();
-    // The news still arrives.
     expect(screen.getByText("Level 6")).toBeTruthy();
     expect(screen.getByText("Level up")).toBeTruthy();
   });
@@ -108,8 +98,7 @@ describe("XPToast", () => {
 
 describe("ProfileFrame", () => {
   it("draws every frame the shop can sell", () => {
-    // A key added to PROFILE_FRAME_KEYS without a style here is a type error;
-    // this asserts the other direction — nothing is sold that is not drawn.
+    // The type system covers keys without a style; this covers the other direction.
     for (const key of RENDERED_FRAMES) {
       expect(FRAME_RING[key], key).toBeTruthy();
     }

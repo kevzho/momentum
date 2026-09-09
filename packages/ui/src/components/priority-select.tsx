@@ -14,14 +14,7 @@ import {
   SelectValue,
 } from "@momentum/ui/components/select";
 
-/**
- * P1–P4, with a glyph **and** a label — never colour alone.
- *
- * `TaskRow` already renders the read-only glyph and this is its editable twin,
- * so the two share the wording: `4` is "None", because P4 is the default and
- * means "no priority set", not "lowest priority". A user who never touches this
- * control should not end up with every task labelled urgent-adjacent.
- */
+/** Shares its wording with `TaskRow`: P4 is "None", the default, not "lowest priority". */
 const PRIORITY_LABELS: Record<TaskPriority, string> = {
   1: "P1 · Urgent",
   2: "P2 · High",

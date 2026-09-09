@@ -1,12 +1,6 @@
 import { expect, signIn, test } from "./fixtures";
 
-/**
- * Mobile usability at phone size (the `mobile` project: iPhone 13, touch).
- *
- * Two facts per route: the page never scrolls sideways, and the navigation
- * drawer — the only navigation chrome a phone carries — opens and lists the
- * sections.
- */
+// Two facts per route: the page never scrolls sideways, and the navigation drawer opens.
 test.describe("Mobile @mobile", () => {
   test.beforeEach(async ({ page }) => {
     await signIn(page);

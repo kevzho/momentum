@@ -8,11 +8,6 @@ import { signIn, type AuthResult } from "@/features/auth/actions";
 import { FormField, FormMessage } from "@/features/auth/components/form-field";
 import { useResultFocus } from "@/features/auth/components/use-result-focus";
 
-/**
- * `useActionState` posts to the same server action the plain `<form>` would
- * submit to, so the page works before hydration and gains pending state and
- * inline errors after it.
- */
 export function SignInForm({ next }: { next: string | null }) {
   const [state, formAction, pending] = useActionState<AuthResult | null, FormData>(signIn, null);
   const fieldErrors = state && !state.ok ? state.error.fieldErrors : undefined;

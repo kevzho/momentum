@@ -12,27 +12,16 @@ import {
   DialogTitle,
 } from "@momentum/ui/components/dialog";
 
-/**
- * The one confirmation the task manager asks for: deleting.
- *
- * Deleting a task cascades to its subtasks and to every work block that pointed
- * at it (Domain Rule 13), and there is no undo — so the step between the button
- * and the write says what goes, in numbers, and defaults to not doing it.
- * Focus starts on Cancel; Escape and a click outside cancel; only the labelled
- * button deletes.
- *
- * Where focus goes afterwards is the part a modal opened by a control that
- * removes itself gets wrong. The confirming button is gone once the row or the
- * selection it belonged to is deleted, so the dialog returns to it only while
- * it is still there, and otherwise to the caller's `fallbackFocus` — never to
- * `<body>` (Domain Rule 10).
- */
+// Focus starts on Cancel. On close it returns to the opener only while that
+// is still mounted (the confirming control often deletes itself), otherwise to
+// `fallbackFocus`, never to `<body>`.
 export function ConfirmDeleteDialog({
   open,
   onOpenChange,
   title,
   description,
   confirmLabel,
+  confirmVariant = "destructive",
   onConfirm,
   fallbackFocus,
 }: {
@@ -41,6 +30,8 @@ export function ConfirmDeleteDialog({
   title: string;
   description: string;
   confirmLabel: string;
+  /** Archiving asks the same way but is not destructive. */
+  confirmVariant?: "destructive" | "default";
   onConfirm: () => void;
   /** Where focus lands when the control that opened the dialog no longer exists. */
   fallbackFocus?: () => HTMLElement | null;
@@ -56,7 +47,6 @@ export function ConfirmDeleteDialog({
         onOpenAutoFocus={(event) => {
           opener.current =
             document.activeElement instanceof HTMLElement ? document.activeElement : null;
-          // The safe answer holds focus, not the destructive one.
           event.preventDefault();
           cancel.current?.focus();
         }}
@@ -88,7 +78,7 @@ export function ConfirmDeleteDialog({
           </Button>
           <Button
             type="button"
-            variant="destructive"
+            variant={confirmVariant}
             size="sm"
             onClick={() => {
               onOpenChange(false);
@@ -103,17 +93,13 @@ export function ConfirmDeleteDialog({
   );
 }
 
-/** What a delete takes with it, for the confirmation to say in numbers. */
+/** What a delete takes with it. */
 export interface DeleteCascade {
   subtasks: number;
   blocks: number;
 }
 
-/**
- * "Its 2 subtasks and 3 work blocks are deleted too." — or as much of that as
- * applies. `count` is how many tasks are being deleted, which changes the
- * pronouns and nothing else.
- */
+/** "Its 2 subtasks and 3 work blocks are deleted too." `count` only changes the pronouns. */
 export function describeDeleteCascade(count: number, cascade: DeleteCascade): string {
   const parts: string[] = [];
   if (cascade.subtasks > 0) {

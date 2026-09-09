@@ -20,19 +20,9 @@ import type { AnalyticsPageData, AnalyticsProject } from "@/features/analytics/t
 import { requireSession } from "@/lib/auth/session";
 
 /**
- * The analytics page's one read.
- *
- * **Ninety days, once.** The three windows the page offers are the same rows
- * aggregated over three periods, so the widest is read and the narrower two are
- * computed from it (`@momentum/core/analytics`). Switching range then costs
- * nothing at all — no fetch, no re-render of the server tree, no loading state
- * — and the three totals cannot disagree, because they come from one set of
- * rows through one set of functions.
- *
- * Every boundary in here is the profile's. `todayIn` resolves the last day in
- * the user's timezone and `allPeriods` derives the windows from local dates, so
- * a user in Auckland gets their Tuesday and not the server's Monday
- * (Domain Rule 4). Nothing on this page does date arithmetic of its own.
+ * Reads ninety days once; the narrower ranges are computed from the same rows
+ * in `@momentum/core/analytics`, so switching range costs no fetch and the
+ * totals cannot disagree. Every boundary resolves in the profile's timezone.
  */
 export async function getAnalyticsPage(): Promise<AnalyticsPageData> {
   const { supabase, userId, profile } = await requireSession();
@@ -47,9 +37,8 @@ export async function getAnalyticsPage(): Promise<AnalyticsPageData> {
       focus.listStartedBetween(supabase, userId, widest.window),
       tasks.listCompletedBetween(supabase, userId, widest.window),
       blocks.listWorkBetween(supabase, userId, widest.window),
-      // Archived habits included: they were answerable for the part of the
-      // period before they were retired, and `habitConsistencyByDay` uses
-      // `archivedFrom` to stop expecting anything of them after it.
+      // Archived habits included: `habitConsistencyByDay` uses `archivedFrom` to
+      // stop expecting anything of them after it.
       habitsRepo.listFor(supabase, userId),
       habitsRepo.listCompletionsBetween(supabase, userId, widest.from, widest.to),
       projectsRepo.listFor(supabase, userId),
@@ -61,12 +50,8 @@ export async function getAnalyticsPage(): Promise<AnalyticsPageData> {
     projectId: session.projectId,
   }));
 
-  /*
-   * Subtasks are counted. A subtask is completed by its own `complete_task`
-   * call and earns its own XP, so it is a unit of work the user finished — and
-   * counting it here keeps "tasks completed" agreeing with the quest counter
-   * the same user already reads on /today and /progress.
-   */
+  // Subtasks are counted: each earns its own XP, and this keeps "tasks
+  // completed" agreeing with the quest counter.
   const completedTasks: CompletedTaskFact[] = taskRows.map((task) => ({
     id: task.id,
     projectId: task.projectId,
@@ -127,11 +112,8 @@ export async function getAnalyticsPage(): Promise<AnalyticsPageData> {
 }
 
 /**
- * A habit's answerable span, in local dates.
- *
- * `created_at` and `archived_at` are instants; which date they fall on is the
- * user's question, not the server's (Domain Rule 4). Archiving takes effect
- * from its own date onward, so the day a habit was retired asks nothing of it.
+ * A habit's answerable span, in local dates. Archiving takes effect from its
+ * own date onward, so the day a habit was retired asks nothing of it.
  */
 function habitFact(habit: Habit, timezone: IanaTimeZone): HabitFact {
   return {

@@ -26,34 +26,12 @@ import { toInstant } from "../mappers/scalars";
 import type { MomentumClient } from "../types";
 
 /**
- * Progression: the ledger, the definitions, and the four trusted writes.
- *
- * Reads and RPCs, and no third kind. `xp_events`, `user_achievements` and
- * `quest_assignments` are client-read-only, and `profiles.xp/level/coins` are
- * guarded columns (Domain Rule 15) — so there is no repository function here
- * that inserts an award, and there cannot be one. Every mutation below sends an
- * id; the amount is decided by
- * `20260907140000_gamification_functions.sql` (Domain Rule 6).
- *
- * The one ordinary write is `equipCosmetic`, and it is ordinary on purpose:
- * `user_cosmetics.equipped` is the single column a client may move, because
- * which of the things you already own you are wearing is not a fact the server
- * has any reason to arbitrate. Buying is a different question and goes through
- * `purchase_cosmetic()`, which debits coins in the same transaction.
+ * `xp_events`, `user_achievements` and `quest_assignments` are client-read-only
+ * and `profiles.xp/level/coins` are guarded: every award is an RPC that decides
+ * its own amount. Never add a function here that inserts an award.
  */
 
-/* -------------------------------------------------------------------------- */
-/* Reads                                                                      */
-/* -------------------------------------------------------------------------- */
-
-/**
- * The ledger, most recent first.
- *
- * The XP history a user can look at is the same rows the profile total is the
- * sum of — there is no second record of what was earned, which is what makes
- * "the total reconciles with the ledger" a statement about one table rather
- * than an agreement between two.
- */
+/** The ledger, most recent first. */
 export async function listXpEvents(
   client: MomentumClient,
   userId: Uuid,
@@ -114,13 +92,7 @@ export async function listUnlockedAchievements(
   return data.map(rowToUserAchievement);
 }
 
-/**
- * Unlocked achievements with the names they were unlocked for, in one query.
- *
- * The shell reads this on every authenticated request — the celebration
- * compares the set it renders with the last one it saw — so it joins the
- * definitions rather than fetching them separately. Six rows at most.
- */
+/** Unlocked achievements joined with their names, newest first. */
 export async function listUnlockedWithNames(
   client: MomentumClient,
   userId: Uuid,
@@ -171,12 +143,7 @@ export async function listOwnedCosmetics(
   return data.map(rowToUserCosmetic);
 }
 
-/**
- * The cosmetic the user is wearing, of one kind.
- *
- * Read on every authenticated request for the top bar's avatar, so it is one
- * indexed lookup rather than the whole shop.
- */
+/** The key of the equipped cosmetic of one kind, or null. */
 export async function equippedCosmeticKey(
   client: MomentumClient,
   userId: Uuid,
@@ -194,17 +161,9 @@ export async function equippedCosmeticKey(
   return data?.cosmetic_definitions.key ?? null;
 }
 
-/* -------------------------------------------------------------------------- */
-/* Trusted writes                                                             */
-/* -------------------------------------------------------------------------- */
-
 /**
- * Today's and this week's quests, assigning them if they do not exist yet.
- *
- * It takes no arguments, and that is the guarantee: the period is resolved from
- * the profile's own timezone and week-start preference inside the function, so
- * no caller can ask for a future day's quests or generate a hundred past days
- * of them.
+ * Today's and this week's quests, assigning them if needed. Takes no arguments
+ * by design: the period is resolved server-side from the profile's timezone.
  */
 export async function ensureQuests(client: MomentumClient): Promise<QuestAssignment[]> {
   const { data, error } = await client.rpc("ensure_quest_assignments");
@@ -243,12 +202,8 @@ export async function purchaseCosmetic(
 }
 
 /**
- * Wears, or takes off, something already owned.
- *
- * An ordinary update: `equipped` is the one column `guard_user_cosmetics()`
- * lets a client move, and `enforce_one_equipped_per_kind()` un-equips the
- * previous one of that kind in the same statement — so two cosmetics of a kind
- * cannot both be on, even if a request fails between two of them.
+ * `equipped` is the one column `guard_user_cosmetics()` lets a client move;
+ * `enforce_one_equipped_per_kind()` un-equips the previous one of that kind.
  */
 export async function equipCosmetic(
   client: MomentumClient,
@@ -268,10 +223,6 @@ export async function equipCosmetic(
   return rowToUserCosmetic(data);
 }
 
-/* -------------------------------------------------------------------------- */
-/* Weekly goals — the one thing here the user creates                         */
-/* -------------------------------------------------------------------------- */
-
 export interface NewWeeklyGoal {
   id: Uuid;
   userId: Uuid;
@@ -281,7 +232,7 @@ export interface NewWeeklyGoal {
   title: string | null;
 }
 
-/** `id` is client-generated, so a retry after a lost response is idempotent (Domain Rule 17). */
+/** `id` is client-generated, so a retry after a lost response is idempotent. */
 export async function insertWeeklyGoal(
   client: MomentumClient,
   goal: NewWeeklyGoal,
@@ -305,8 +256,7 @@ export async function insertWeeklyGoal(
   if (error) throw error;
   if (data !== null) return rowToWeeklyGoal(data);
 
-  // The retry case: the row already exists with this id, so the create
-  // succeeded and only the response was lost.
+  // Retry case: the row already exists, so only the response was lost.
   const existing = await findWeeklyGoal(client, goal.id);
   if (existing === null) throw new Error("weekly goal disappeared between insert and read");
   return existing;

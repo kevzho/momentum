@@ -10,18 +10,9 @@ import type { PlanningHabit } from "@/features/calendar/types";
 import { HABITS_COPY, describeProgress, describeTarget } from "@/features/habits/copy";
 
 /**
- * One habit in the planning drawer.
- *
- * Not a drag source, and deliberately so: a task is dropped on a slot the user
- * picks, while a habit's schedule already names the days it wants. Its route
- * into the week is the same "Add to week" the habits page offers, generating
- * the same blocks through the same action — so the pointer route and the
- * keyboard route are one button and cannot diverge (Domain Rule 10).
- *
- * The row states facts and nothing else: the target, what the range has reached
- * so far, and how many days already have time reserved. It never says whether
- * that is good (Domain Rule 7 — the drawer's neutrality rule applies to habits
- * exactly as it applies to the workload bars beside them).
+ * One habit in the planning drawer. Deliberately not a drag source: a habit's
+ * schedule already names the days it wants, so "Add to week" is its route in.
+ * The row states facts and never judges them (Domain Rule 7).
  */
 export interface PlanningHabitRowProps {
   row: PlanningHabit;

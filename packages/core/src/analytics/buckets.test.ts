@@ -25,8 +25,7 @@ describe("dayBucket", () => {
     const midnightInNewYork = at("2026-06-17", 0, 0, NEW_YORK);
 
     expect(dayBucket(midnightInNewYork, NEW_YORK)).toBe("2026-06-17");
-    // The same instant is mid-morning of the 17th in Kolkata — a different
-    // reading of the clock, but the same date here by coincidence of offset.
+    // Mid-morning of the 17th in Kolkata: the same date by coincidence of offset.
     expect(dayBucket(midnightInNewYork, KOLKATA)).toBe("2026-06-17");
     // Late evening in New York is already the next morning in Kolkata.
     expect(dayBucket(at("2026-06-17", 20, 0, NEW_YORK), KOLKATA)).toBe("2026-06-18");
@@ -40,12 +39,6 @@ describe("hourBucket", () => {
     expect(hourBucket(at("2026-06-17", 23, 59), NEW_YORK)).toBe(23);
   });
 
-  /**
-   * On the spring-forward morning the clock never reads 02:xx, so no instant
-   * may be bucketed there. Walking the whole local day in ten-minute steps is
-   * the cheapest way to say "no instant at all", rather than probing the one
-   * the implementation happens to handle.
-   */
   it("produces no hour the clock skipped on a spring-forward day", () => {
     const start = at("2026-03-08", 0, 0, NEW_YORK);
     const hours = new Set<number>();
@@ -58,14 +51,12 @@ describe("hourBucket", () => {
     expect(hours.has(3)).toBe(true);
   });
 
-  /** And on the fall-back morning the repeated hour receives both passes. */
   it("gives the repeated hour both of its passes on a fall-back day", () => {
     const firstOneAm = at("2026-11-01", 1, 0, NEW_YORK);
     const secondOneAm = addMinutes(firstOneAm, 60);
 
     expect(hourBucket(firstOneAm, NEW_YORK)).toBe(1);
     expect(hourBucket(secondOneAm, NEW_YORK)).toBe(1);
-    // Two distinct instants, one bucket: what a wall-clock axis should show.
     expect(firstOneAm).not.toBe(secondOneAm);
   });
 });
@@ -79,11 +70,6 @@ describe("weekBucket", () => {
     expect(weekBucket(wednesday, NEW_YORK, 0)).toBe("2026-06-14");
   });
 
-  /**
-   * The boundary case a week bucket exists to get right: late on Sunday night
-   * with a Monday week start, the user is still in the week that began six days
-   * ago — not the one starting in twenty minutes.
-   */
   it("keeps a late Sunday evening in the week that is ending", () => {
     const sundayNight = at("2026-06-21", 23, 40);
 
@@ -207,7 +193,7 @@ describe("weeksOfPeriod", () => {
     const period = analyticsPeriod("7", d("2026-06-17"), NEW_YORK);
     const weeks = weeksOfPeriod(period.days, 1);
 
-    // 2026-06-11 is a Thursday, so a Monday week puts it in the week of the 8th.
+    // 2026-06-11 is a Thursday.
     expect(weeks.map((week) => week.start)).toEqual(["2026-06-08", "2026-06-15"]);
   });
 
@@ -225,7 +211,6 @@ describe("weeksOfPeriod", () => {
       "2026-06-13",
       "2026-06-14",
     ]);
-    // And the last week stops at today.
     expect(weeks[1]?.days.slice(3)).toEqual([null, null, null, null]);
   });
 
@@ -243,7 +228,6 @@ describe("weeksOfPeriod", () => {
     const weeks = weeksOfPeriod(period.days, 1);
 
     expect(weeks.every((week) => week.days.length === 7)).toBe(true);
-    // Every date of the period appears exactly once across the grid.
     const placed = weeks.flatMap((week) => week.days).filter((day) => day !== null);
     expect(placed).toEqual([...period.days]);
   });
@@ -252,8 +236,7 @@ describe("weeksOfPeriod", () => {
     const period = analyticsPeriod("30", d("2026-03-20"), NEW_YORK);
     const weeks = weeksOfPeriod(period.days, 1);
 
-    // 2026-03-08 is the Sunday the clocks move: it is the last slot of the
-    // week that began Monday the 2nd, not the first of the next one.
+    // 2026-03-08 is the Sunday the clocks move: the last slot of the week of the 2nd.
     const springWeek = weeks.find((week) => week.start === "2026-03-02");
     expect(springWeek?.days.at(6)).toBe("2026-03-08");
   });

@@ -3,18 +3,10 @@ import "server-only";
 import { z } from "zod";
 
 /**
- * Validated environment. Reading `process.env` anywhere else means a typo
- * surfaces as `undefined` deep inside a request; here it fails once, loudly,
- * with the name of the variable.
- *
- * The `NEXT_PUBLIC_` values are read through literal property accesses so the
- * Next.js compiler can inline them; they are still only *used* on the server,
- * because v1 has no browser Supabase client (docs/ARCHITECTURE.md §4).
- *
- * `SUPABASE_SECRET_KEY` is deliberately absent: the secret key is used by the
- * seed script and the integration-test harness, never by the application
- * (docs/ARCHITECTURE.md §12). Importing it here would put it one refactor away
- * from a request path.
+ * Validated environment; a missing variable fails once, loudly, by name. The
+ * `NEXT_PUBLIC_` values are read through literal property accesses so the
+ * compiler can inline them. `SUPABASE_SECRET_KEY` is deliberately absent: the
+ * application never uses it.
  */
 const envSchema = z.object({
   NEXT_PUBLIC_SUPABASE_URL: z.url({ message: "must be the Supabase project URL" }),

@@ -4,14 +4,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ActionResult } from "@/lib/actions/result";
 
-/**
- * The rollback is the whole point of this hook, so it is what the tests are
- * about: a failed mutation must leave the UI showing the server's truth and the
- * user holding an error they can act on. Silent divergence between the two is a
- * P0 bug (Domain Rule 11), and "every feature writes its own revert" is the
- * improvisation this hook exists to prevent.
- */
-
 const { errorToast, reportError } = vi.hoisted(() => ({
   errorToast: vi.fn(),
   reportError: vi.fn(),
@@ -41,7 +33,7 @@ function deferred<T>() {
   return { promise, settle: (value: T) => settle(value) };
 }
 
-/** Server truth is the constant 0; the reducer adds. A revert is therefore "back to 0". */
+/** Server truth is the constant 0; the reducer adds, so a revert is "back to 0". */
 function Counter({ action }: { action: (input: number) => Promise<ActionResult<number>> }) {
   const { state, run, pending } = useOptimisticAction({
     serverState: 0,
@@ -85,8 +77,7 @@ describe("useOptimisticAction", () => {
 
     await clickAdd();
 
-    // The reducer runs before the await, so the UI moves on the gesture's own
-    // frame rather than a round trip later.
+    // The reducer runs before the await.
     expect(total()).toBe("1");
     expect(screen.getByTestId("pending").textContent).toBe("pending");
 
@@ -98,8 +89,7 @@ describe("useOptimisticAction", () => {
       await inFlight.promise;
     });
 
-    // Nothing reverted it: the transition settled against unchanged props and
-    // React discarded the optimistic value on its own.
+    // Nothing reverted it: React discarded the optimistic value on its own.
     expect(total()).toBe("0");
     expect(screen.getByTestId("pending").textContent).toBe("idle");
   });
@@ -125,9 +115,6 @@ describe("useOptimisticAction", () => {
       options.action.onClick();
     });
 
-    // Retrying is safe for every calendar mutation because ids are
-    // client-generated and the trusted functions are idempotent
-    // (Domain Rule 17).
     expect(action).toHaveBeenCalledTimes(2);
     expect(action).toHaveBeenLastCalledWith(1);
   });
@@ -207,14 +194,8 @@ describe("useOptimisticAction", () => {
     expect(errorToast).not.toHaveBeenCalled();
   });
 
-  /*
-   * The other half of "on !ok or throw" (docs/ARCHITECTURE.md §8). An action
-   * reports expected failure by returning, but the call itself still rejects
-   * when the device is offline, the response is a 5xx, the request is aborted
-   * or the action id went stale in a deploy — and React re-throws a rejection
-   * out of the transition at the next render, which would hand the route's
-   * error boundary a whole blanked surface in place of one failed drag.
-   */
+  // A rejected call: React would re-throw it out of the transition and blank
+  // the route's error boundary over one failed drag.
   describe("when the call rejects instead of returning", () => {
     it("rolls back and toasts, the same as a returned failure", async () => {
       const onError = vi.fn();
@@ -246,12 +227,10 @@ describe("useOptimisticAction", () => {
       );
       await clickAdd();
 
-      // The surface is still there; the boundary never saw it.
+      // The boundary never saw it.
       expect(screen.queryByRole("alert")).toBeNull();
       expect(total()).toBe("0");
 
-      // The server's own `unavailable` wording, so there is one message for
-      // "could not reach the server" whichever side noticed.
       expect(errorToast).toHaveBeenCalledTimes(1);
       const [message, options] = errorToast.mock.calls[0] as [
         string,
@@ -260,8 +239,7 @@ describe("useOptimisticAction", () => {
       expect(message).toBe("Momentum could not reach the server. Your change was not saved.");
       expect(options.action.label).toBe("Retry");
 
-      // Feature cleanup runs, so pending marks are released rather than left
-      // on rows with no write behind them (Domain Rule 11).
+      // Feature cleanup runs, so pending marks are released.
       expect(onError).toHaveBeenCalledWith(
         {
           code: "unavailable",
@@ -270,15 +248,13 @@ describe("useOptimisticAction", () => {
         1,
       );
 
-      // Swallowed for the user, not for us: a bug in the action is still
-      // reported even though it no longer blanks the route.
+      // Still reported even though it no longer blanks the route.
       expect(reportError).toHaveBeenCalledTimes(1);
     });
 
     it("lets a redirect through, because that is control flow and not failure", async () => {
-      // `redirect()` travels as a thrown value. Turning it into a toast would
-      // strand the user on the page they were being moved off, so
-      // `unstable_rethrow` re-throws it and the boundary above takes it.
+      // `redirect()` travels as a thrown value; `unstable_rethrow` re-throws it and
+      // the boundary takes it.
       const action = vi
         .fn<(input: number) => Promise<ActionResult<number>>>()
         .mockImplementation(() => redirect("/login"));

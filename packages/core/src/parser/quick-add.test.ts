@@ -5,19 +5,7 @@ import type { LocalDate, Uuid } from "../types";
 
 import { MAX_PARSED_MINUTES, parseQuickAdd, type DismissedToken } from "./index";
 
-/**
- * The parser's contract, stated as tests because every clause of it is a
- * promise to someone typing fast:
- *
- * - the four categories, across the spec's own examples;
- * - **nothing is ever discarded** — the title plus the tokens always account
- *   for every non-whitespace character of the input;
- * - metadata-shaped text that is not metadata stays text;
- * - conflicts, unicode, emptiness and absurd length do not break it.
- */
-
-// A Monday, so "monday" has to jump a full week and every other weekday is
-// unambiguous relative to it.
+// A Monday, so "monday" has to jump a full week.
 const TODAY = localDate("2026-09-07");
 
 const SCHOOL = { id: "11111111-1111-4111-8111-111111111111" as Uuid, name: "School" };
@@ -29,7 +17,6 @@ function parse(input: string, dismissed: readonly DismissedToken[] = []) {
   return parseQuickAdd(input, { today: TODAY, projects: PROJECTS, dismissed });
 }
 
-/** Every non-whitespace character survives, either in the title or in a token. */
 function accountsForEveryCharacter(input: string, dismissed: readonly DismissedToken[] = []) {
   const result = parse(input, dismissed);
   const kept = [result.title, ...result.tokens.map((token) => token.text)]
@@ -66,7 +53,6 @@ describe("the spec's examples", () => {
   it("reads all three of weekday, duration and project", () => {
     const result = parse("GVAE analysis monday 90m #research");
     expect(result.title).toBe("GVAE analysis");
-    // Today is itself a Monday: "monday" is the *next* one, a week out.
     expect(result.dueDate).toBe(localDate("2026-09-14"));
     expect(result.estimatedMinutes).toBe(90);
     expect(result.projectId).toBe(RESEARCH.id);
@@ -126,7 +112,6 @@ describe("dates", () => {
     expect(parse("x tomorrow").tokens[0]?.label).toBe("Tomorrow");
     expect(parse("x friday").tokens[0]?.label).toBe("Friday");
     expect(parse("x next friday").tokens[0]?.label).toBe("Friday");
-    // A week out lands exactly on the boundary and still reads as a weekday.
     expect(parse("x monday").tokens[0]?.label).toBe("Monday");
   });
 });

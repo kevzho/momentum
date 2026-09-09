@@ -13,21 +13,10 @@ import { Popover, PopoverContent, PopoverTrigger } from "@momentum/ui/components
 import { Separator } from "@momentum/ui/components/separator";
 
 /**
- * A due date. Emits `LocalDate` — a calendar date in the user's timezone — and
- * never an instant (Domain Rules 1 and 4).
- *
- * The seam with `react-day-picker` is the whole job here. That library speaks
- * `Date`, and given no `timeZone` prop it builds every grid day with
- * `new Date(year, month, day)` — midnight in the *browser's* zone — then hands
- * one of those objects straight back through `onSelect`. So the two
- * conversions below are the only place a `Date` exists and they both read and
- * write the browser's own calendar fields, which is the picker's convention:
- * the offset cancels on both edges and the day that leaves this component is
- * the day whose cell the user clicked. The `Date` is a shell for the grid and
- * never escapes; only the `LocalDate` string is persisted.
- *
- * `today` is passed in, resolved on the server in the profile timezone. This
- * component never asks the browser what day it is.
+ * Emits `LocalDate`, never an instant. `react-day-picker` builds grid days as
+ * browser-local midnight `Date`s and hands them back through `onSelect`, so
+ * `toDate`/`fromDate` both use the browser's local calendar fields and the
+ * offset cancels. `today` is passed in; this never asks the browser what day it is.
  */
 function DatePicker({
   value,
@@ -81,7 +70,6 @@ function DatePicker({
       </PopoverTrigger>
 
       <PopoverContent align="start" className="w-auto p-0">
-        {/* The three dates that account for most due dates, one click each. */}
         <div className="flex flex-col gap-0.5 p-1.5">
           <Shortcut label="Today" onSelect={() => choose(today)} />
           <Shortcut label="Tomorrow" onSelect={() => choose(addDays(today, 1))} />
@@ -130,23 +118,13 @@ function Shortcut({
   );
 }
 
-/**
- * `LocalDate` → the `Date` react-day-picker wants: local midnight, the same
- * instant its own `DateLib` builds for that grid day, so the picker's
- * `isSameDay` rings the selected cell and the "today" cell it was given.
- */
+/** Local midnight, the same instant react-day-picker builds for that grid day. */
 function toDate(date: LocalDate): Date {
   const [year, month, day] = date.split("-").map(Number) as [number, number, number];
   return new Date(year, month - 1, day);
 }
 
-/**
- * The picker's `Date` → `LocalDate`, read in the browser's zone.
- *
- * `getFullYear` and friends, never the UTC getters: `onSelect` hands back one
- * of the grid's own day objects, and those are built at *local* midnight, so
- * reading their UTC fields returns the previous day anywhere east of UTC.
- */
+/** Local getters, never UTC ones: the grid's days are local midnight, and UTC fields give the previous day east of UTC. */
 function fromDate(date: Date): LocalDate {
   const year = String(date.getFullYear()).padStart(4, "0");
   const month = String(date.getMonth() + 1).padStart(2, "0");

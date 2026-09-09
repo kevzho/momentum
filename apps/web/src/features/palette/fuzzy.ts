@@ -1,14 +1,5 @@
-/**
- * The palette's matcher: a deterministic fuzzy subsequence score, written here
- * rather than taken from cmdk's own filter because the palette ranks four
- * different kinds of thing against each other — commands, tasks, projects and
- * how recently a command was used — and a scorer it cannot see inside cannot be
- * tuned or tested.
- *
- * Deliberately greedy and left-to-right: it is not the optimal alignment, it is
- * the one a person predicts. Typing more characters always narrows the list,
- * and the same query always produces the same order.
- */
+// Deterministic greedy left-to-right subsequence scorer, kept in-house (not
+// cmdk's filter) so commands, tasks, projects and recency can be ranked together.
 
 /** Word starts, so "wg" finds "Weekly Goal" and "#dw" finds "#deep-work". */
 const BOUNDARY = /[\s\-_/#.:]/u;
@@ -23,8 +14,7 @@ const LENGTH_PENALTY = 0.08;
 
 /**
  * `null` when `text` does not contain `query` as a subsequence; otherwise a
- * score where bigger is better. An empty query matches everything at 0, which
- * is what makes the unfiltered list fall back to its declared order.
+ * score where bigger is better. An empty query matches everything at 0.
  */
 export function fuzzyScore(query: string, text: string): number | null {
   const needle = fold(query);
@@ -58,11 +48,7 @@ export function fuzzyScore(query: string, text: string): number | null {
   return score - haystack.length * LENGTH_PENALTY;
 }
 
-/**
- * The best score across several strings — a command's label and its keywords, a
- * task's title and its project's name. A keyword match is worth slightly less
- * than a label match, so "Go to Today" beats a task that merely mentions today.
- */
+/** Best score across `primary` and `secondary`; a secondary match is discounted. */
 export function fuzzyScoreAny(
   query: string,
   primary: string,
@@ -81,11 +67,8 @@ export function fuzzyScoreAny(
   return result;
 }
 
-/**
- * Case-folded and stripped of diacritics, so "Ecole" finds "École" and the
- * matcher behaves the same for every alphabet the product accepts. `NFKD` first
- * because the accent has to become its own code point before it can be removed.
- */
+// Case-folded and stripped of diacritics; NFKD first so the accent is its own
+// code point before it is removed.
 function fold(value: string): string {
   return value
     .normalize("NFKD")

@@ -1,14 +1,7 @@
 import { instant } from "../time";
 import type { Habit } from "../types";
 
-/**
- * A habit with every field set to something harmless, for tests that care about
- * one or two of them.
- *
- * It builds a whole `Habit` rather than the `HabitSchedule` subset the maths
- * takes, so a test that hands one to a function is also checking that a real
- * row would satisfy it.
- */
+/** A whole `Habit` (not just the `HabitSchedule` subset) so tests also prove a real row satisfies the maths. */
 export function habitOf(overrides: Partial<Habit> = {}): Habit {
   return {
     id: "11111111-1111-4111-8111-111111111111",

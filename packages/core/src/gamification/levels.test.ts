@@ -9,13 +9,6 @@ import {
   xpForLevel,
 } from "./levels";
 
-/**
- * The curve, and the two properties that make it usable: it never goes
- * backwards, and `levelForXp` is the exact inverse of `xpForLevel` at every
- * boundary. The boundary cases are the ones a user notices — one XP short of a
- * level has to read as the level below it, whatever `Math.pow` returns.
- */
-
 describe("xpForLevel", () => {
   it("costs nothing to be level 1", () => {
     expect(xpForLevel(1)).toBe(0);
@@ -24,8 +17,6 @@ describe("xpForLevel", () => {
   });
 
   it("matches the documented thresholds", () => {
-    // The first six, spelled out, so a change to the formula has to be a
-    // deliberate change to these numbers as well.
     expect(xpForLevel(2)).toBe(100);
     expect(xpForLevel(3)).toBe(282);
     expect(xpForLevel(4)).toBe(519);
@@ -41,13 +32,11 @@ describe("xpForLevel", () => {
   });
 
   it("keeps levelling reachable rather than exponential", () => {
-    // The pacing specs/08-gamification.md asks for: a level 40 user still
-    // levels up sometimes. One level at 40 costs under a thousand XP — a few
-    // committed days, not a month.
+    // A level 40 user still levels up sometimes: one level costs under a thousand XP.
     const costAt40 = xpForLevel(41) - xpForLevel(40);
     expect(costAt40).toBeLessThan(1_000);
 
-    // And the early ones are quick: 1 to 5 costs less than a single level at 40.
+    // Levels 1 to 5 cost less than a single level at 40.
     expect(xpForLevel(5)).toBeLessThan(costAt40);
   });
 });
@@ -64,8 +53,7 @@ describe("levelForXp", () => {
       const threshold = xpForLevel(level);
       expect(levelForXp(threshold)).toBe(level);
       if (level > 1) {
-        // One short is still the level below. This is the case floating point
-        // gets wrong if nothing corrects it.
+        // One short is still the level below; the case floating point gets wrong uncorrected.
         expect(levelForXp(threshold - 1)).toBe(level - 1);
       }
     }

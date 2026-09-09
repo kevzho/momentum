@@ -18,12 +18,6 @@ import {
 } from "@/features/palette/search";
 import type { PaletteCommand } from "@/features/palette/types";
 
-/**
- * What the palette shows, as a pure function: fuzzy search across commands,
- * tasks and projects at once, with the section holding the best match first, so
- * the first row is selected and Enter does the obvious thing.
- */
-
 const NOW = 1_780_000_000_000;
 
 function command(

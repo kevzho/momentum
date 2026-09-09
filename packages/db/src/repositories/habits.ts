@@ -16,38 +16,12 @@ import { rowToHabit, rowToHabitCompletion } from "../mappers/habit";
 import type { InsertRow, MomentumClient, UpdateRow } from "../types";
 
 /**
- * `habits` and `habit_completions`.
- *
- * The two tables have opposite write models, and the split is Domain Rule 15's:
- *
- * - A **habit** is ordinary user data. Creating, editing and archiving it are
- *   plain statements, scoped by RLS like any other row the user owns.
- * - A **completion** is client-read-only. `20260906121200_grants.sql` gives
- *   `authenticated` `select` on `habit_completions` and nothing else, so every
- *   write below goes through a `security definer` function that computes the
- *   completion date in the profile timezone and awards the XP once
- *   (Domain Rules 4, 6, 14).
- *
- * Habits deliberately have no recurrence rule (docs/ARCHITECTURE.md §11): the
- * blocks "Add to week" writes are ordinary `calendar_blocks` rows and are
- * created through the blocks repository, not here.
+ * A habit is ordinary RLS-scoped user data. A completion is client-read-only:
+ * every completion write goes through a `security definer` function that
+ * resolves the date in the profile timezone and awards XP once.
  */
 
-/* -------------------------------------------------------------------------- */
-/* Habits — reads                                                             */
-/* -------------------------------------------------------------------------- */
-
-/**
- * Every habit the page renders, archived ones included.
- *
- * One query rather than two, because archiving is a scope the user switches
- * between rather than a different question, and a person's habit list is a
- * handful of rows. `habits_user_idx (user_id, archived_at)` covers it.
- *
- * Ordered so the active ones lead and the order is stable across renders:
- * archived last, then oldest first, which is roughly the order they were
- * adopted in.
- */
+/** Every habit, archived ones included: active first, then oldest first. */
 export async function listFor(client: MomentumClient, userId: Uuid): Promise<Habit[]> {
   const { data, error } = await client
     .from("habits")
@@ -67,20 +41,9 @@ export async function findById(client: MomentumClient, id: Uuid): Promise<Habit 
   return data === null ? null : rowToHabit(data);
 }
 
-/* -------------------------------------------------------------------------- */
-/* Habits — writes                                                            */
-/* -------------------------------------------------------------------------- */
-
 /**
- * A new habit.
- *
- * `id` comes from the client so the optimistic row and the persisted row share
- * a key and a retried insert collides with itself (Domain Rule 17).
- *
- * The database refuses the combinations that would be meaningless — a
- * `weekdays` habit with no days, a unit on a boolean habit, a target other than
- * 1 on `daily`/`weekdays` — so this shape does not re-state them, and the
- * action maps the constraint names onto sentences.
+ * A client-supplied `id` lets the optimistic and persisted rows share a key.
+ * Invalid combinations are refused by database constraints, not re-stated here.
  */
 export interface NewHabit {
   id?: Uuid;
@@ -135,14 +98,7 @@ export async function insert(client: MomentumClient, habit: NewHabit): Promise<H
   return rowToHabit(data);
 }
 
-/**
- * One write for the whole form, so a save cannot half-apply.
- *
- * Changing a habit's frequency never touches its completions. The history is
- * what happened; the target is what the user is aiming at now, and re-reading
- * old days against a new rule is exactly the kind of retroactive judgement
- * Domain Rule 7 rules out.
- */
+/** One write for the whole form. Changing frequency never touches completions. */
 export async function update(client: MomentumClient, id: Uuid, patch: HabitPatch): Promise<Habit> {
   const row: UpdateRow<"habits"> = {
     ...(patch.name === undefined ? {} : { name: patch.name }),
@@ -165,15 +121,7 @@ export async function update(client: MomentumClient, id: Uuid, patch: HabitPatch
   return rowToHabit(data);
 }
 
-/**
- * Archiving: stop tracking, keep everything.
- *
- * `archived_at` is an ordinary column on `habits` — there is no guard on it,
- * because archiving destroys nothing. The completions stay, their XP stays, and
- * un-archiving brings the habit back with its whole history (Domain Rule 7).
- * This is the route a user should reach for; `remove` below is the one that
- * takes the history with it.
- */
+/** Stops tracking; completions and their XP stay, and un-archiving restores the history. */
 export async function setArchived(
   client: MomentumClient,
   id: Uuid,
@@ -190,32 +138,13 @@ export async function setArchived(
   return rowToHabit(data);
 }
 
-/**
- * Deletes a habit, and by `on delete cascade` its completions and its calendar
- * blocks — the blocks because they have no meaning without their parent
- * (Domain Rule 13), the completions because they are records *of* it.
- *
- * The XP those completions earned stays: the ledger has no foreign key on
- * `source_id` and outlives its sources by design (Domain Rule 7).
- */
+/** Deletes a habit; `on delete cascade` removes its completions and blocks. Earned XP stays. */
 export async function remove(client: MomentumClient, id: Uuid): Promise<void> {
   const { error } = await client.from("habits").delete().eq("id", id);
   if (error) throw error;
 }
 
-/* -------------------------------------------------------------------------- */
-/* Completions — reads                                                        */
-/* -------------------------------------------------------------------------- */
-
-/**
- * Every completion in a date range, for every habit.
- *
- * Both bounds inclusive: `completion_date` is a calendar date, not an instant,
- * so a range is a set of days and the half-open convention that governs block
- * windows does not apply (Domain Rule 4). `habit_completions_user_date_idx`
- * covers it, and one query serves the week strip, the heatmap and every rate on
- * the page — they are all the same rows counted differently.
- */
+/** Every completion in `[from, to]` (both inclusive — `completion_date` is a calendar date). */
 export async function listCompletionsBetween(
   client: MomentumClient,
   userId: Uuid,
@@ -234,7 +163,7 @@ export async function listCompletionsBetween(
   return data.map(rowToHabitCompletion);
 }
 
-/** The same read for one habit — the long-range heatmap on its detail view. */
+/** The same read for one habit. */
 export async function listCompletionsForHabit(
   client: MomentumClient,
   habitId: Uuid,
@@ -253,21 +182,10 @@ export async function listCompletionsForHabit(
   return data.map(rowToHabitCompletion);
 }
 
-/* -------------------------------------------------------------------------- */
-/* Completions — trusted writes                                               */
-/* -------------------------------------------------------------------------- */
-
 /**
- * Records that a habit was done on a user-local date.
- *
- * An RPC and not an insert, and not because of a policy that could be relaxed:
- * the date has to be computed from the profile timezone by something the client
- * cannot lie to, the row has to be the *one* row for that habit and day
- * (Domain Rule 14), and the XP has to be awarded exactly once (Domain Rule 6).
- * All three live in `record_habit_completion`.
- *
- * `onDate` is the day being recorded, not "now": the function stamps
- * `completed_at` with the database clock itself.
+ * Records that a habit was done on a user-local date. An RPC, not an insert:
+ * one row per habit and day, XP awarded exactly once, `completed_at` stamped
+ * by the database clock.
  */
 export async function recordCompletion(
   client: MomentumClient,
@@ -288,14 +206,9 @@ export async function recordCompletion(
 }
 
 /**
- * Un-ticks a day. Returns the row that was removed, or null if there was none —
- * removing twice is not an error, so a retry settles on the same state.
- *
- * The function `returns setof`, so "there was nothing to remove" arrives as an
- * empty array rather than as a row of nulls; see the note on
- * `remove_habit_completion` in `20260907120000_habit_functions.sql`.
- *
- * The XP the completion earned is not withdrawn (Domain Rule 7).
+ * Un-ticks a day. Returns the removed row, or null if there was none (the
+ * function `returns setof`, so "nothing" arrives as an empty array). XP is
+ * not withdrawn.
  */
 export async function removeCompletion(
   client: MomentumClient,

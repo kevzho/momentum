@@ -1,6 +1,5 @@
 import { expect, signIn, test, SEED_USERS } from "./fixtures";
 
-/** Workflow 1 — Signup / login. */
 test.describe("Sign in and sign out", () => {
   test("signs in, lands on Today, and signs out from the account menu", async ({ page }) => {
     await signIn(page);

@@ -9,18 +9,8 @@ import type {
 } from "./facts";
 
 /**
- * Builders for the analytics suite.
- *
- * Every fixture is expressed as a **wall-clock reading in a named zone** and
- * converted with `fromLocal`, never as a hand-written `Z` timestamp. A test
- * that says "a session at 09:00 on 8 March in New York" then keeps meaning that
- * on the morning the clocks move, which is the only way these tests can be
- * evidence about DST rather than an elaborate restatement of UTC arithmetic.
- */
-
-/**
- * The transition instants in 2026, quoted from `time/zone.test.ts` so the two
- * suites cannot disagree about when the clocks moved:
+ * Every fixture is a wall-clock reading in a named zone converted with
+ * `fromLocal`, never a hand-written `Z` timestamp, so DST tests mean what they say.
  *
  *   America/New_York  2026-03-08 07:00Z  local 02:00 -> 03:00  (day is 23h)
  *                     2026-11-01 06:00Z  local 02:00 -> 01:00  (day is 25h)

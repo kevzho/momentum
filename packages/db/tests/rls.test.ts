@@ -13,16 +13,9 @@ import {
 } from "./support/harness";
 
 /**
- * Proof, not assertion.
- *
- * Every user-owned table is walked twice: once as its owner, to establish that
- * there is something there to steal, and once as a second signed-in account,
- * which must come away with nothing and must not be able to write anything.
- * A missing policy is a security bug even if no UI reaches the table
- * (Domain Rule 9), so the list below is the whole schema, not the tables the
- * product happens to render today.
- *
- * Run with: `MOMENTUM_DB_TESTS=1 pnpm test` against a freshly reset local stack.
+ * Every user-owned table walked as its owner and as a second account, which
+ * must read and write nothing. The list is the whole schema, not the tables
+ * the product renders. Run with `MOMENTUM_DB_TESTS=1 pnpm test`.
  */
 
 const describeDb = DB_TESTS_ENABLED ? describe : describe.skip;
@@ -95,9 +88,8 @@ describeDb("row-level security", () => {
       expect(data?.length ?? 0).toBeGreaterThan(0);
     });
 
-    // Both halves matter. Without rows of their own, "an unscoped select
-    // returns only the neighbour's own rows" below passes on an empty set and
-    // proves nothing about that table.
+    // Without rows of their own, "an unscoped select returns only the
+    // neighbour's rows" passes on an empty set and proves nothing.
     it.each(USER_OWNED_TABLES)("%s has rows for the neighbour too", async (table) => {
       const { data, error } = await neighbourAny.from(table).select(ownerColumn(table));
       expect(error).toBeNull();
@@ -119,7 +111,6 @@ describeDb("row-level security", () => {
       const { data, error } = await neighbourAny.from(table).select(column);
 
       expect(error).toBeNull();
-      // Whatever comes back is theirs. An unscoped select must never leak.
       for (const row of (data ?? []) as Record<string, string>[]) {
         expect(row[column]).toBe(neighbourId);
       }
@@ -136,8 +127,7 @@ describeDb("row-level security", () => {
         .eq(column, ownerId)
         .select(column);
 
-      // Either the policy hides every candidate row (no rows updated) or the
-      // grant refuses the verb outright. Both are a denial.
+      // Either the policy hides every row (no rows updated) or the grant refuses the verb.
       if (error === null) expect(data).toEqual([]);
       else expect(error.code).toBeTruthy();
     });
@@ -182,8 +172,7 @@ describeDb("row-level security", () => {
 
   describe("client-read-only tables reject writes even from their owner", () => {
     it.each(READ_ONLY_TABLES)("%s refuses an insert", async (table) => {
-      // The row shape does not matter: the grant and the missing policy stop
-      // the statement before any column is considered.
+      // The row shape does not matter: the statement is stopped before any column is considered.
       const { error } = await ownerAny.from(table).insert({ user_id: ownerId });
       expect(error).not.toBeNull();
     });
@@ -296,8 +285,7 @@ describeDb("row-level security", () => {
         end_at: end.toISOString(),
       });
 
-      // The row would pass the policy — it is the neighbour's own user_id —
-      // and is stopped by assert_same_owner().
+      // The row passes the policy (its own user_id); assert_same_owner() is what stops it.
       expect(error).not.toBeNull();
     });
 

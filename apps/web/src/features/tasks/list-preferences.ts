@@ -10,22 +10,9 @@ import {
   type TaskSort,
 } from "@momentum/core/tasks";
 
-/**
- * Sort and filter, persisted for the session.
- *
- * The spec asks that they "persist within a session", which is exactly what
- * `sessionStorage` means, and docs/ARCHITECTURE.md §7 assigns that kind of
- * state here rather than to the URL: a sort order is not something anyone
- * links to, and putting it in the address would push the view — which people
- * *do* link to — down among five other parameters.
- *
- * It is read through `useSyncExternalStore`, which is the primitive for exactly
- * this shape: an external store, a server snapshot that differs from the
- * client's, and a subscription. The alternative — `useState` seeded in an
- * effect — is a second render triggered from inside an effect, which React
- * flags as a cascading render and which would also flash the default sort for
- * one frame on every mount.
- */
+// Sort and filter persist in `sessionStorage`, not the URL, and are read via
+// `useSyncExternalStore` rather than `useState` seeded in an effect (which
+// would cascade a render and flash the default sort on mount).
 const KEY = "momentum.tasks.list";
 
 export interface ListPreferences {
@@ -35,27 +22,16 @@ export interface ListPreferences {
 }
 
 export const DEFAULT_PREFERENCES: ListPreferences = {
-  // Manual is the default because the list is drag-reorderable: any other
-  // default would silently discard the order a user just dragged things into.
+  // Manual: any other default would hide the order a user just dragged into.
   sort: "manual",
   direction: "asc",
   filter: EMPTY_FILTER,
 };
 
-/**
- * The store.
- *
- * `snapshot` is cached because `useSyncExternalStore` compares snapshots by
- * identity and calls `getSnapshot` on every render — parsing the JSON each
- * time would return a new object every time and loop forever.
- *
- * It is also the value of record. A write puts the new preferences straight
- * into it and only then tries to persist them, so storage the browser refuses
- * (Safari private mode, site data blocked, a full quota) costs the user their
- * sort order across a reload rather than the ability to change it at all. Only
- * a `storage` event from another tab clears the cache, because that is the one
- * case where the truth really is in storage and not here.
- */
+// `snapshot` is cached because `useSyncExternalStore` compares by identity;
+// re-parsing JSON on every `getSnapshot` would loop forever. It is also the
+// value of record, so a refused write (private mode, full quota) only costs
+// persistence across a reload. Only another tab's `storage` event clears it.
 let snapshot: ListPreferences | null = null;
 const listeners = new Set<() => void>();
 
@@ -68,17 +44,13 @@ function subscribe(onChange: () => void): () => void {
   };
 }
 
-/**
- * Publishes `next` and tells React. `null` drops the cache so the next
- * `getSnapshot` re-reads — which is what another tab's write means, and the
- * only reason to go back to storage.
- */
+/** `null` drops the cache so the next `getSnapshot` re-reads storage. */
 function publish(next: ListPreferences | null): void {
   snapshot = next;
   for (const listener of listeners) listener();
 }
 
-/** A stable listener identity, so `removeEventListener` matches. */
+// A stable listener identity, so `removeEventListener` matches.
 function onStorage(): void {
   publish(null);
 }
@@ -88,7 +60,7 @@ function getSnapshot(): ListPreferences {
   return snapshot;
 }
 
-/** The server has no session storage, so it renders the defaults — and so does the first client paint. */
+// The server renders the defaults, and so does the first client paint.
 function getServerSnapshot(): ListPreferences {
   return DEFAULT_PREFERENCES;
 }
@@ -108,13 +80,7 @@ export function useListPreferences(): [
   return [preferences, update];
 }
 
-/**
- * Storage can throw — Safari in private mode, a browser configured to block it
- * — and a task list that will not render because a preference could not be read
- * is worse than one that forgot a sort order. Both directions swallow; the
- * caller has already published the value, so a refused write loses nothing the
- * session can still see.
- */
+// Storage can throw (private mode, blocked site data); both directions swallow.
 function read(): ListPreferences | null {
   try {
     const raw = window.sessionStorage.getItem(KEY);
@@ -129,15 +95,11 @@ function write(preferences: ListPreferences): void {
   try {
     window.sessionStorage.setItem(KEY, JSON.stringify(preferences));
   } catch {
-    /* Not being able to remember a sort order is not worth an error. */
+    // A forgotten sort order is not worth an error.
   }
 }
 
-/**
- * Validated on the way in, field by field. The value came from a store the user
- * can edit, and a bad `sort` would index the comparators with `undefined` and
- * throw on the first render.
- */
+/** Validated field by field: a bad `sort` would index the comparators with `undefined`. */
 export function parse(value: unknown): ListPreferences | null {
   if (typeof value !== "object" || value === null) return null;
   const raw = value as Record<string, unknown>;

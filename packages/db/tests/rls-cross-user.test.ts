@@ -16,46 +16,19 @@ import {
 } from "./support/harness";
 
 /**
- * Cross-user proof: a second account tries, and comes away with nothing.
+ * Cross-user attacks that pass a naive policy check and must be stopped
+ * elsewhere (WITH CHECK, `assert_same_owner`, `assert_caller`, grants, embeds,
+ * side channels). Every refusal asserts the SQLSTATE, and every mutation
+ * attempt is followed by a read as the owner proving the row is unchanged.
+ * A failure here is a security finding, not a flaky test.
  *
- * `rls.test.ts` walks every table as the neighbour and shows that plain reads,
- * updates and deletes addressed by the owner's user_id touch nothing. This file
- * is the other half of that proof — the attacks that *pass* a naive policy
- * check and have to be stopped somewhere else:
- *
- *   A. inserting a row with someone else's user_id (WITH CHECK);
- *   B. moving an own row to someone else's account (WITH CHECK, the guards);
- *   C. pointing an own row's foreign key at someone else's row
- *      (`assert_same_owner`, docs/ARCHITECTURE.md §12);
- *   D. calling every sanctioned RPC with an id that belongs to someone else
- *      (`assert_caller`, and no state change afterwards);
- *   E. reaching the functions that are deliberately not granted;
- *   F. reading someone else's per-user rows through a resource embed on a
- *      definition table that everyone may read;
- *   G. side channels: counts, id probes, and error messages that would say
- *      whether a foreign row exists;
- *   H. creating a row already in a guarded state, and writing the
- *      client-read-only tables as their own owner;
- *   I. every granted function, signed out.
- *
- * Every refusal asserts the SQLSTATE rather than "an error happened", and every
- * mutation attempt is followed by a read as the row's owner proving the row is
- * exactly as it was. A test here that fails because the database let the
- * neighbour through is a security finding, not a flaky test.
- *
- * Run with: `MOMENTUM_DB_TESTS=1 pnpm exec vitest run --project db` against the
- * local stack. Everything the suite creates carries a client-generated id and is
- * removed by id in `afterAll`; the seeded rows are only ever read.
+ * Run with `MOMENTUM_DB_TESTS=1 pnpm exec vitest run --project db`. Seeded rows
+ * are only ever read; everything minted is removed by id in `afterAll`.
  */
 
 const describeDb = DB_TESTS_ENABLED ? describe : describe.skip;
 
-/**
- * SQLSTATE `insufficient_privilege`. RLS `with check`, a missing table or
- * function grant, `assert_caller()`, `assert_same_owner()` and
- * `reject_guarded_write()` all raise it, so it is the one code a refused
- * cross-user attempt is allowed to come back with.
- */
+/** SQLSTATE `insufficient_privilege` — the one code a refused cross-user attempt may come back with. */
 const DENIED = "42501";
 
 /** SQLSTATE `invalid_parameter_value`: a well-formed request refused on its merits. */
@@ -111,11 +84,7 @@ interface Outcome {
   error: PostgrestError | null;
 }
 
-/**
- * The statement was refused with exactly this SQLSTATE. When it was not, the
- * failure says what the database handed back, because a row coming back here
- * is the finding.
- */
+/** Asserts the statement was refused with exactly this SQLSTATE. */
 function expectRefused(outcome: Outcome, code: string = DENIED): PostgrestError {
   const { error } = outcome;
   if (error === null) {
@@ -219,7 +188,7 @@ describeDb("row-level security: cross-user attempts", () => {
     if (outcome.error) throw new Error(`${what}: ${outcome.error.code} ${outcome.error.message}`);
   }
 
-  /** A whole row, as its owner sees it, or null. The untyped client, because the table is a variable. */
+  /** A whole row as its owner sees it, or null. Untyped client because the table is a variable. */
   async function rowAsOwner(
     client: SupabaseClient,
     table: UserOwnedTable,
@@ -263,8 +232,7 @@ describeDb("row-level security: cross-user attempts", () => {
     neighbourId = await userIdOf(neighbour);
     expect(ownerId).not.toBe(neighbourId);
 
-    // The owner's current local week, computed exactly as guard_weekly_goals
-    // does (today in the owner's timezone, snapped to their week start), so
+    // The owner's current local week, computed as guard_weekly_goals does, so
     // weekly-goal fixtures satisfy the current-week rule.
     const ownerProfile = await one(
       owner.from("profiles").select("timezone, week_start").eq("id", ownerId),
@@ -277,8 +245,6 @@ describeDb("row-level security: cross-user attempts", () => {
     });
     if (week.error) throw new Error(`resolving owner week: ${week.error.message}`);
     ownerWeek = week.data as string;
-
-    // ---- The owner's own rows, read through the owner's policies -----------
 
     theirs.openTask = (
       await one(
@@ -422,8 +388,6 @@ describeDb("row-level security: cross-user attempts", () => {
       await one(owner.from("profiles").select("timezone").eq("id", ownerId), "owner profile")
     ).timezone;
 
-    // ---- Rows the owner creates, to try to give away (section B) -----------
-
     ownerFixture.projects = mint("projects");
     ok(
       await owner
@@ -431,8 +395,7 @@ describeDb("row-level security: cross-user attempts", () => {
         .insert({ id: ownerFixture.projects, user_id: ownerId, name: "RLS proof: owner project" }),
       "owner project fixture",
     );
-    // Deliberately without a project: the only thing that can stop the transfer
-    // is the policy itself, not assert_same_owner on the project.
+    // No project, so only the policy itself can stop the transfer.
     ownerFixture.tasks = mint("tasks");
     ok(
       await owner
@@ -462,9 +425,8 @@ describeDb("row-level security: cross-user attempts", () => {
       "owner habit fixture",
     );
     ownerFixture.weekly_goals = mint("weekly_goals");
-    // Current week (the guard requires it), and a metric the owner has no goal
-    // for this week (weekly_goals_uniq is per user+week+metric), so the fixture
-    // never collides with a seeded goal and touches no seed row.
+    // Current week (the guard requires it) and a metric with no seeded goal
+    // (weekly_goals_uniq is per user+week+metric).
     const usedMetrics = new Set(
       (
         await all(
@@ -567,17 +529,14 @@ describeDb("row-level security: cross-user attempts", () => {
   });
 
   afterAll(async () => {
-    // The service role, because a row that *did* change hands would be
-    // invisible to the account that created it — and that row is precisely the
-    // one that must not be left behind.
+    // Service role: a row that did change hands is invisible to its creator.
     const admin = adminClient();
     const failures: string[] = [];
     const idsOf = (table: FixtureTable) =>
       minted.filter((row) => row.table === table).map((row) => row.id);
 
     try {
-      // Ledger rows nothing here should have minted. If any exist, a test above
-      // has already failed; removing them keeps the caps honest for the next run.
+      // Ledger rows nothing here should have minted; removing them keeps the caps honest.
       const habitIds = idsOf("habits");
       const completionIds =
         habitIds.length === 0
@@ -602,8 +561,7 @@ describeDb("row-level security: cross-user attempts", () => {
         }
       }
 
-      // Children before parents. The cascades would manage, but an explicit
-      // order names the table when one of these fails.
+      // Children before parents, so a failure names the table.
       const deleters: Record<FixtureTable, (ids: string[]) => PromiseLike<Outcome>> = {
         calendar_blocks: (ids) => admin.from("calendar_blocks").delete().in("id", ids),
         focus_sessions: (ids) => admin.from("focus_sessions").delete().in("id", ids),
@@ -636,13 +594,8 @@ describeDb("row-level security: cross-user attempts", () => {
     if (failures.length > 0) throw new Error(`fixture cleanup failed: ${failures.join("; ")}`);
   });
 
-  /* ---------------------------------------------------------------------- */
-  /* A. Inserting a row that claims to be someone else's                     */
-  /* ---------------------------------------------------------------------- */
-
   describe("A. a row inserted with the other account's user_id is refused", () => {
-    // Every insert carries every required column and a fresh client id, so the
-    // only reason left for the refusal is the user_id (RLS `with check`).
+    // Every insert is otherwise complete, so the only reason left to refuse is the user_id.
     const insertAsNeighbourForOwner: Record<
       ClientWritableTable,
       (id: string) => PromiseLike<Outcome>
@@ -660,9 +613,7 @@ describeDb("row-level security: cross-user attempts", () => {
           .from("habits")
           .insert({ id, user_id: ownerId, name: "RLS proof: planted", frequency_type: "daily" }),
       weekly_goals: (id) =>
-        // The owner's current week, so guard_weekly_goals passes and RLS
-        // `with check` is the one thing left to refuse the foreign user_id
-        // (42501) — a far week would be rejected first for the wrong reason.
+        // Current week, so guard_weekly_goals passes and `with check` is what refuses.
         neighbour.from("weekly_goals").insert({
           id,
           user_id: ownerId,
@@ -683,17 +634,12 @@ describeDb("row-level security: cross-user attempts", () => {
 
         expectRefused(await insertAsNeighbourForOwner[table](id));
 
-        // PROVES the row was not created under the owner's account: the owner,
-        // whose policy would show it, sees nothing with that id.
+        // The owner, whose policy would show it, sees nothing with that id.
         expect(await rowAsOwner(ownerAny, table, id)).toBeNull();
         expect(await rowAsOwner(neighbourAny, table, id)).toBeNull();
       },
     );
   });
-
-  /* ---------------------------------------------------------------------- */
-  /* B. Giving an own row away                                               */
-  /* ---------------------------------------------------------------------- */
 
   describe("B. an account cannot transfer its own row to another account", () => {
     it.each(CLIENT_WRITABLE_TABLES)(
@@ -701,9 +647,7 @@ describeDb("row-level security: cross-user attempts", () => {
       async (table) => {
         const id = ownerFixture[table];
 
-        // The row passes `using` (it is the owner's) and must fail `with check`
-        // (the new user_id is not the caller's). A silent "0 rows" would mean
-        // the policy hid the row instead — also a denial, but not this one.
+        // Passes `using`, must fail `with check`; a silent "0 rows" would be the wrong denial.
         expectRefused(
           await ownerAny
             .from(table)
@@ -712,8 +656,6 @@ describeDb("row-level security: cross-user attempts", () => {
             .select("user_id"),
         );
 
-        // PROVES nothing moved: the owner still reads the row as their own and
-        // the neighbour still cannot see it.
         const after = await rowAsOwner(ownerAny, table, id);
         expect(after?.user_id).toBe(ownerId);
         expect(await rowAsOwner(neighbourAny, table, id)).toBeNull();
@@ -723,7 +665,6 @@ describeDb("row-level security: cross-user attempts", () => {
     it("profiles: re-keying the profile to the neighbour's id fails with 42501", async () => {
       expectRefused(await owner.from("profiles").update({ id: neighbourId }).eq("id", ownerId));
 
-      // PROVES the profile is untouched and there is still exactly one of each.
       expect((await profileOf(owner, ownerId)).id).toBe(ownerId);
       expect(await countOf(ownerAny, "profiles", "id", ownerId)).toBe(1);
       expect(await countOf(neighbourAny, "profiles", "id", neighbourId)).toBe(1);
@@ -737,7 +678,6 @@ describeDb("row-level security: cross-user attempts", () => {
         .single();
       ok(before, "owner cosmetic");
 
-      // The ownership guard fires before the policy does; either way, 42501.
       expectRefused(
         await owner
           .from("user_cosmetics")
@@ -746,7 +686,6 @@ describeDb("row-level security: cross-user attempts", () => {
           .eq("cosmetic_id", theirs.cosmetic),
       );
 
-      // PROVES the row is byte-for-byte what it was, and the neighbour gained nothing.
       const after = await owner
         .from("user_cosmetics")
         .select("user_id, cosmetic_id, equipped, purchased_at")
@@ -762,13 +701,8 @@ describeDb("row-level security: cross-user attempts", () => {
     });
   });
 
-  /* ---------------------------------------------------------------------- */
-  /* C. Foreign keys that cross the account boundary                          */
-  /* ---------------------------------------------------------------------- */
-
   describe("C. a foreign key cannot point at another account's row", () => {
-    // Every one of these rows has the neighbour's own user_id, so the policy
-    // accepts it; `assert_same_owner` is what has to say no.
+    // Each row has the neighbour's own user_id, so `assert_same_owner` is what must refuse.
 
     it("calendar_blocks.task_id: a work block on the owner's task is refused (insert)", async () => {
       const id = mint("calendar_blocks");
@@ -827,7 +761,6 @@ describeDb("row-level security: cross-user attempts", () => {
         }),
       );
       expect(await rowAsOwner(neighbourAny, "tasks", id)).toBeNull();
-      // PROVES the owner's task did not acquire a child it cannot see.
       const { data: children } = await owner
         .from("tasks")
         .select("id")
@@ -895,8 +828,8 @@ describeDb("row-level security: cross-user attempts", () => {
       );
       const after = await rowAsOwner(neighbourAny, "tasks", mine.task);
       expect(after?.parent_task_id).toBeNull();
-      // `enforce_subtask_depth` copies the parent's project onto a subtask; the
-      // refused statement must not have left that side effect behind either.
+      // `enforce_subtask_depth` copies the parent's project onto a subtask; that
+      // side effect must not survive the refusal either.
       expect(after?.project_id).toBe(mine.project);
     });
 
@@ -904,9 +837,8 @@ describeDb("row-level security: cross-user attempts", () => {
       const today = todayIn(ianaTimeZone("Europe/London"), nowInstant());
       const before = await countOf(neighbourAny, "habit_completions", "habit_id", mine.habit);
 
-      // The date is inside the recording window, so the only thing left to
-      // refuse is the block — the function checks it explicitly, because RLS
-      // is not consulted inside a security definer body.
+      // The function checks the block explicitly: RLS is not consulted inside a
+      // security definer body.
       const error = expectRefused(
         await neighbour.rpc("record_habit_completion", {
           p_habit_id: mine.habit,
@@ -918,19 +850,12 @@ describeDb("row-level security: cross-user attempts", () => {
       );
       expect(error.message).toMatch(/is not a block of habit/);
 
-      // PROVES no completion was recorded on the way to the refusal.
       expect(await countOf(neighbourAny, "habit_completions", "habit_id", mine.habit)).toBe(before);
     });
   });
 
-  /* ---------------------------------------------------------------------- */
-  /* D. The sanctioned functions, called with someone else's id              */
-  /* ---------------------------------------------------------------------- */
-
   describe("D. every granted function refuses another account's row and changes nothing", () => {
-    // Each case: the owner reads the row, the neighbour calls the function with
-    // that row's id, the owner reads the row again. 42501 comes from
-    // assert_caller(); the two reads must be identical.
+    // Each case: owner reads, neighbour calls, owner reads again; the reads must match.
 
     it("complete_task(owner's open task) → 42501; the task stays open", async () => {
       const before = await rowAsOwner(ownerAny, "tasks", theirs.openTask);
@@ -1080,15 +1005,13 @@ describeDb("row-level security: cross-user attempts", () => {
         }),
       );
 
-      // PROVES no row: the session would be the neighbour's own, so the neighbour would see it.
       expect(await rowAsOwner(neighbourAny, "focus_sessions", id)).toBeNull();
     });
 
     it("start_focus_session(…, owner's project) → 42501; no session is created", async () => {
       const id = mint("focus_sessions");
 
-      // The body does not check the project itself; the insert trigger
-      // (assert_same_owner on focus_sessions.project_id) is what refuses it.
+      // The insert trigger (assert_same_owner on project_id) is what refuses it.
       const error = expectRefused(
         await neighbour.rpc("start_focus_session", {
           p_planned_minutes: 25,
@@ -1122,8 +1045,7 @@ describeDb("row-level security: cross-user attempts", () => {
       "finish_focus_session",
       "abandon_focus_session",
     ] as const)("%s(owner's session) → 42501; the session is untouched", async (fn) => {
-      // assert_caller runs before the status check in every one of these, so
-      // the code is 42501 whether the session is live or long finished.
+      // assert_caller runs before the status check, so 42501 regardless of session state.
       const before = await rowAsOwner(ownerAny, "focus_sessions", theirs.focusSession);
       const pauses = await countOf(ownerAny, "focus_pauses", "session_id", theirs.focusSession);
       const xp = await profileOf(owner, ownerId);
@@ -1152,8 +1074,6 @@ describeDb("row-level security: cross-user attempts", () => {
     });
 
     it("quest_progress(owner's assignment) → 42501 and returns no number", async () => {
-      // This one returns data. It must return none: the count of another
-      // person's completed tasks is their data too.
       const outcome = await neighbour.rpc("quest_progress", {
         p_assignment_id: theirs.questAssignment,
       });
@@ -1180,9 +1100,8 @@ describeDb("row-level security: cross-user attempts", () => {
     it("purchase_cosmetic: a caller who cannot afford it is refused and keeps their coins", async ({
       skip,
     }) => {
-      // purchase_cosmetic acts on the caller only, so there is no cross-user
-      // id to pass. What can be proved is that the price is enforced against
-      // the caller's real balance and nothing is granted on refusal.
+      // purchase_cosmetic acts on the caller only; prove the price is enforced
+      // against the real balance and nothing is granted on refusal.
       const before = await profileOf(neighbour, neighbourId);
       const owned = (
         await all(neighbour.from("user_cosmetics").select("cosmetic_id"), "neighbour cosmetics")
@@ -1218,14 +1137,8 @@ describeDb("row-level security: cross-user attempts", () => {
     });
   });
 
-  /* ---------------------------------------------------------------------- */
-  /* E. The functions that are not granted                                    */
-  /* ---------------------------------------------------------------------- */
-
   describe("E. the internal functions are unreachable over PostgREST", () => {
-    // The mint, the reconciler, the evaluator, the assigner, the ownership
-    // check and the metric — each takes a user id or an amount as an argument,
-    // which is exactly why none of them may be an endpoint (Domain Rule 6).
+    // Each of these takes a user id or an amount, which is why none may be an endpoint.
     const UNGRANTED = [
       {
         fn: "award_xp",
@@ -1276,7 +1189,6 @@ describeDb("row-level security: cross-user attempts", () => {
         const error = expectRefused(await neighbourAny.rpc(fn, args()));
         expect(error.message).toMatch(/permission denied for function/);
 
-        // PROVES the call did not run: the caller's own totals are unchanged.
         expect(await profileOf(neighbour, neighbourId)).toEqual(before);
       },
     );
@@ -1290,8 +1202,7 @@ describeDb("row-level security: cross-user attempts", () => {
     );
 
     it("no probe reached the ledger", async () => {
-      // award_xp was called with fresh source ids; had any call landed, the
-      // caller could read the row back in their own ledger.
+      // Had any award_xp call landed, the caller could read it back in their own ledger.
       expect(probeSourceIds.length).toBeGreaterThan(0);
       const { data, error } = await neighbour
         .from("xp_events")
@@ -1302,15 +1213,9 @@ describeDb("row-level security: cross-user attempts", () => {
     });
   });
 
-  /* ---------------------------------------------------------------------- */
-  /* F. Resource embedding through shared definition tables                   */
-  /* ---------------------------------------------------------------------- */
-
   describe("F. an embed on a shared definition table returns only the caller's rows", () => {
-    // Definition tables are readable by everyone signed in, and PostgREST will
-    // happily embed the per-user table behind them. The embedded rows must be
-    // filtered by the per-user policy — and the totals must match a direct
-    // read of the caller's own rows, so nothing of the owner's is mixed in.
+    // PostgREST embeds the per-user table behind a shared definition table;
+    // the embedded rows must still be filtered by the per-user policy.
 
     it("achievement_definitions → user_achievements", async () => {
       const rows = await all(
@@ -1322,7 +1227,6 @@ describeDb("row-level security: cross-user attempts", () => {
 
       const own = await countOf(neighbourAny, "user_achievements", "user_id", neighbourId);
       expect(embedded).toHaveLength(own);
-      // Not vacuous: the owner has unlocks, and none of them appeared.
       expect(await countOf(ownerAny, "user_achievements", "user_id", ownerId)).toBeGreaterThan(0);
     });
 
@@ -1394,10 +1298,6 @@ describeDb("row-level security: cross-user attempts", () => {
     });
   });
 
-  /* ---------------------------------------------------------------------- */
-  /* G. Side channels                                                         */
-  /* ---------------------------------------------------------------------- */
-
   describe("G. no side channel says whether the owner's rows exist", () => {
     it.each(USER_OWNED_TABLES)("%s: an exact count of the owner's rows is 0", async (table) => {
       // `head: true` fetches no rows; only the count header could leak.
@@ -1441,8 +1341,7 @@ describeDb("row-level security: cross-user attempts", () => {
     });
 
     it("assert_same_owner answers identically for the owner's row and for a row that does not exist", async () => {
-      // If the two messages differed, a rejected insert would be an existence
-      // oracle over every table it guards.
+      // Differing messages would make a rejected insert an existence oracle.
       const taken = expectRefused(
         await neighbour.from("calendar_blocks").insert({
           id: mint("calendar_blocks"),
@@ -1485,9 +1384,8 @@ describeDb("row-level security: cross-user attempts", () => {
     });
 
     it("the trusted functions answer 'another account' for the owner's id and 'does not exist' for a random one — and neither leaks content", async () => {
-      // This asymmetry is deliberate (docs/DATABASE.md: 42501 maps to 403 so the
-      // UI can say "forbidden"). It confirms a row exists, and nothing more;
-      // recorded here so a future change to hide even that is a conscious one.
+      // Deliberate asymmetry (docs/DATABASE.md): 42501 maps to 403 so the UI can
+      // say "forbidden". It confirms a row exists and nothing more.
       const taken = expectRefused(
         await neighbour.rpc("complete_task", { p_task_id: theirs.openTask }),
       );
@@ -1499,10 +1397,6 @@ describeDb("row-level security: cross-user attempts", () => {
       expect(missing.message).toMatch(/does not exist/);
     });
   });
-
-  /* ---------------------------------------------------------------------- */
-  /* H. Guarded columns on insert, and the read-only tables as their owner    */
-  /* ---------------------------------------------------------------------- */
 
   describe("H. a row cannot be born in a guarded state, even by its owner", () => {
     it("tasks: status 'completed' (with completed_at) → 42501", async () => {
@@ -1573,8 +1467,7 @@ describeDb("row-level security: cross-user attempts", () => {
   });
 
   describe("H. the client-read-only tables refuse a complete, well-formed row from their owner", () => {
-    // Full valid shapes with the owner's own user_id, so the refusal can only
-    // be the missing grant (42501 "permission denied for table").
+    // Full valid shapes with the owner's own user_id, so only the missing grant can refuse.
 
     it("xp_events → 42501; the profile total is unchanged", async () => {
       const xp = await profileOf(owner, ownerId);
@@ -1692,10 +1585,6 @@ describeDb("row-level security: cross-user attempts", () => {
     });
   });
 
-  /* ---------------------------------------------------------------------- */
-  /* I. Signed out                                                            */
-  /* ---------------------------------------------------------------------- */
-
   describe("I. every granted function refuses a signed-out caller", () => {
     const GRANTED = [
       { fn: "complete_task", args: () => ({ p_task_id: theirs.openTask }) },
@@ -1750,7 +1639,6 @@ describeDb("row-level security: cross-user attempts", () => {
     });
 
     it("the owner's rows are exactly as they were", async () => {
-      // The anonymous sweep above named every kind of row; none of them moved.
       const task = await rowAsOwner(ownerAny, "tasks", theirs.openTask);
       expect(task?.status).toBe("open");
       const done = await rowAsOwner(ownerAny, "tasks", theirs.completedTask);

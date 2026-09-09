@@ -1,10 +1,6 @@
 import * as React from "react";
 import { cn } from "cn";
 
-/**
- * Keyboard hint glyph. Mono, `text-2xs`, one of the two places the mono family
- * is used at all.
- */
 function Kbd({ className, ...props }: React.ComponentProps<"kbd">) {
   return (
     <kbd

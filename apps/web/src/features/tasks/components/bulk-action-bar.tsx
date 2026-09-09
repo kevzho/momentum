@@ -22,21 +22,8 @@ import {
 } from "@/features/tasks/components/confirm-delete-dialog";
 import type { ProjectSummary } from "@/features/tasks/types";
 
-/**
- * What a selection can do: complete, move to a project, delete.
- *
- * It appears in place above the list rather than floating over it, so it never
- * covers a row and never changes the list's scroll position — a floating bar
- * that hides the last selected task is a small betrayal of the selection it
- * represents.
- *
- * Every control here empties the selection, and an empty selection is what
- * unmounts the bar, so each of them removes itself as a direct result of being
- * pressed. This is not a modal, so there is no focus scope to restore anything:
- * without `returnFocusTo` the browser drops focus on `<body>` and a keyboard
- * user restarts from the top of the shell (Domain Rule 10). It is the same
- * contract, and the same guard, as `SidePanel`'s close button.
- */
+// Every control here empties the selection, which unmounts the bar, so each
+// hands focus to `returnFocusTo` before it removes itself.
 export function BulkActionBar({
   selectedIds,
   allCompleted,
@@ -53,7 +40,7 @@ export function BulkActionBar({
   /** Every selected task is already complete, so the button offers the reverse. */
   allCompleted: boolean;
   projects: readonly ProjectSummary[];
-  /** What deleting the selection takes with it, for the confirmation to say. */
+  /** What deleting the selection takes with it. */
   cascade: DeleteCascade;
   pending: boolean;
   /** Where focus lands when an action clears the selection and takes the bar with it. */
@@ -65,21 +52,11 @@ export function BulkActionBar({
 }) {
   const count = selectedIds.size;
 
-  /*
-   * Whether the menu is closing because an item was chosen, rather than because
-   * the user pressed Escape or clicked away. Only the first case unmounts the
-   * bar, and only it needs the handoff below; in the other two Radix's own
-   * restore lands on a trigger that is still there and is exactly right.
-   */
+  // Whether the menu is closing because an item was chosen (which unmounts the
+  // bar) rather than by Escape or a click away (where Radix's restore is right).
   const menuActed = React.useRef(false);
-  /*
-   * Delete is the one action that asks first. It is the only irreversible one
-   * — completion reverses, a move re-moves — and it cascades to subtasks and
-   * blocks the bar cannot show. The count and the cascade are in the dialog.
-   */
   const [confirmingDelete, setConfirmingDelete] = React.useState(false);
 
-  /** Moves focus to the caller's anchor. Answers whether there was one to move to. */
   function handOffFocus(): boolean {
     const target = returnFocusTo?.current ?? null;
     if (target === null || !target.isConnected) return false;
@@ -89,8 +66,7 @@ export function BulkActionBar({
 
   function act(run: () => void): void {
     run();
-    // React commits the unmount only after this handler returns, so focus is
-    // moved while the bar is still mounted and simply stays where it lands.
+    // The unmount commits after this handler returns, so focus moved now stays put.
     handOffFocus();
   }
 
@@ -133,15 +109,8 @@ export function BulkActionBar({
         <DropdownMenuContent
           align="start"
           className="w-52"
-          /*
-           * This path cannot use `act`. An open menu traps focus, so a move made
-           * from inside `onSelect` is dragged straight back into the menu and
-           * then lost when it closes; and Radix's own restore aims at the
-           * trigger, which is inside the bar the chosen item has just unmounted.
-           * The close hook is the moment that works — the same shape
-           * `useOpenerFocus` uses for this feature's sheets — and the restore is
-           * only cancelled when there is somewhere better to put focus.
-           */
+          // Cannot use `act`: an open menu traps focus, and Radix's restore aims
+          // at a trigger inside the bar that has just unmounted.
           onCloseAutoFocus={(event) => {
             if (!menuActed.current) return;
             menuActed.current = false;

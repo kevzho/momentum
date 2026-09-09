@@ -2,24 +2,7 @@ import { formatDuration } from "../time/format";
 import { durationMinutes } from "../time/duration";
 import type { Instant, Minutes } from "../types/scalars";
 
-/**
- * Coverage: how much of a task's estimate is actually on the calendar.
- *
- * This is the number that makes the planner useful (specs/04-task-manager.md).
- * A task due Friday with a 135-minute estimate and 45 minutes booked is not
- * "scheduled" — it is a third scheduled, and the other 90 minutes have to come
- * from somewhere in the same finite week.
- *
- * It is the arithmetic expression of Domain Rules 1 and 2 together: the
- * scheduled total is summed across ALL of the task's work blocks, on whatever
- * days they fall, and the due date is nowhere in this file. A model with one
- * `scheduled_start` per task could not produce this number at all — the sum
- * would always be one block or none — which is why the rule is a data-model
- * rule and not a UI preference.
- *
- * `estimatedMinutes` is the user's intent and is never replaced by actuals
- * (Domain Rule 3); nothing here reads `actual_minutes`.
- */
+/** Coverage: how much of a task's estimate is on the calendar, summed across all its work blocks. Never reads actuals. */
 
 export type CoverageState =
   /** No estimate, so there is nothing to be a fraction of. */
@@ -46,14 +29,7 @@ export interface Coverage {
   state: CoverageState;
 }
 
-/**
- * Minutes reserved by a set of work blocks.
- *
- * Elapsed time, via `durationMinutes` — not wall-clock difference — because a
- * block is a claim on the week and a DST day is 23 or 25 hours long
- * (Domain Rule 3). Blocks are summed whole: a task's coverage is not relative
- * to any displayed window.
- */
+/** Minutes reserved by a set of work blocks: elapsed time, so a DST day is 23 or 25 hours long. */
 export function scheduledMinutesOf(
   blocks: readonly { startAt: Instant; endAt: Instant }[],
 ): Minutes {
@@ -70,8 +46,7 @@ export function coverageOf(estimatedMinutes: Minutes | null, scheduledMinutes: M
       remainingMinutes: 0,
       overscheduledMinutes: 0,
       ratio: null,
-      // An unestimated task with blocks on the calendar is still unestimated:
-      // the honest answer to "how much is left?" is that nobody has said.
+      // An unestimated task with blocks on the calendar is still unestimated.
       state: "unestimated",
     };
   }
@@ -91,13 +66,7 @@ export function coverageOf(estimatedMinutes: Minutes | null, scheduledMinutes: M
   };
 }
 
-/**
- * `"45m of 2h 15m scheduled"` — the sentence the spec asks for, in one place so
- * the row, the sheet and the announcement cannot word it three ways.
- *
- * An unestimated task gets the only true statement available about it: what is
- * booked, with no denominator invented for it.
- */
+/** `"45m of 2h 15m scheduled"`; an unestimated task states only what is booked. */
 export function formatCoverage(coverage: Coverage): string {
   if (coverage.estimatedMinutes === null) {
     return coverage.scheduledMinutes === 0

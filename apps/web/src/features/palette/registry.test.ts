@@ -8,11 +8,6 @@ const { paletteCommands, registerCommands } = await import("@/features/palette/r
 const { defineCommands } = await import("@/features/palette/types");
 const { ListTodoIcon } = await import("lucide-react");
 
-/**
- * The registry's two promises: everything the spec lists is reachable, and a
- * feature can add to it without the palette knowing.
- */
-
 describe("the registered commands", () => {
   it("gives every command a unique id, because the id keys the recent ordering", () => {
     const ids = paletteCommands().map((command) => command.id);
@@ -34,7 +29,13 @@ describe("the registered commands", () => {
         .map((command) => command.label);
 
     expect(byGroup("create")).toEqual(
-      expect.arrayContaining(["Add task", "Add event", "Add habit", "Start focus session"]),
+      expect.arrayContaining([
+        "Add task",
+        "Add event",
+        "Add habit",
+        "New project",
+        "Start focus session",
+      ]),
     );
     expect(byGroup("action")).toEqual(
       expect.arrayContaining(["Complete task", "Schedule task", "Search tasks", "Search projects"]),

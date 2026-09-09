@@ -3,28 +3,9 @@ import type { FocusSession } from "../types/focus";
 import { localDateOf } from "../time/zone";
 
 /**
- * What the focus history counts, and what it counts it over.
- *
- * Pure, like the rest of `@momentum/core`: it takes the sessions, the
- * timezone, today's date and the week's dates, and reads no clock. "Today" and
- * "this week" are the user's, resolved from the profile timezone by the caller
- * and applied here through `localDateOf` (Domain Rule 4).
- *
- * **A session belongs to the local date it started on.** A session begun at
- * 23:40 and finished at 00:10 is counted on the day the user sat down, which is
- * the same convention the calendar uses to decide a block's column, and the
- * only one that keeps "3 sessions today" agreeing with the list underneath it.
- *
- * The two numbers are deliberately different questions:
- *
- * - **`focusedMinutes`** is every measured minute a finished session recorded,
- *   an abandoned one included. The time was spent; a session the user ended
- *   early is still work done, and hiding it would make the product's own
- *   actual-versus-estimate signal (Domain Rule 3) quietly incomplete.
- * - **`completedSessions`** counts only the sessions that ran to a finish.
- *
- * Neither of them is a judgement, and there is no third number for the
- * sessions that were abandoned (Domain Rule 7).
+ * A session belongs to the local date it started on, matching the calendar's
+ * column rule. `focusedMinutes` includes abandoned sessions (the time was
+ * spent); `completedSessions` counts only those that ran to a finish.
  */
 
 export interface FocusTotals {
@@ -62,8 +43,7 @@ export function summariseFocus(input: FocusHistoryInput): FocusHistory {
   const projects = new Map<string, FocusProjectTotal>();
 
   for (const session of input.sessions) {
-    // A session still running has recorded nothing yet: its minutes are not a
-    // fact until `finish_focus_session` writes them.
+    // A running session has recorded nothing until `finish_focus_session` writes its minutes.
     if (session.actualMinutes === null) continue;
 
     const date = localDateOf(session.startedAt, input.timezone);

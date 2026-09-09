@@ -4,16 +4,8 @@ import { describe, expect, it } from "vitest";
 import { AnalyticsView } from "@/features/analytics/components/analytics-view";
 import { analyticsData, at, busyRows, manyBlocks } from "@/features/analytics/fixtures";
 
-/**
- * The analytics page, from the island down.
- *
- * The assertions are on the **tables**, not on the SVG. That is not a
- * concession to jsdom: the hidden table is the page's contract with a screen
- * reader, so a chart whose table is wrong is a broken chart even when the bars
- * look right, and a chart library swapped underneath should not move a single
- * expectation in this file (specs/10-analytics.md — chart data is accessible to
- * screen readers).
- */
+// Assertions are on the hidden tables, not the SVG: the table is the page's
+// contract with a screen reader.
 
 /** The rows of one figure's data table, as arrays of cell text. */
 function tableRows(title: string): string[][] {
@@ -33,12 +25,8 @@ function figure(title: string): HTMLElement {
   return screen.getByRole("figure", { name: title });
 }
 
-/**
- * A stat tile's value, addressed through the design system's own slot
- * attribute. Querying by label text would be ambiguous: "Focused time" is a
- * tile label *and* a column header in two of the hidden tables, which is fine
- * on the page and fatal to `getByText`.
- */
+// Addressed by slot attribute: "Focused time" is a tile label and a column
+// header, which is fatal to `getByText`.
 function statTile(label: string): string {
   const tiles = [...document.querySelectorAll("[data-slot='stat-tile']")];
   const tile = tiles.find((node) => node.firstElementChild?.textContent === label);
@@ -132,11 +120,7 @@ describe("planned against actual", () => {
     expect(rows[0]).toContain("Thesis");
   });
 
-  /**
-   * The 240 recorded minutes of an unestimated task must not appear on the
-   * actual side. If they ever did, Thesis would be the only row and Admin's
-   * time would be silently added to it or shown as a 100% overrun.
-   */
+  // The 240 recorded minutes of an unestimated task must not appear on the actual side.
   it("leaves an unestimated task out of both sides and says how many it left out", () => {
     render(<AnalyticsView data={analyticsData(busyRows())} />);
 
@@ -191,10 +175,6 @@ describe("a new account", () => {
 });
 
 describe("a window with a gap in it", () => {
-  /**
-   * A user with history but a quiet week gets charts at zero and the control to
-   * widen the window — not the new-account page.
-   */
   it("keeps the charts and the range control when only the narrow window is empty", () => {
     const data = analyticsData({
       ...busyRows(),

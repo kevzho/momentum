@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
-import { BellIcon, LogOutIcon, PlusIcon, SearchIcon, SettingsIcon } from "lucide-react";
+import { LogOutIcon, PlusIcon, SearchIcon, SettingsIcon } from "lucide-react";
 
 import { Avatar, AvatarFallback } from "@momentum/ui/components/avatar";
 import { Button } from "@momentum/ui/components/button";
@@ -33,7 +33,7 @@ import type { ProjectSummaryWithCount } from "@/features/tasks/types";
 import { signOut } from "@/features/auth/actions";
 import { sectionLabel } from "@/lib/nav";
 
-/** Who is signed in, resolved on the server from the profile and the auth user. */
+/** Who is signed in, resolved on the server. */
 export interface Account {
   displayName: string;
   email: string | null;
@@ -41,10 +41,9 @@ export interface Account {
 }
 
 /**
- * The top bar never repeats the page's own heading: the section name here is
- * shown only at the widths where `PageHeader`'s title is visually hidden, and
- * it is hidden from assistive technology because the page's `h1` is still in
- * the accessibility tree (docs/DESIGN_SYSTEM.md).
+ * The section name is shown only at widths where `PageHeader`'s title is
+ * visually hidden, and hidden from assistive technology because the page's
+ * `h1` is still in the tree.
  */
 export function TopBar({
   account,
@@ -52,7 +51,7 @@ export function TopBar({
   projects,
 }: {
   account: Account;
-  /** Level and XP, computed by the server from the ledger (Domain Rule 6). */
+  /** Level and XP, computed by the server from the ledger. */
   progress: ProgressBadge;
   projects: readonly ProjectSummaryWithCount[];
 }) {
@@ -71,9 +70,7 @@ export function TopBar({
 
       <div className="flex-1" />
 
-      {/* The palette's pointer route. The keyboard route is ⌘K from anywhere;
-          this is here because a shortcut nobody has been told about is not a
-          feature, and because the bar is where people look for search. */}
+      {/* The palette's pointer route; the keyboard route is ⌘K. */}
       <Button
         variant="ghost"
         size="sm"
@@ -98,11 +95,7 @@ export function TopBar({
         </TooltipContent>
       </Tooltip>
 
-      {/* Compact, and a link: the indicator says where you are, and the page it
-          points at says what got you there. The bar's width transition is the
-          "progress movement" the spec asks for — the whole of the routine XP
-          feedback, with celebration reserved for a level, an achievement and a
-          weekly goal. */}
+      {/* The bar's width transition is the whole of the routine XP feedback. */}
       <Link
         href="/progress"
         aria-label={`Level ${progress.level}. ${progress.xpRemaining} XP to level ${progress.level + 1}.`}
@@ -115,21 +108,10 @@ export function TopBar({
         />
       </Link>
 
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button variant="ghost" size="icon-sm">
-            <BellIcon aria-hidden="true" />
-            <span className="sr-only">Notifications</span>
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>No new notifications</TooltipContent>
-      </Tooltip>
-
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="icon-sm" className="rounded-full">
-            {/* The one cosmetic this phase renders. It changes how the avatar
-                looks and nothing else — coins never buy capability. */}
+            {/* Changes how the avatar looks and nothing else: coins never buy capability. */}
             <ProfileFrame frame={isProfileFrameKey(progress.frame) ? progress.frame : null}>
               <Avatar className="size-6">
                 <AvatarFallback className="text-2xs">{account.initials}</AvatarFallback>
@@ -159,11 +141,7 @@ export function TopBar({
               Settings
             </Link>
           </DropdownMenuItem>
-          {/* A form posting to a server action, not an onSelect handler:
-              signing out is a mutation, so it belongs in a form and needs no
-              client handler of its own. The menu itself still needs JavaScript
-              — Radix mounts this content only once the menu opens — so this is
-              not a no-JavaScript path; it is one less thing to hydrate. */}
+          {/* A form posting to a server action: signing out is a mutation and needs no client handler. */}
           <form action={signOut}>
             <DropdownMenuItem asChild>
               <button type="submit" className="w-full">

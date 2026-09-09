@@ -1,6 +1,6 @@
 import type { Instant, LocalDate, Uuid } from "./scalars";
 
-/** Phase 14. Reflection prompts are optional; the numbers are derived from Phase 10's aggregations, never stored here. */
+/** Reflection prompts are optional; the week's numbers are derived from analytics, never stored here. */
 export interface WeeklyReview {
   id: Uuid;
   userId: Uuid;

@@ -11,22 +11,8 @@ import { rowToCalendarBlock } from "./mappers/calendar-block";
 import type { Row } from "./types";
 
 /**
- * The work-block model, guarded against regression.
- *
- * Phase 4's brief was to refactor a single-block model into a multi-block one
- * and migrate the data. **There was nothing to migrate.** The schema has been
- * multi-block since `20260906120500_calendar_blocks.sql`, the first migration
- * that could have got it wrong: a work block is a row of `calendar_blocks` with
- * `kind = 'work'` and a required `task_id`, and `tasks` has never had a
- * scheduling column. So no data has ever been in the shape Domain Rule 2
- * forbids, and a migration would have had nothing to move.
- *
- * What that leaves worth testing is the property a migration would have
- * established: that the model **is** N-blocks-per-task, and that no future
- * migration can quietly take it back to one. The single-block shape is the
- * single most expensive thing to get wrong later (specs/04-task-manager.md), and
- * it would arrive as an innocuous-looking `alter table tasks add column`. These
- * tests read the migrations as text and fail on exactly that.
+ * Guards the N-blocks-per-task model: reads the migrations as text and fails
+ * on any that would give `tasks` a scheduling column.
  */
 
 const MIGRATIONS_DIR = join(import.meta.dirname, "../../../supabase/migrations");
@@ -52,12 +38,6 @@ describe("the schema is multi-block, and stays that way", () => {
     expect(migrations().length).toBeGreaterThan(0);
   });
 
-  /**
-   * The regression guard. Any column that would let one task carry one span —
-   * a start/end pair, a "scheduled at", a single block reference — is refused
-   * here rather than in review, because by the time it is in a migration it is
-   * in everybody's database.
-   */
   it("never adds a scheduling column to tasks, in any migration", () => {
     const FORBIDDEN =
       /\b(scheduled_start|scheduled_end|scheduled_at|scheduled_for|start_at|end_at|block_id|calendar_block_id)\b/;
@@ -65,8 +45,7 @@ describe("the schema is multi-block, and stays that way", () => {
     for (const { name, sql } of migrations()) {
       const body = statements(sql);
 
-      // Every statement that creates or alters `tasks`, isolated from the rest
-      // of the file — `calendar_blocks` legitimately has start_at and end_at.
+      // Only statements touching `tasks` — `calendar_blocks` legitimately has start_at/end_at.
       const touchesTasks = [
         ...body.matchAll(/create table (?:if not exists )?public\.tasks\s*\(([\s\S]*?)\n\);/g),
         ...body.matchAll(/alter table (?:if exists )?(?:only )?public\.tasks\b([^;]*);/g),
@@ -87,8 +66,6 @@ describe("the schema is multi-block, and stays that way", () => {
     expect(blocks).toBeDefined();
     const body = statements((blocks as { sql: string }).sql);
 
-    // N blocks reference 1 task, and the reference is not unique — nothing
-    // constrains a task to a single block.
     expect(body).toMatch(/task_id\s+uuid references public\.tasks \(id\) on delete cascade/);
     expect(body).not.toMatch(/unique[^;]*\(\s*task_id\s*\)/);
     expect(body).not.toMatch(/create unique index[^;]*\(task_id\)/);
@@ -106,23 +83,13 @@ describe("the schema is multi-block, and stays that way", () => {
     const tasks = migrations().find((m) => m.name.endsWith("_tasks.sql"));
     const body = statements((tasks as { sql: string }).sql);
 
-    // Deleting a task deletes its blocks (Domain Rule 13). `tasks` itself holds
-    // no reference to a block, so deleting a block can reach nothing.
     expect(body).not.toContain("references public.calendar_blocks");
   });
 });
 
-/**
- * The generated types are the compile-time half of the same guarantee: if a
- * migration added a scheduling column, `pnpm db:types` would put it here and
- * these assertions would stop compiling.
- */
+/** The compile-time half: a scheduling column would land in the generated types and stop this compiling. */
 describe("the generated row type", () => {
   it("has no scheduling column on tasks", () => {
-    // A type-level assertion: `keyof Row<"tasks">` is a closed union, so naming
-    // a column that does not exist is a compile error, and this test failing to
-    // typecheck is the signal. The runtime half checks the shape is what the
-    // compiler thinks.
     const columns: (keyof Row<"tasks">)[] = [
       "id",
       "user_id",
@@ -147,8 +114,6 @@ describe("the generated row type", () => {
   });
 
   it("keeps the deadline and the schedule in different tables entirely", () => {
-    // `due_date` is on the task; `start_at` is on the block. Domain Rule 1 as a
-    // fact about the schema rather than a convention.
     const due: keyof Row<"tasks"> = "due_date";
     const start: keyof Row<"calendar_blocks"> = "start_at";
 
@@ -157,10 +122,6 @@ describe("the generated row type", () => {
   });
 });
 
-/**
- * The model working end to end on the spec's own example: one task, three
- * blocks, on three days that are not the due date.
- */
 describe("one task owning many blocks", () => {
   const TASK_ID = "44444444-4444-4444-4444-444444444444";
 

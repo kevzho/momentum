@@ -6,25 +6,15 @@ import { getShellTaskData } from "@/features/tasks/queries";
 import { requireSession } from "@/lib/auth/session";
 import { SIDEBAR_COOKIE, parseSidebarState } from "@/lib/sidebar-state";
 
-/**
- * The authenticated shell.
- *
- * `requireSession()` is the real gate: `proxy.ts` has already redirected most
- * signed-out traffic, but that check is an optimisation and this one is not
- * (docs/ARCHITECTURE.md §12). It is `cache()`d, so the pages below re-use the
- * same session and profile without a second round trip.
- */
+// `requireSession()` is the real gate; `proxy.ts` is an optimisation. It is
+// `cache()`d, so the pages below re-use the same session and profile.
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const [session, cookieStore, shell, progress] = await Promise.all([
     requireSession(),
     cookies(),
-    // The sidebar's project list, Quick Add's pickers and the command
-    // palette's search index. Read here, once, so both work on every route
-    // rather than only where a task page is.
+    // Read once here so the sidebar, Quick Add and the palette work on every route.
     getShellTaskData(),
-    // The top bar's level indicator, and the baseline the celebration compares
-    // against. Read on every authenticated route because the indicator is on
-    // every authenticated route.
+    // The top bar's level indicator and the celebration's baseline.
     getProgressBadge(),
   ]);
   const sidebarState = parseSidebarState(cookieStore.get(SIDEBAR_COOKIE)?.value);

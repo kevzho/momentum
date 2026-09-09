@@ -8,20 +8,6 @@ import type { Task } from "@momentum/core/types";
 import type { ActionResult } from "@/lib/actions/result";
 import type { TasksPageData } from "@/features/tasks/types";
 
-/**
- * Optimistic completion, and its rollback.
- *
- * "Any mutation applied optimistically must revert cleanly on failure and
- * surface the failure to the user" (Domain Rule 11), and the spec lists it as
- * an acceptance criterion of its own. So this is the test for it: the row shows
- * as complete the moment the checkbox is ticked, and — when the server refuses
- * — it is open again and the user is holding the server's own message.
- *
- * Nothing in the feature writes a revert. The rollback here is React
- * discarding the optimistic value when the transition settles against unchanged
- * props, which is exactly why there is no revert to get wrong.
- */
-
 const { errorToast, setTaskCompletionMock, reorderTaskMock } = vi.hoisted(() => ({
   errorToast: vi.fn(),
   setTaskCompletionMock: vi.fn(),
@@ -75,7 +61,7 @@ const TASK: Task = {
   updatedAt: instant("2026-09-01T00:00:00.000Z"),
 };
 
-/** Server truth: one open task with two work blocks. Props never change. */
+// Server truth: one open task with two work blocks. Props never change.
 const SERVER_STATE: TasksPageData = {
   today: localDate("2026-09-07"),
   timezone: ianaTimeZone("America/New_York"),
@@ -191,8 +177,6 @@ describe("optimistic completion", () => {
       screen.getByRole("button", { name: "Complete" }).click();
     });
 
-    // The optimistic value is gone and the row is open again — without this
-    // feature having written a single line of revert.
     expect(status()).toBe("open");
     expect(screen.getByTestId("pending").textContent).toBe("idle");
   });
@@ -230,11 +214,6 @@ describe("optimistic completion", () => {
   });
 });
 
-/**
- * A reorder writes every row whose number changes — and says whether it wrote
- * anything at all, because the caller announces the move and a move nothing
- * made must not be announced (Domain Rule 10).
- */
 describe("reorder", () => {
   const flat = ["a", "b", "c"].map((id) => ({
     ...TASK,
@@ -287,8 +266,7 @@ describe("reorder", () => {
     });
 
     // Every row is at 0, so no single number can put c between a and b: the
-    // batch carries each row whose number changes (here its two neighbours,
-    // spread around it), and the overlay already reads in the new order.
+    // batch carries every row whose number changes.
     expect(screen.getByTestId("issued").textContent).toBe("true");
     expect(screen.getByTestId("order").textContent).toBe("a,c,b");
     const [input] = reorderTaskMock.mock.calls[0] as [{ orders: { id: string }[] }];

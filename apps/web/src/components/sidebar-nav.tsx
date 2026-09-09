@@ -1,13 +1,17 @@
 "use client";
 
+import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { PlusIcon } from "lucide-react";
+import { FolderPlusIcon, PlusIcon } from "lucide-react";
 import { cn } from "@momentum/ui/lib/utils";
 
+import { Button } from "@momentum/ui/components/button";
 import { ProjectDot } from "@momentum/ui/components/project-dot";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@momentum/ui/components/tooltip";
 
+import { ProjectMenu } from "@/features/projects/components/project-menu";
+import { useProjectManager } from "@/features/projects/components/project-manager";
 import type { ProjectSummaryWithCount } from "@/features/tasks/types";
 import { taskHref } from "@/features/tasks/view-params";
 import { useQuickAdd } from "@/features/tasks/components/quick-add";
@@ -17,9 +21,9 @@ const ITEM_CLASS =
   "flex h-8 items-center gap-2 rounded-md px-2 text-sm text-sidebar-foreground/80 transition-colors duration-fast ease-standard hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-3 focus-visible:ring-sidebar-ring/50 focus-visible:outline-none aria-[current=page]:bg-sidebar-accent aria-[current=page]:font-medium aria-[current=page]:text-sidebar-accent-foreground";
 
 /**
- * The navigation itself, shared by the desktop rail and the mobile drawer so
- * the two can never drift. `collapsed` only changes presentation: every link
- * keeps its accessible name, from a tooltip when the label is hidden.
+ * Shared by the desktop rail and the mobile drawer. `collapsed` only changes
+ * presentation: every link keeps its accessible name, from a tooltip when the
+ * label is hidden.
  */
 export function SidebarNav({
   collapsed = false,
@@ -32,6 +36,26 @@ export function SidebarNav({
 }) {
   const pathname = usePathname();
   const quickAdd = useQuickAdd();
+
+  const newProjectRef = React.useRef<HTMLButtonElement>(null);
+  const manager = useProjectManager({
+    projects,
+    fallbackFocus: () => newProjectRef.current,
+  });
+
+  const newProject = (
+    <Button
+      ref={newProjectRef}
+      variant="ghost"
+      size="icon-sm"
+      className="text-muted-foreground"
+      title={collapsed ? undefined : "New project"}
+      onClick={manager.createProject}
+    >
+      <FolderPlusIcon aria-hidden="true" />
+      <span className="sr-only">New project</span>
+    </Button>
+  );
 
   return (
     <nav className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-2 py-2">
@@ -66,23 +90,34 @@ export function SidebarNav({
       </ul>
 
       <div className="flex flex-col gap-0.5">
-        <h2
-          className={cn(
-            "px-2 pb-1 text-xs font-medium tracking-wide text-muted-foreground uppercase",
-            collapsed && "sr-only",
-          )}
+        <div
+          className={cn("flex items-center justify-between pb-1", collapsed && "justify-center")}
         >
-          Projects
-        </h2>
+          <h2
+            className={cn(
+              "px-2 text-xs font-medium tracking-wide text-muted-foreground uppercase",
+              collapsed && "sr-only",
+            )}
+          >
+            Projects
+          </h2>
+          {collapsed ? (
+            <Tooltip>
+              <TooltipTrigger asChild>{newProject}</TooltipTrigger>
+              <TooltipContent side="right">New project</TooltipContent>
+            </Tooltip>
+          ) : (
+            newProject
+          )}
+        </div>
         <ul className="flex flex-col gap-0.5">
           {projects.map((project) => {
             const row = (
               <Link
-                // The per-project view: the sixth view, and the only one not
-                // reachable from the task page's own tabs.
+                // The per-project view: the only one not reachable from the task page's own tabs.
                 href={taskHref({ view: "project", projectId: project.id })}
                 onClick={onNavigate}
-                className={cn(ITEM_CLASS, collapsed && "justify-center px-0")}
+                className={cn(ITEM_CLASS, "min-w-0 flex-1", collapsed && "justify-center px-0")}
               >
                 <ProjectDot color={project.color} className="mx-0.5" />
                 <span className={cn("flex-1 truncate", collapsed && "sr-only")}>
@@ -98,7 +133,7 @@ export function SidebarNav({
             );
 
             return (
-              <li key={project.id}>
+              <li key={project.id} className="group flex items-center">
                 {collapsed ? (
                   <Tooltip>
                     <TooltipTrigger asChild>{row}</TooltipTrigger>
@@ -107,7 +142,16 @@ export function SidebarNav({
                     </TooltipContent>
                   </Tooltip>
                 ) : (
-                  row
+                  <>
+                    {row}
+                    {/* Revealed on hover and focus, always on a coarse pointer, held while its menu is open. */}
+                    <ProjectMenu
+                      project={project}
+                      onRename={manager.renameProject}
+                      onArchive={manager.archiveProject}
+                      className="shrink-0 opacity-0 transition-opacity duration-fast group-focus-within:opacity-100 group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100 pointer-coarse:opacity-100"
+                    />
+                  </>
                 )}
               </li>
             );
@@ -116,9 +160,6 @@ export function SidebarNav({
             <li className="px-2 py-1 text-xs text-muted-foreground">No projects yet.</li>
           ) : null}
           <li>
-            {/* Creating a project is the project manager's, which no phase owns
-                yet. Adding a task is this phase's and is what the button below
-                it does, so this one stays a stub rather than pretending. */}
             <button
               type="button"
               onClick={() => {
@@ -137,6 +178,7 @@ export function SidebarNav({
           </li>
         </ul>
       </div>
+      {manager.dialogs}
     </nav>
   );
 }

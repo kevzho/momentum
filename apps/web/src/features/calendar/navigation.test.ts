@@ -12,13 +12,6 @@ import {
   wantsNewEvent,
 } from "@/features/calendar/navigation";
 
-/**
- * The query string is user input: the anchor arrives from a link, from the back
- * button, or from someone typing into the address bar. What is pinned here is
- * the module's own promise — an anchor it cannot use lands the user on this
- * week rather than on the route's error boundary.
- */
-
 const TODAY = localDate("2026-09-07");
 const MONDAY = 1;
 
@@ -36,10 +29,8 @@ describe("parseCalendarParams", () => {
   });
 
   it("falls back to today at the ends of the calendar rather than throwing", () => {
-    // `isLocalDate` accepts any four-digit year, but `weekOf` steps a week
-    // either side of the anchor and `localDate()` throws on the five-digit and
-    // negative years that produces — inside a server component, where it
-    // becomes the error boundary this fallback exists to avoid.
+    // `weekOf` steps a week either side of the anchor; `localDate()` throws on
+    // the five-digit and negative years that produces.
     for (const week of ["9999-12-31", "0000-01-01", "9999-01-01"]) {
       const params = parseCalendarParams({ week }, TODAY);
       expect(params.anchor).toBe(TODAY);
@@ -51,7 +42,6 @@ describe("parseCalendarParams", () => {
     for (const week of ["0001-01-08", "9998-12-31"]) {
       const params = parseCalendarParams({ week }, TODAY);
       expect(params.anchor).toBe(week);
-      // The whole pipeline the page runs on the parsed anchor.
       expect(displayedDays(params, MONDAY)).toHaveLength(7);
       expect(() => rangeStart(params, MONDAY)).not.toThrow();
       expect(() => shiftAnchor(params, MONDAY, -1)).not.toThrow();

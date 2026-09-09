@@ -32,7 +32,6 @@ describe("habitConsistencyByDay", () => {
     expect(dayOn(days, "2026-06-14")).toEqual({ expected: 2, met: 0, recorded: 0 });
   });
 
-  /** A habit created on Thursday is not 0% for the Monday it did not exist on. */
   it("expects nothing of a habit before it was tracked", () => {
     const days = habitConsistencyByDay([dailyHabit("h1", "2026-06-16")], [], period);
 
@@ -40,7 +39,6 @@ describe("habitConsistencyByDay", () => {
     expect(dayOn(days, "2026-06-16").expected).toBe(1);
   });
 
-  /** Retiring a habit stops it asking, rather than leaving it to fail daily. */
   it("expects nothing of a habit from the day it was archived", () => {
     const days = habitConsistencyByDay([dailyHabit("h1", "2026-06-01", "2026-06-16")], [], period);
 
@@ -49,10 +47,6 @@ describe("habitConsistencyByDay", () => {
     expect(dayOn(days, "2026-06-17").expected).toBe(0);
   });
 
-  /**
-   * "Three times a week, any days" names no day, so no day may be marked as one
-   * it was owed on — but the work still happened and is still shown.
-   */
   it("records a per-week habit's completions without inventing a daily target", () => {
     const days = habitConsistencyByDay(
       [weeklyHabit("h1", "2026-06-01")],
@@ -88,11 +82,6 @@ describe("habitCompletionRate", () => {
     expect(habitCompletionRate(days)).toEqual({ met: 3, expected: 6, value: 0.5 });
   });
 
-  /**
-   * The rule `habitStats` already applies to today, applied here so the two
-   * surfaces cannot disagree about a day still in progress: an unfinished day
-   * can raise the rate and never lower it.
-   */
   it("leaves the last day out of the denominator until it is met", () => {
     const habit = dailyHabit("h1", "2026-06-01");
     const met = [

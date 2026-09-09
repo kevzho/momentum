@@ -10,15 +10,6 @@ import { setTaskCompletion } from "@/features/tasks/actions";
 import { taskHref } from "@/features/tasks/view-params";
 import { defineCommands, type CommandContext, type TaskPickerMode } from "@/features/palette/types";
 
-/**
- * What the task manager contributes to the command palette.
- *
- * Five declarations and no palette code: the picker the three task actions
- * share is described here too, because "which list, and what happens when you
- * choose from it" is the task manager's question, not the palette's
- * (specs/11-command-palette.md).
- */
-
 const completeTask: TaskPickerMode = {
   kind: "tasks",
   heading: "Complete a task",
@@ -29,8 +20,7 @@ const completeTask: TaskPickerMode = {
     context.perform({
       success: `Completed “${task.title}”`,
       failure: "Momentum could not complete that task.",
-      // The trusted path, exactly as the checkbox uses it: completion, its
-      // timestamp and its XP are the database's to write (Domain Rule 15).
+      // The trusted path: completion, its timestamp and its XP are the database's to write.
       action: () => setTaskCompletion({ id: task.id, completed: true }),
     });
   },
@@ -41,12 +31,7 @@ const scheduleTask: TaskPickerMode = {
   heading: "Schedule a task",
   placeholder: "Which task needs time?",
   empty: "No open task matches.",
-  /*
-   * Scheduling is reserving a block, and the surface that does that is the
-   * task's own detail sheet — where the 0..n work blocks live (Domain Rule 2).
-   * The palette takes the user there rather than inventing a second scheduling
-   * dialog that would have to be kept in step with the first.
-   */
+  // Scheduling happens in the task's detail sheet, not a second dialog here.
   onSelect: (task, context) => open(task.id, context, `Opening “${task.title}” to schedule work`),
 };
 

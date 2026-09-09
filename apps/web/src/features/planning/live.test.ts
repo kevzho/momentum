@@ -23,12 +23,6 @@ import {
   taskBlockMinutes,
 } from "@/features/planning/live";
 
-/**
- * The projections the drawer's numbers are built on. Each is field-for-field
- * and pure; what is tested is that nothing is lost, invented or reordered on
- * the way from the board's view models to the scheduler's inputs.
- */
-
 const DAYS = [
   "2026-09-07",
   "2026-09-08",
@@ -187,9 +181,6 @@ describe("taskBlockMinutes", () => {
   });
 
   it("never proposes a block shorter than the grid's minimum", () => {
-    // A five-minute estimate is a real estimate, but a five-minute block is one
-    // the editor and a resize both refuse; every route — drop, Find Time, the
-    // manual dialog — seeds the same floor.
     expect(taskBlockMinutes({ ...HOMEWORK, estimatedMinutes: 5 })).toBe(MIN_BLOCK_MINUTES);
     expect(taskBlockMinutes({ ...HOMEWORK, estimatedMinutes: 10 })).toBe(MIN_BLOCK_MINUTES);
     expect(taskBlockMinutes({ ...HOMEWORK, estimatedMinutes: MIN_BLOCK_MINUTES })).toBe(

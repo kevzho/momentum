@@ -5,27 +5,11 @@ import type { Habit, HabitAmountUnit, HabitFrequencyType, Weekday } from "@momen
 import { WEEKDAY_NAMES } from "@/features/settings/weekday-names";
 
 /**
- * Every word the habits surface says.
- *
- * It is one module, and it is tested, because Domain Rule 7 is a constraint on
- * *language* as much as on maths. Nothing here may call the user inconsistent,
- * lazy or behind; nothing may describe a day as a failure; nothing may frame a
- * number as something to be afraid of losing. A single stray adjective in a
- * component would be as much a violation as a streak that resets to zero, and
- * a phrase invented at the call site is a phrase no test can see.
- *
- * The neutral vocabulary, once:
- *
- *   met        · "Done"       the target was reached
- *   partial    · "Some"       an amount was recorded, short of the target
- *   open       · "Not recorded"  a past day the habit asked for, with nothing on it
- *   ahead      · "Coming up"  a day that has not finished yet
- *   free       · "Not scheduled"  a day this habit asks nothing of
+ * Every user-facing string of the habits surface, in one tested module: nothing
+ * here may call the user inconsistent or behind, describe a day as a failure,
+ * or frame a number as something to lose. Components import from here rather
+ * than inventing phrases the test cannot see.
  */
-
-/* -------------------------------------------------------------------------- */
-/* Frequency                                                                  */
-/* -------------------------------------------------------------------------- */
 
 export const FREQUENCY_LABELS: Record<HabitFrequencyType, string> = {
   daily: "Every day",
@@ -49,12 +33,8 @@ export const UNIT_LABELS: Record<HabitAmountUnit, string> = {
 };
 
 /**
- * The habit's target, in one line: "Every day · 25m", "Mon · Wed · Fri",
- * "3 days a week", "15m a day", "2h a week".
- *
- * The estimate is appended, not merged: "how much time I reserve for it" and
- * "what the target is" are different facts, and an `amount_per_day` habit of 15
- * minutes with a 20-minute block has both.
+ * "Every day · 25m", "Mon · Wed · Fri", "3 days a week", "15m a day". The
+ * estimate is appended, not merged: reserved time and target are different facts.
  */
 export function describeTarget(habit: Habit): string {
   const target = targetPhrase(habit);
@@ -93,17 +73,7 @@ export function describeAmount(amount: number, unit: HabitAmountUnit): string {
   return amount === 1 ? "Once" : `${amount} times`;
 }
 
-/* -------------------------------------------------------------------------- */
-/* Progress                                                                   */
-/* -------------------------------------------------------------------------- */
-
-/**
- * "2 of 3 days" · "80m of 2h" · "3 of 5 times".
- *
- * The noun is what the numbers count. A boolean habit — every day, certain
- * days, days per week — counts days, whichever cadence it is measured over;
- * only a count-based amount habit counts times.
- */
+/** "2 of 3 days" · "80m of 2h" · "3 of 5 times". Boolean habits count days; count amount habits count times. */
 export function describeProgress(habit: Habit, achieved: number, target: number): string {
   if (habit.unit === "minutes") {
     return `${formatDuration(achieved)} of ${formatDuration(target)}`;
@@ -120,43 +90,24 @@ export const DAY_STATE_LABELS: Record<HabitDayState, string> = {
   free: "Not scheduled",
 };
 
-/* -------------------------------------------------------------------------- */
-/* Rates                                                                      */
-/* -------------------------------------------------------------------------- */
-
-/**
- * A rate as a percentage, or an em dash when there is nothing to measure.
- *
- * "No data yet" is not "0%". A habit two days old has not failed a month; it
- * has not had one (Domain Rule 8's sample-size caution, and Domain Rule 7's
- * insistence that a number never reads as an accusation).
- */
+/** A rate as a percentage, or an em dash when there is nothing to measure — "no data yet" is not "0%". */
 export function formatRate(rate: HabitRate): string {
   if (rate.value === null) return "—";
   return `${Math.round(rate.value * 100)}%`;
 }
 
-/**
- * What the rate was measured over, so the percentage is never bare.
- *
- * The two cadences count different things — days for a per-day habit, target
- * units across whole weeks for a per-week one — so the sentence says which.
- */
+/** What the rate was measured over: days for a per-day habit, target units over whole weeks for a per-week one. */
 export function describeRate(rate: HabitRate, unit: "day" | "week"): string {
   if (rate.value === null) return "Not enough history yet";
   if (unit === "week") return `${rate.met} of ${rate.expected} counted, over whole weeks`;
   return `${rate.met} of ${rate.expected} days`;
 }
 
-/** "9 days" · "1 week". A fact, never a warning (Domain Rule 7). */
+/** "9 days" · "1 week". A fact, never a warning. */
 export function describeStreak(length: number, unit: "day" | "week"): string {
   if (length === 0) return "None yet";
   return `${length} ${unit}${length === 1 ? "" : "s"}`;
 }
-
-/* -------------------------------------------------------------------------- */
-/* Fixed strings                                                              */
-/* -------------------------------------------------------------------------- */
 
 export const HABITS_COPY = {
   pageDescription: "What you are keeping up, and how consistently.",

@@ -2,27 +2,9 @@ import { addDays, localDateOf, minutesFromMidnight, weekOf } from "../time";
 import type { IanaTimeZone, Instant, LocalDate, Minutes, Weekday } from "../types/scalars";
 
 /**
- * Every bucketing decision this module makes, in one file.
- *
- * There are exactly three ways an aggregation groups a timestamp — by local
- * day, by local week, by local hour — and each is written once here so that a
- * bug in one of them is one bug rather than six. All three take the timezone as
- * a parameter and none reads an ambient default (Domain Rule 4).
- *
- * The DST behaviour each inherits is the behaviour `@momentum/core/time`
- * already defines, and it is correct in a way worth stating:
- *
- * - **Day.** `localDateOf` asks the timezone which date an instant falls on, so
- *   a 23:30 session belongs to the day the user sat down and a 00:30 one does
- *   not, regardless of the UTC date or the server's clock.
- * - **Week.** A week bucket is the *date* its week starts on, derived from the
- *   day bucket by pure calendar arithmetic. That is what keeps a week from
- *   drifting across a DST weekend: `weekOf` counts dates, and dates do not
- *   change length.
- * - **Hour.** `minutesFromMidnight` is a wall-clock reading, not elapsed time.
- *   On a spring-forward day nothing lands in the hour the clock skipped, and on
- *   a fall-back day the repeated hour receives both passes. Both are what an
- *   axis labelled with clock hours should show.
+ * Every bucketing decision in one file: by local day, local week and local
+ * hour, all in the profile timezone. Hour is a wall-clock reading, so on a
+ * fall-back day the repeated hour receives both passes.
  */
 
 /** A bucket keyed by local date, with its summed value. */
@@ -41,7 +23,7 @@ export interface HourValue {
 export interface WeekdayValue {
   weekday: Weekday;
   value: number;
-  /** How many observations produced `value` — the sample size behind the bucket. */
+  /** How many observations produced `value`. */
   count: number;
 }
 
@@ -53,10 +35,7 @@ export function dayBucket(at: Instant, timezone: IanaTimeZone): LocalDate {
   return localDateOf(at, timezone);
 }
 
-/**
- * The start date of the local week an instant belongs to, in the user's own
- * week shape (Monday or Sunday is a profile setting, never a constant).
- */
+/** The start date of the local week an instant belongs to, for the user's `weekStart`. */
 export function weekBucket(at: Instant, timezone: IanaTimeZone, weekStart: Weekday): LocalDate {
   return weekOf(localDateOf(at, timezone), weekStart).start;
 }
@@ -67,15 +46,8 @@ export function hourBucket(at: Instant, timezone: IanaTimeZone): number {
 }
 
 /**
- * Sums `amountOf` into one bucket per key in `keys`, returned in `keys` order.
- *
- * Buckets are seeded at zero and kept even when empty: a chart's x-axis is the
- * period, not the days that happen to have data, and a week with three quiet
- * days should show three gaps rather than silently compress into four columns.
- *
- * An item whose key is not in `keys` is ignored rather than appended. That is
- * what makes it safe to hand this function ninety days of rows and a seven-day
- * axis, which is exactly what the page does.
+ * Sums `amountOf` into one bucket per key in `keys`, in `keys` order. Empty
+ * buckets are kept at zero; an item whose key is not in `keys` is ignored.
  */
 export function sumInto<K extends string | number, T>(
   keys: readonly K[],
@@ -118,13 +90,7 @@ export function hourSeries<T>(
   return HOURS_OF_DAY.map((hour) => ({ hour, value: totals.get(hour) ?? 0 }));
 }
 
-/**
- * Minutes summed per weekday, with the number of observations behind each.
- *
- * The count is not decoration: an insight about a weekday is only allowed to
- * speak once enough observations sit behind it (Domain Rule 8), and this is
- * where that number comes from.
- */
+/** Minutes summed per weekday, with the number of observations behind each (the insight's sample size). */
 export function weekdaySeries<T>(
   items: readonly T[],
   weekdayOfItem: (item: T) => Weekday | null,
@@ -151,24 +117,11 @@ export function weekdaySeries<T>(
 /** One week of a period: where it starts, and which of its seven days the period covers. */
 export interface PeriodWeek {
   start: LocalDate;
-  /**
-   * Exactly seven entries, week-start first. `null` where the day falls outside
-   * the period — the first and last weeks of a 30- or 90-day window are almost
-   * always partial, and a heatmap must leave those cells absent rather than
-   * draw them as days on which nothing happened.
-   */
+  /** Exactly seven entries, week-start first; `null` where the day falls outside the period. */
   days: (LocalDate | null)[];
 }
 
-/**
- * A period's days, grouped into the user's own weeks.
- *
- * The shape a consistency grid is drawn from: columns are weeks, rows are the
- * seven weekdays. It lives here rather than in the component because grouping
- * dates into weeks is date logic, and date logic does not belong in a component
- * (Domain Rule 5). It is also pure calendar arithmetic — `weekOf` and `addDays`
- * both count dates — so a DST weekend cannot shift a column.
- */
+/** A period's days grouped into the user's own weeks: the shape a consistency grid is drawn from. */
 export function weeksOfPeriod(days: readonly LocalDate[], weekStart: Weekday): PeriodWeek[] {
   const first = days.at(0);
   const last = days.at(-1);

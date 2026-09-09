@@ -9,17 +9,8 @@ import type {
 } from "@momentum/core/types";
 
 /**
- * The habits feature's view models.
- *
- * The server reads habits, their completions and their calendar blocks, runs
- * the pure functions in `@momentum/core/habits` over them, and hands the client
- * island the shapes below. The client never fetches, never resolves a date and
- * never sees a database row (docs/ARCHITECTURE.md §5, §6).
- *
- * Every date here is a `LocalDate` already resolved in the profile timezone,
- * and "today" is computed once per request — so the server render and the
- * hydrated client render agree, and the week strip cannot disagree with the
- * consistency number beside it (Domain Rule 4).
+ * View models handed to the habits client island. Every date is a `LocalDate`
+ * already resolved in the profile timezone; "today" is computed once per request.
  */
 
 /** One habit, with everything the row and its detail view need. */
@@ -33,13 +24,9 @@ export interface HabitView {
   /** Dates in the displayed week that already have a calendar block for it. */
   reservedDates: readonly LocalDate[];
   /**
-   * The first date this habit is measured from: the later of its creation date
-   * and the start of the read range.
-   *
-   * Carried to the client so the optimistic overlay recomputes every rate the
-   * way the server did. A client that guessed at it would show one consistency
-   * figure during the write and a different one when the server answered, which
-   * is the silent divergence Domain Rule 11 forbids.
+   * First date the habit is measured from: the later of its creation date and
+   * the read range start. Carried so the optimistic overlay recomputes rates
+   * exactly as the server did.
    */
   trackedFrom: LocalDate;
   /** Completions inside the heatmap range, oldest first. */
@@ -60,13 +47,7 @@ export interface HabitsPageData {
   archived: readonly HabitView[];
 }
 
-/**
- * The optimistic overlay's unit of change: one habit's record for one day.
- *
- * Recording and un-recording are the same shape because they are the same
- * gesture in two directions, and the reducer that applies them has to be able
- * to undo either (docs/ARCHITECTURE.md §8).
- */
+/** One habit's record for one day; recording and un-recording share the shape. */
 export interface CompletionPatch {
   habitId: Uuid;
   date: LocalDate;

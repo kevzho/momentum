@@ -38,23 +38,9 @@ import type { CompletionPatch, HabitView, HabitsPageData } from "@/features/habi
 import { useOptimisticAction } from "@/lib/actions/use-optimistic-action";
 
 /**
- * The habits page.
- *
- * One client island over server-resolved data (docs/ARCHITECTURE.md §5): it
- * fetches nothing, reads no clock, and does no date arithmetic — `page.today`,
- * `page.week` and every rate arrived already computed in the profile timezone.
- *
- * Recording a day is the only mutation with an optimistic overlay, because it
- * is the only one a user does repeatedly and expects to be instant. It runs
- * through `useOptimisticAction`, and the overlay recomputes the whole habit
- * from its patched completions rather than nudging the displayed numbers — so
- * the week strip, the progress line and consistency move together and roll back
- * together (docs/ARCHITECTURE.md §8, Domain Rule 11). The rest — creating,
- * editing, archiving, deleting, adding to the week — are round trips that
- * change the shape of the page, and pretending otherwise would buy nothing.
- *
- * Nothing on this surface characterises the user. Every string it can show is
- * in `copy.ts`, which is where Domain Rule 7 is enforced and tested.
+ * The habits page island over server-resolved data: it fetches nothing and
+ * reads no clock. Recording a day is the only optimistic mutation; the rest
+ * change the page's shape and are plain round trips.
  */
 
 const SCOPES = [
@@ -65,10 +51,9 @@ const SCOPES = [
 type Scope = (typeof SCOPES)[number]["value"];
 
 /**
- * The open form: the habit being edited, or — for a new one — the id the row
- * will have. Minted when the form opens and not per submit, so a retry after a
- * lost response sends the same id and the unique-violation-as-success path in
- * `createHabit` can recognise it (Domain Rule 17, docs/DOMAIN_RULES.md §19).
+ * The open form. A new habit's id is minted when the form opens, not per submit,
+ * so a retry after a lost response sends the same id and `createHabit` can
+ * treat the unique violation as success.
  */
 type Editing = { habit: HabitView; id: Uuid } | { habit: null; id: Uuid };
 
@@ -92,12 +77,8 @@ export function HabitsView({
     setEditing({ habit: null, id: crypto.randomUUID() });
   }, []);
 
-  /*
-   * "Add habit", arriving from the command palette as `?new=habit`. The form
-   * opens once and the intent is dropped from the URL, so a reload or a back
-   * button does not reopen a dialog the user has already dismissed. The ref is
-   * what makes "once" true without the effect having to lie about what it reads.
-   */
+  // `?new=habit` from the palette: open the form once, then drop the intent from
+  // the URL so a reload or back does not reopen a dismissed dialog.
   const handledNewHabit = React.useRef(false);
   React.useEffect(() => {
     if (!newHabit || handledNewHabit.current) return;
@@ -140,23 +121,15 @@ export function HabitsView({
         habitId: view.habit.id,
         date,
         recorded,
-        // What one press means is decided once, in the domain, and Today asks
-        // the same function — so the two surfaces cannot record different
-        // amounts for the same tap.
+        // Today calls the same function, so both surfaces record the same amount per press.
         amount: amountToRecord(view.habit, day, view.progress),
       });
     },
     [announce, completion],
   );
 
-  /**
-   * The mutations that change the page's shape.
-   *
-   * Deliberately not optimistic: each of them adds, removes or moves a row, and
-   * a rolled-back row appearing and vanishing is worse feedback than a moment's
-   * wait. Every one of them still surfaces its failure, which is the part
-   * Domain Rule 11 actually requires.
-   */
+  // Shape-changing mutations are deliberately not optimistic: a rolled-back row
+  // appearing and vanishing is worse than a moment's wait.
   const [busy, startTransition] = React.useTransition();
 
   const run = React.useCallback(
@@ -202,16 +175,8 @@ export function HabitsView({
     );
   }
 
-  /**
-   * Reserves this week's time, and says what actually happened.
-   *
-   * The confirmation waits for the result rather than being fired beside the
-   * call: the action is idempotent by differencing against the blocks that
-   * already exist, so pressing it a second time creates nothing — and a toast
-   * that claimed otherwise would be telling the user something the calendar
-   * would then contradict (Domain Rule 11's spirit, applied to a message
-   * rather than to a row).
-   */
+  // The toast waits for the result: a second press creates nothing, and the
+  // message must not contradict the calendar.
   function addToWeek(view: HabitView): void {
     const weekStartDate = page.week[0];
     if (weekStartDate === undefined) return;
@@ -234,15 +199,9 @@ export function HabitsView({
     );
   }
 
-  /*
-   * Focus hand-off when a row leaves the list (Domain Rule 10).
-   *
-   * Archiving or deleting unmounts the row whose menu the user was in, and the
-   * browser would drop them on `<body>`. Focus goes to the row's neighbour —
-   * the next one, else the previous — and to "New habit" when the list has
-   * nothing left. The neighbour is chosen *before* the mutation runs, from the
-   * list as it stands, so it is still the right answer once the row is gone.
-   */
+  // Focus hand-off when a row unmounts: the next row, else the previous, else
+  // "New habit". The neighbour is chosen before the mutation runs, while the
+  // row is still in the list.
   const listRef = React.useRef<HTMLUListElement | null>(null);
   const newHabitRef = React.useRef<HTMLButtonElement | null>(null);
 

@@ -44,44 +44,23 @@ import { failure, type ActionResult } from "@/lib/actions/result";
 import { reportError } from "@/lib/report-error";
 
 /**
- * The progress page.
- *
- * One client island over server-resolved data (docs/ARCHITECTURE.md §5): it
- * fetches nothing, reads no clock, and does no date arithmetic — the level, the
- * quests, their progress and every date arrived already computed in the profile
- * timezone.
- *
- * There is no optimistic overlay here, and that is deliberate. Every mutation
- * on this surface is a *server decision*: whether a quest is finished, what it
- * is worth, whether the coins are there. An optimistic "+20 XP" would be the
- * client asserting an amount one frame before the server decided it, which is
- * the exact shape Domain Rule 6 exists to prevent. Each control waits for the
- * row, and failures surface with the server's own message.
- *
- * Celebration lives in `ProgressProvider`, mounted in the shell, because a
- * level up earned on /tasks has to be noticed on /tasks.
+ * No optimistic overlay here on purpose: every mutation is a server decision
+ * (whether a quest is finished, what it is worth), and an optimistic "+20 XP"
+ * would be the client asserting an amount. Celebration lives in
+ * `ProgressProvider`, mounted in the shell.
  */
 export function ProgressView({ data }: { data: ProgressPageData }) {
   const announce = useAnnounce();
   const [pending, setPending] = React.useState<ReadonlySet<string>>(() => new Set());
-  // The same set, readable synchronously: two clicks in one frame both see the
-  // state from before either of them, so the guard reads this instead.
+  // Readable synchronously: two clicks in one frame both see the state from
+  // before either, so the guard reads this instead.
   const inFlight = React.useRef<Set<string>>(new Set());
   const [goalOpen, setGoalOpen] = React.useState(false);
 
-  /**
-   * One write per row. A second press on a row already writing is ignored —
-   * every action here is idempotent, but a double-click should not be two
-   * requests — while a write to a *different* row proceeds: a goal set while a
-   * claim is in flight is a goal, not a press to swallow.
-   *
-   * "Failure" is a returned `{ ok: false }` *or* a rejected call, and both
-   * take the same path (Domain Rules §19): the server's own message, and a
-   * Retry that runs the same operation again. A validation refusal — "that
-   * quest is not finished yet" — carries no Retry, because retrying cannot
-   * make it succeed. `unstable_rethrow` first: `redirect()` and `notFound()`
-   * travel as thrown values and are control flow, not failure.
-   */
+  // One write per row; a write to a different row proceeds. A returned
+  // `{ ok: false }` and a rejected call take the same path. No Retry on a
+  // validation refusal. `unstable_rethrow` first: `redirect()` and `notFound()`
+  // are thrown control flow.
   const run = React.useCallback(
     function run<T>(id: string, operation: () => Promise<ActionResult<T>>, done?: string) {
       if (inFlight.current.has(id)) return;
@@ -124,9 +103,8 @@ export function ProgressView({ data }: { data: ProgressPageData }) {
 
       <LevelPanel data={data} />
 
-      {/* Explicit `minmax(0, 1fr)` tracks at every width: an implicit `auto`
-          track sizes to the widest row's min-content, and at 375px that pushed
-          every right-aligned control past the viewport. */}
+      {/* Explicit `minmax(0, 1fr)` tracks: an implicit `auto` track sizes to the
+          widest row's min-content, which at 375px pushed controls past the viewport. */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Section title={PROGRESS_COPY.quests.dailyTitle} icon={ListChecksIcon}>
           {data.daily.length === 0 ? (
@@ -329,10 +307,7 @@ export function ProgressView({ data }: { data: ProgressPageData }) {
                     {PROGRESS_COPY.cosmetics.price(row.definition.price)}
                   </Button>
                 ) : (
-                  /* Not a disabled button: there is nothing to press, and a
-                     control that dropped focus by disabling itself would break
-                     the keyboard path (Domain Rule 10). The price and the
-                     balance are simply stated. */
+                  /* Not a disabled button: disabling would drop focus and break the keyboard path. */
                   <span data-slot="numeric" className="shrink-0 text-xs text-muted-foreground">
                     {PROGRESS_COPY.cosmetics.cannotAfford(row.definition.price, data.badge.coins)}
                   </span>
@@ -389,7 +364,6 @@ export function ProgressView({ data }: { data: ProgressPageData }) {
   );
 }
 
-/** Level, progress into it, and the coin balance. Compact; never a hero banner. */
 function LevelPanel({ data }: { data: ProgressPageData }) {
   const { badge } = data;
 
@@ -422,14 +396,7 @@ function LevelPanel({ data }: { data: ProgressPageData }) {
   );
 }
 
-/**
- * What the caps have paid out in the last 24 hours — the ledger's own rolling
- * window (Domain Rules §21), not the local day.
- *
- * Stated rather than discovered. A user who has reached a cap should be told
- * the rule instead of noticing that a completion moved nothing — and the copy
- * says plainly that reaching one removes nothing (Domain Rule 7).
- */
+/** The ledger's own rolling 24-hour window, not the local day. */
 function CapsPanel({ data }: { data: ProgressPageData }) {
   return (
     <section className="flex flex-col gap-1.5 border-t pt-4">

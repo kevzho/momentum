@@ -11,18 +11,14 @@ import type {
 } from "@momentum/core/types";
 import type { LevelProgress, QuestFacts, QuestProgress } from "@momentum/core/gamification";
 
-/**
- * The shapes the progress surface renders. Every one of them is server-computed
- * and read-only: nothing on this page sends an amount, and the numbers below
- * are reports of a ledger rather than inputs to one (Domain Rule 6).
- */
+// Every shape here is server-computed and read-only: reports of a ledger, never inputs to one.
 
 /** The compact indicator the top bar shows on every authenticated route. */
 export interface ProgressBadge extends LevelProgress {
   coins: number;
   /** The equipped profile frame, if the user owns and wears one. */
   frame: string | null;
-  /** Unlocked achievements, newest first — the celebration compares against this. */
+  /** Unlocked achievements, newest first; the celebration compares against this. */
   unlocked: readonly UnlockedAchievement[];
   /** Weekly goals claimed this week, so a completion can be celebrated once. */
   weeklyGoalsClaimed: number;
@@ -39,7 +35,7 @@ export interface QuestRow {
   definition: QuestDefinition;
   progress: QuestProgress;
   completedAt: Instant | null;
-  /** Met, not yet claimed — the only state the Claim control is offered in. */
+  /** Met, not yet claimed: the only state the Claim control is offered in. */
   claimable: boolean;
 }
 
@@ -79,6 +75,6 @@ export interface ProgressPageData {
   achievements: readonly AchievementRow[];
   cosmetics: readonly CosmeticRow[];
   recent: readonly XpEvent[];
-  /** What the day's caps have already paid out, so the page can state the rule. */
+  /** What the day's caps have already paid out. */
   cappedToday: readonly { source: string; awarded: number; cap: number }[];
 }

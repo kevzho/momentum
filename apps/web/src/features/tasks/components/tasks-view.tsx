@@ -24,6 +24,7 @@ import { PageHeader } from "@momentum/ui/components/page-header";
 import { useAnnounce } from "@momentum/ui/components/announcer";
 import { cn } from "@momentum/ui/lib/utils";
 
+import { useProjectManager } from "@/features/projects/components/project-manager";
 import { BulkActionBar } from "@/features/tasks/components/bulk-action-bar";
 import type { DeleteCascade } from "@/features/tasks/components/confirm-delete-dialog";
 import { TaskDetailSheet } from "@/features/tasks/components/task-detail-sheet";
@@ -37,22 +38,8 @@ import type { TasksPageData } from "@/features/tasks/types";
 import { TAB_VIEWS, VIEW_LABELS, taskHref, type TaskParams } from "@/features/tasks/view-params";
 import { useUserSettings } from "@/lib/time/user-settings";
 
-/**
- * The task manager.
- *
- * One client island over the server's props. It holds no copy of server data:
- * `useTaskMutations` wraps the whole page state in a single `useOptimistic`
- * overlay, and every view, count and coverage number below is derived from that
- * overlay by the pure functions in `@momentum/core/tasks` (docs/ARCHITECTURE.md
- * §7, §8).
- *
- * That derivation is what makes optimistic completion behave correctly for
- * free. Completing a task patches two fields; the task then fails
- * `matchesView(…, "today")` and passes `matchesView(…, "completed")`, so it
- * leaves one list and joins another with no code that moves it. On failure the
- * transition settles against unchanged props, React discards the overlay, and
- * the row returns to where it was (Domain Rule 11).
- */
+// One client island over the server's props: every view, count and coverage
+// number is derived from the optimistic overlay by `@momentum/core/tasks`.
 export function TasksView({ data, params }: { data: TasksPageData; params: TaskParams }) {
   const router = useRouter();
   const announce = useAnnounce();
@@ -65,23 +52,41 @@ export function TasksView({ data, params }: { data: TasksPageData; params: TaskP
   const [focusedId, setFocusedId] = React.useState<Uuid | null>(null);
 
   const { view, projectId } = params;
+
+  // `?new=project` from the palette: the dialog opens once and the intent
+  // leaves the URL so reload or back does not reopen it.
+  const projectManager = useProjectManager({
+    projects: state.projects,
+    onCreated: (project) =>
+      router.replace(taskHref({ view: "project", projectId: project.id }), { scroll: false }),
+  });
+  const handledNewProject = React.useRef(false);
+  const newTaskButton = React.useRef<HTMLButtonElement>(null);
+  const openNewProject = projectManager.createProject;
+  React.useEffect(() => {
+    if (!params.newProject || handledNewProject.current) return;
+    handledNewProject.current = true;
+    // Arriving by navigation leaves focus on `<body>`, which the dialog would
+    // otherwise record as its opener.
+    if (document.activeElement === null || document.activeElement === document.body) {
+      newTaskButton.current?.focus();
+    }
+    openNewProject();
+    router.replace(taskHref({ view, projectId, taskId: params.taskId }), { scroll: false });
+  }, [openNewProject, params.newProject, params.taskId, projectId, router, view]);
+
   const context = React.useMemo(
     () => ({ today: state.today, projectId }),
     [state.today, projectId],
   );
 
-  /*
-   * A project view seeds Quick Add with its project, whichever way it is
-   * opened: `Q`, the palette's "Add task", or the "New task" button above —
-   * one set of defaults, registered with the provider for as long as the page
-   * is showing that project, so the two routes cannot drift.
-   */
+  // A project view seeds Quick Add with its project, however it is opened.
   React.useEffect(() => {
     quickAdd.setDefaults(projectId === null ? {} : { projectId });
     return () => quickAdd.setDefaults({});
   }, [quickAdd, projectId]);
 
-  /** Which tasks own at least one work block — the only correct source (Domain Rule 2). */
+  // "Scheduled" means owning at least one work block, never a column on the task.
   const scheduledTaskIds = React.useMemo(() => {
     const ids = new Set<Uuid>();
     for (const [taskId, blocks] of Object.entries(state.workBlocks)) {
@@ -118,7 +123,7 @@ export function TasksView({ data, params }: { data: TasksPageData; params: TaskP
     [visible, state.workBlocks, state.tasks, state.projects],
   );
 
-  /** How many tasks each tab holds, before the toolbar's filters narrow them. */
+  // Per-tab counts, before the toolbar's filters narrow them.
   const counts = React.useMemo(() => {
     const result = {} as Record<TaskView, number>;
     for (const tab of TAB_VIEWS) {
@@ -144,11 +149,7 @@ export function TasksView({ data, params }: { data: TasksPageData; params: TaskP
     [state.tasks, openTask],
   );
 
-  /*
-   * The sheet's open state lives in the URL, so a task is linkable and the back
-   * button closes it (docs/ARCHITECTURE.md §7). `scroll: false` keeps the list
-   * where it was; opening a task should not move the page under it.
-   */
+  // The sheet's open state lives in the URL. `scroll: false` keeps the list in place.
   const setOpenTask = React.useCallback(
     (taskId: Uuid | null) => {
       router.replace(taskHref({ view, projectId, taskId }), { scroll: false });
@@ -156,19 +157,8 @@ export function TasksView({ data, params }: { data: TasksPageData; params: TaskP
     [router, view, projectId],
   );
 
-  /*
-   * The selection, narrowed to what is on screen.
-   *
-   * `selectedIds` is what the user picked; `visible` is what the view tab and
-   * the toolbar's filters currently show. Everything downstream — the bar's
-   * count, its three actions, and the rows' own checkboxes — reads this
-   * intersection, so a bulk Delete can never reach a row the user cannot see,
-   * and the number on the bar is by construction the number of ids the mutation
-   * receives. Picks that scrolled out of the view under a filter are kept
-   * rather than dropped, and come back when the filter is cleared; any further
-   * selection gesture re-bases the set on the rows in front of the user. This
-   * is the treatment the focus cursor already gets in `task-list.tsx`.
-   */
+  // The selection narrowed to what is on screen: everything downstream reads
+  // this intersection, so a bulk action can never reach a hidden row.
   const selectedTasks = React.useMemo(
     () => visible.filter((task) => selectedIds.has(task.id)),
     [visible, selectedIds],
@@ -183,11 +173,7 @@ export function TasksView({ data, params }: { data: TasksPageData; params: TaskP
     setSelectedIds(new Set());
   }
 
-  /**
-   * What deleting these tasks takes with them — subtasks, and the work blocks
-   * of both — for the confirmation to say in numbers (Domain Rule 13: blocks
-   * go with their parent; nothing else does).
-   */
+  // What deleting these tasks takes with them: subtasks, and the blocks of both.
   const cascadeOf = React.useCallback(
     (ids: ReadonlySet<Uuid>): DeleteCascade => {
       const subtasks = state.tasks.filter(
@@ -205,26 +191,12 @@ export function TasksView({ data, params }: { data: TasksPageData; params: TaskP
     [cascadeOf, visibleSelectedIds],
   );
 
-  /*
-   * Where focus goes when the bulk bar removes itself.
-   *
-   * Complete, Move, Delete and Clear all empty the selection, and an empty
-   * selection is what unmounts the bar — so the button the user just pressed
-   * disappears from under the focus ring. Nothing inside the list is a safe
-   * landing place: a bulk Delete can take every row with it and leave an empty
-   * state behind. The key hint between the bar and the list is rendered either
-   * way, so it is the anchor (Domain Rule 10; the calendar's Plan panel returns
-   * focus to its toggle for the same reason).
-   */
+  // Where focus goes when the bulk bar unmounts itself: the key hint is
+  // rendered whatever the list holds, so it is the anchor.
   const listHint = React.useRef<HTMLParagraphElement>(null);
 
-  /**
-   * A drop, and the keyboard's `Alt+↑/↓`, arrive here as the same call.
-   * `mutate` computes the rows to write with `sortOrdersForMove` and persists
-   * them (Domain Rule 10: the two paths are one mutation). The move is
-   * announced only when a write was issued — a live region that reports a move
-   * nothing made is worse than one that says nothing.
-   */
+  // A drop and Alt+↑/↓ arrive here as the same call. Announced only when a
+  // write was issued.
   function moveTask(taskId: Uuid, toIndex: number): void {
     const task = visible.find((t) => t.id === taskId);
     if (task === undefined) return;
@@ -243,8 +215,7 @@ export function TasksView({ data, params }: { data: TasksPageData; params: TaskP
   }
 
   const sensors = useSensors(
-    // A few pixels of travel before a drag starts, so a click on a row still
-    // opens it and a drag handle does not hijack every press.
+    // A few pixels of travel before a drag starts, so a click still opens the row.
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
   );
 
@@ -256,7 +227,7 @@ export function TasksView({ data, params }: { data: TasksPageData; params: TaskP
         title={title}
         description={DESCRIPTIONS[view]}
         actions={
-          <Button size="sm" onClick={() => quickAdd.open({ projectId })}>
+          <Button ref={newTaskButton} size="sm" onClick={() => quickAdd.open({ projectId })}>
             <PlusIcon aria-hidden="true" />
             New task
           </Button>
@@ -328,9 +299,8 @@ export function TasksView({ data, params }: { data: TasksPageData; params: TaskP
         <TaskListKeyHint ref={listHint} />
 
         <DndContext
-          // An explicit id: dnd-kit otherwise derives one from a module-level
-          // counter, which a server process that has rendered before gets
-          // wrong — the hydration mismatch Phase 3 found on every draggable.
+          // Explicit id: dnd-kit's default comes from a module-level counter,
+          // which mismatches between server and client.
           id="task-list-dnd"
           sensors={sensors}
           modifiers={[restrictToVerticalAxis]}
@@ -349,6 +319,11 @@ export function TasksView({ data, params }: { data: TasksPageData; params: TaskP
               const task = state.tasks.find((t) => t.id === taskId);
               mutate.setCompletion(taskId, completed);
               if (task) announce(`${task.title} ${completed ? "completed" : "reopened"}`);
+            }}
+            onUnarchive={(taskId) => {
+              const task = state.tasks.find((t) => t.id === taskId);
+              mutate.unarchive(taskId);
+              if (task) announce(`${task.title} unarchived`);
             }}
             onOpen={setOpenTask}
             onSelectionChange={setSelectedIds}
@@ -385,6 +360,10 @@ export function TasksView({ data, params }: { data: TasksPageData; params: TaskP
           setOpenTask(null);
           mutate.archive(id);
         }}
+        onUnarchive={(id) => {
+          setOpenTask(null);
+          mutate.unarchive(id);
+        }}
         onAddBlock={(taskId, span) => mutate.addBlock(taskId, span)}
         onUpdateBlock={(taskId, blockId, span) => mutate.updateBlock(taskId, blockId, span)}
         onRemoveBlock={(taskId, blockId) => mutate.removeBlock(taskId, blockId)}
@@ -394,6 +373,8 @@ export function TasksView({ data, params }: { data: TasksPageData; params: TaskP
           mutate.reorder(id, ordered, toIndex);
         }}
       />
+
+      {projectManager.dialogs}
     </PageContainer>
   );
 }
@@ -405,9 +386,9 @@ const DESCRIPTIONS: Record<TaskView, string> = {
   all: "Every open task.",
   completed: "What you have finished.",
   project: "Open work in this project.",
+  archived: "Put away, not deleted. Unarchive a task to bring it back.",
 };
 
-/** "1 task", "3 tasks" — announcements pluralise the way the bar's own label does. */
 function taskCount(count: number): string {
   return `${count} ${count === 1 ? "task" : "tasks"}`;
 }

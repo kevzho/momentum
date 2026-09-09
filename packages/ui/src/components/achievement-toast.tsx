@@ -7,16 +7,8 @@ import { AwardIcon, SparklesIcon, TargetIcon } from "lucide-react";
 import { useReducedMotion } from "@momentum/ui/hooks/use-reduced-motion";
 
 /**
- * The three things worth celebrating, in one component.
- *
- * A level up, an achievement unlock, and a weekly goal completed — and nothing
- * else, ever (specs/08-gamification.md). It is brief, it is dismissible, and it
- * is one toast: the caller shows at most one per update, never a queue.
- *
- * **Reduced motion removes the flourish, not the news.** The ring behind the
- * icon is the only animated part, and under `prefers-reduced-motion` it is not
- * rendered at all rather than rendered with a zero duration. The message still
- * arrives, because suppressing an animation must not suppress information.
+ * Level up, achievement, weekly goal — nothing else. Under reduced motion the
+ * animated ring is not rendered at all; the message still arrives.
  */
 type CelebrationKind = "level" | "achievement" | "goal";
 

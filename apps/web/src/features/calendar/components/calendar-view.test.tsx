@@ -18,12 +18,6 @@ import type {
 } from "@/features/calendar/types";
 import { UserSettingsProvider } from "@/lib/time/user-settings";
 
-/**
- * The board's job is routing intent to actions, so what is pinned here is the
- * argument it sends — the half no editor test can see. The actions themselves
- * are stubbed at the module boundary; nothing in this file talks to a database.
- */
-
 const { actions, router } = vi.hoisted(() => ({
   actions: {
     updateBlock: vi.fn(),
@@ -49,8 +43,7 @@ vi.mock("@/features/calendar/actions", () => ({
   updateBlock: (input: unknown) => actions.updateBlock(input),
 }));
 
-// The board calls the habits feature's own action for "Add to week" (Phase 6),
-// and a `'use server'` module reaches `server-only` through `requireSession`.
+// A `'use server'` module reaches `server-only` through `requireSession`.
 vi.mock("@/features/habits/actions", () => ({ addHabitToWeek: vi.fn() }));
 
 const TZ = ianaTimeZone("America/New_York");
@@ -108,8 +101,6 @@ function item(overrides: Partial<CalendarItem> = {}): CalendarItem {
     id: "block-1",
     blockId: "block-1",
     kind: "work",
-    // A work block's title is the *task's*, resolved on read: the column itself
-    // is empty, which is what keeps the two from ever disagreeing.
     title: "History essay",
     description: null,
     startAt: instant("2026-09-07T20:00:00.000Z"),
@@ -163,11 +154,6 @@ beforeEach(() => {
 
 describe("saving a block from the editor", () => {
   it("sends no title for a work block, so the column keeps resolving from the task", () => {
-    // `values.title` for a work block is the task's name, resolved on read
-    // (`queries.ts`). Writing it back would stamp a copy into
-    // `calendar_blocks.title`, and from then on the block shows that frozen
-    // string while a rename of the task never reaches it (Domain Rule 2). The
-    // field is read-only in the editor precisely so this cannot happen.
     saveFirstBlock(renderBoard([item()]));
 
     return waitFor(() => {
@@ -198,19 +184,10 @@ describe("saving a block from the editor", () => {
 });
 
 describe("the Plan panel toggle", () => {
-  /*
-   * Domain Rule 10. Hiding the panel unmounts the button that was pressed to
-   * hide it, and the panel is not a modal, so nothing restores focus on its
-   * own: `SidePanel` sends focus wherever the board points it. The board has
-   * to point it at this toggle — the one control that brings the panel back —
-   * or focus lands on `<body>` and a keyboard user tabs from the top of the
-   * shell again.
-   */
   it("takes focus back when the panel's own close button hides it", () => {
     const view = renderBoard([]);
 
-    // Both controls read "Hide plan panel" while the panel is open; the header
-    // toggle is the one that is a pressed toggle.
+    // Both controls read "Hide plan panel"; the header toggle is the pressed one.
     const toggle = screen.getByRole("button", { name: "Hide plan panel", pressed: true });
     const panel = view.container.querySelector<HTMLElement>('[data-slot="side-panel"]');
     const hide = within(panel!).getByRole("button", { name: "Hide plan panel" });
@@ -225,11 +202,6 @@ describe("the Plan panel toggle", () => {
   });
 });
 
-/**
- * Below `lg` the panel has no room beside the calendar, so the toggle opens
- * the same content as a sheet — at every width there is a control that shows
- * the week plan (the mobile audit's "nothing hidden").
- */
 describe("the Plan panel below lg", () => {
   function narrow(): void {
     const query = (media: string): MediaQueryList => ({
@@ -261,7 +233,7 @@ describe("the Plan panel below lg", () => {
     fireEvent.click(toggle);
 
     expect(screen.getByRole("dialog", { name: "Plan my week" })).toBeDefined();
-    // The same element; the modal has hidden the page behind it from queries by role.
+    // The modal has hidden the page behind it from queries by role.
     expect(toggle.getAttribute("aria-expanded")).toBe("true");
     expect(toggle.textContent).toContain("Hide plan panel");
   });
@@ -283,9 +255,6 @@ describe("the Plan panel below lg", () => {
 
 describe("the drag ghost", () => {
   it("reads a task's length in the product's one duration convention", () => {
-    // The row the ghost was dragged out of is still on screen underneath it,
-    // showing `formatDuration` of the same number; a raw minute count here
-    // would be the same fact in two formats.
     render(
       <DragGhost
         settings={SETTINGS}
@@ -305,16 +274,10 @@ describe("the drag ghost", () => {
   });
 });
 
-/**
- * The command palette's "Add event" cannot open the editor itself — the editor
- * needs this island's week, grid and settings — so it navigates with
- * `?new=event` and the island honours the intent. Once.
- */
 describe("the palette's Add event intent", () => {
   it("opens a create draft and drops the intent from the URL", async () => {
     renderBoard([item()], true);
 
-    // A create draft, not an edit: the title field is editable and empty.
     const title = await screen.findByLabelText<HTMLInputElement>("Title");
     expect(title.value).toBe("");
     expect(title.hasAttribute("readonly")).toBe(false);

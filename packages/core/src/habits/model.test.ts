@@ -92,8 +92,7 @@ describe("contributionOf", () => {
   });
 
   it("counts a boolean habit's day as one, whatever the row says", () => {
-    // record_habit_completion forces amount = 1 for boolean habits; a row that
-    // somehow carried more must not count as two days of a weekly target.
+    // record_habit_completion forces amount = 1 for boolean habits.
     expect(contributionOf(habitOf({ frequencyType: "times_per_week", target: 3 }), 4)).toBe(1);
   });
 

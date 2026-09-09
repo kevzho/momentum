@@ -3,17 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { ListPreferences } from "@/features/tasks/list-preferences";
 
-/**
- * Sort and filter "persist within a session" — but persistence is the second
- * clause. The first is that they work. Storage can refuse a write (Safari in
- * private mode, site data blocked, a full quota), and when it does the change
- * still has to take effect: a toolbar whose every control snaps back is a
- * broken feature, not a forgotten preference.
- *
- * The store keeps module state, so each test loads a fresh copy of it.
- */
-
-/** A minimal consumer: shows the live sort and offers one change. */
+// The store keeps module state, so each test loads a fresh copy of it.
 async function renderStore() {
   vi.resetModules();
   const { useListPreferences } = await import("@/features/tasks/list-preferences");
@@ -41,7 +31,7 @@ afterEach(() => {
   window.sessionStorage.clear();
 });
 
-/** Stands in for a browser that refuses site data: every access throws. */
+// A browser that refuses site data: every access throws.
 function blockStorage(): void {
   vi.stubGlobal("sessionStorage", {
     getItem: () => {
@@ -78,8 +68,7 @@ describe("list preferences", () => {
 
     chooseDue();
 
-    // Only the persistence is lost. Re-reading storage here would return
-    // nothing and snap the control back to the default.
+    // Only the persistence is lost.
     expect(sort()).toBe("due");
   });
 

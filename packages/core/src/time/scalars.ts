@@ -1,15 +1,6 @@
 import type { IanaTimeZone, Instant, LocalDate, LocalTime } from "../types/scalars";
 
-/**
- * Constructors and validators for the branded time scalars.
- *
- * This is the first slice of `@momentum/core/time`. Domain Rule 5 says every
- * piece of date logic lives in this module, and normalising a database
- * timestamp into an `Instant` is date logic, so it belongs here rather than in
- * a mapper. The timezone, boundary, snapping and formatting functions
- * described in docs/ARCHITECTURE.md §10 join it in Phase 3, when the calendar
- * needs them; nothing here depends on date-fns.
- */
+/** Constructors and validators for the branded time scalars. */
 
 const INSTANT_PATTERN =
   /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})(\.\d+)?(Z|z|[+-]\d{2}(?::?\d{2})?)$/;
@@ -17,12 +8,9 @@ const LOCAL_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const LOCAL_TIME_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)(?::[0-5]\d)?$/;
 
 /**
- * Normalises any ISO-8601 instant to `YYYY-MM-DDTHH:mm:ss.sssZ`.
- *
- * Postgres hands back microsecond precision (`…:00.123456+00:00`); the extra
- * digits are truncated, not rounded, so the value never moves forward in time.
- * Nothing in Momentum measures below a millisecond, and one canonical spelling
- * is what lets two instants be compared with `===`.
+ * Normalises any ISO-8601 instant to `YYYY-MM-DDTHH:mm:ss.sssZ`. Postgres's
+ * microseconds are truncated, not rounded; one canonical spelling lets two
+ * instants be compared with `===`.
  */
 export function instant(value: string): Instant {
   const match = INSTANT_PATTERN.exec(value.trim());
@@ -44,14 +32,11 @@ export function instant(value: string): Instant {
 
   const millis = (fraction ?? ".").slice(1).padEnd(3, "0").slice(0, 3);
 
-  // Already UTC: keep the digits we were given rather than round-tripping
-  // through Date, which would re-derive them from a float.
+  // Already UTC: keep the digits rather than round-tripping through Date.
   if (offset === "Z" || offset === "z" || /^[+-]00(?::?00)?$/.test(offset)) {
     return `${year}-${month}-${day}T${hour}:${minute}:${second}.${millis}Z` as Instant;
   }
 
-  // A non-UTC offset only reaches us from a client or a fixture. Date is the
-  // simplest correct converter and never escapes this function.
   const parsed = new Date(
     `${year}-${month}-${day}T${hour}:${minute}:${second}.${millis}${normalizeOffset(offset)}`,
   );
@@ -104,10 +89,7 @@ export function isLocalTime(value: string): boolean {
   return LOCAL_TIME_PATTERN.test(value.trim());
 }
 
-/**
- * An IANA timezone identifier. Validated against the runtime's own timezone
- * database, which is the same test the profile trigger applies in Postgres.
- */
+/** An IANA timezone identifier, validated against the runtime's timezone database. */
 export function ianaTimeZone(value: string): IanaTimeZone {
   const trimmed = value.trim();
   if (!isIanaTimeZone(trimmed)) {
@@ -127,5 +109,5 @@ export function isIanaTimeZone(value: string): boolean {
   }
 }
 
-/** The fallback every timezone decision falls back to, in one place. */
+/** The fallback timezone. */
 export const UTC = "UTC" as IanaTimeZone;

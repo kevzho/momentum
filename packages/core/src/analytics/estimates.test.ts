@@ -11,13 +11,6 @@ import { d, NEW_YORK, task } from "./test-fixtures";
 
 const period = analyticsPeriod("30", d("2026-06-17"), NEW_YORK);
 
-/**
- * specs/10-analytics.md singles this comparison out: it must be correct and
- * must "never conflate the two values". Conflation has a precise meaning here —
- * summing estimates over one set of tasks and measured minutes over a larger
- * one, so the difference between the bars is mostly the tasks that were never
- * estimated. Every test below is a way of that going wrong.
- */
 describe("estimateComparisonByProject", () => {
   it("sums both sides over exactly the same tasks", () => {
     const rows = estimateComparisonByProject(
@@ -38,8 +31,7 @@ describe("estimateComparisonByProject", () => {
     const rows = estimateComparisonByProject(
       [
         task({ date: "2026-06-15", hour: 9, estimated: 60, actual: 60, projectId: "p1" }),
-        // 240 measured minutes and no estimate. If this leaked into the actual
-        // side alone, the project would read as 300% over.
+        // If this leaked into the actual side alone, the project would read as 300% over.
         task({ date: "2026-06-16", hour: 9, estimated: null, actual: 240, projectId: "p1" }),
       ],
       period,
@@ -55,8 +47,6 @@ describe("estimateComparisonByProject", () => {
     const rows = estimateComparisonByProject(
       [
         task({ date: "2026-06-15", hour: 9, estimated: 60, actual: 60, projectId: "p1" }),
-        // An estimate that was never worked against is not evidence the
-        // estimate was wrong, only that nothing was timed.
         task({ date: "2026-06-16", hour: 9, estimated: 120, actual: 0, projectId: "p1" }),
       ],
       period,

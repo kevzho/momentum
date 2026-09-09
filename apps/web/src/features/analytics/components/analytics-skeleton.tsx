@@ -9,12 +9,7 @@ import {
 } from "@/components/skeletons";
 import { CHART_HEIGHT } from "@/features/analytics/components/charts/chart-theme";
 
-/**
- * Built from the same layout as the analytics page, so the skeleton occupies
- * the space the content will occupy and nothing shifts on arrival. The chart
- * blocks take their height from the same constant the figures do, which is what
- * keeps the two in step when that number changes.
- */
+// The chart blocks take their height from the same constant the figures do.
 export function AnalyticsSkeleton() {
   return (
     <PageContainer>

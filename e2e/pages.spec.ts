@@ -1,12 +1,6 @@
 import { collectConsoleErrors, expect, signIn, test } from "./fixtures";
 
-/**
- * Workflows 16 and 17 — Today and Analytics render their sections cleanly.
- *
- * Console errors are collected from before sign-in, so hydration is covered.
- * Nothing is filtered: a React key warning or a failed request on these pages
- * is a defect, not noise.
- */
+// Console errors are collected from before sign-in, so hydration is covered. Nothing is filtered.
 test.describe("Today and Analytics", () => {
   test("Today renders its sections without console errors", async ({ page }) => {
     const errors = collectConsoleErrors(page);
@@ -18,7 +12,7 @@ test.describe("Today and Analytics", () => {
         page.getByRole("heading", { level: 2, name: section, exact: true }),
       ).toBeVisible();
     }
-    // The day's XP line sits under the greeting; it is text, never a client assertion.
+    // The day's XP line is text, never a client assertion.
     await expect(page.getByText(/XP/).first()).toBeVisible();
 
     expect(errors).toEqual([]);

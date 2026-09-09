@@ -1,19 +1,7 @@
-/**
- * Which commands this person actually uses.
- *
- * "Recent/frequent commands surface first" (specs/11-command-palette.md), which
- * means the palette needs a memory. It is a per-browser preference, so it lives
- * in `localStorage` alongside the theme rather than in the database
- * (docs/ARCHITECTURE.md §7): losing it costs a slightly worse ordering for a
- * day, and syncing it would cost a write on every command.
- *
- * Everything here is a pure function of a map and a timestamp, so the ordering
- * is testable without a browser and without a clock.
- */
+// Per-browser command usage, kept in `localStorage` rather than the database.
 
 export const RECENTS_KEY = "momentum.palette.recents";
 
-/** More than anyone reads before typing; enough that the ordering settles. */
 const MAX_ENTRIES = 40;
 
 export interface CommandUsage {
@@ -31,11 +19,8 @@ const DAY = 24 * HOUR;
 const WEEK = 7 * DAY;
 
 /**
- * How much a command's history is worth when the list is ranked.
- *
- * Recency first, frequency second, and both bounded: a command used forty times
- * last month must not out-rank the one the user is typing the name of. The
- * bonus is small next to a prefix match for exactly that reason.
+ * Ranking bonus for a command's history: recency first, frequency second, both
+ * bounded so history stays small next to a prefix match.
  */
 export function usageBonus(usage: CommandUsage | undefined, now: number): number {
   if (usage === undefined) return 0;
@@ -73,13 +58,7 @@ export function recordUse(usage: CommandUsageMap, id: string, now: number): Comm
   return next;
 }
 
-/**
- * Reads the stored map, treating anything unexpected as "no history".
- *
- * A quota-blocked, disabled or corrupted store must degrade to an unranked
- * palette, never to an error: the palette is the way to *reach* the rest of the
- * product, so it is the last thing that may fail to open.
- */
+/** Reads the stored map; a disabled or corrupted store is "no history", never an error. */
 export function readUsage(storage: Pick<Storage, "getItem"> | undefined): CommandUsageMap {
   if (storage === undefined) return NO_USAGE;
 
@@ -100,7 +79,7 @@ export function writeUsage(
   try {
     storage.setItem(RECENTS_KEY, JSON.stringify(usage));
   } catch {
-    // A full or disabled store costs the ordering, nothing else.
+    // A full or disabled store only costs the ordering.
   }
 }
 

@@ -22,28 +22,9 @@ import {
 } from "./support/harness";
 
 /**
- * Progression, proved against a real database.
- *
- * Everything here is a claim about Postgres, and none of it can be made by a
- * unit test (docs/ARCHITECTURE.md §13). The list is the phase's own acceptance
- * criteria, in the order they matter:
- *
- * 1. **The client cannot mint XP by any path.** Not by inserting into the
- *    ledger, not by updating the profile, not by unlocking an achievement, not
- *    by claiming a quest it has not finished, and not by buying something it
- *    cannot afford. If any of that is possible, nothing else in this phase
- *    means anything (Domain Rules 6, 15).
- * 2. **Complete → uncomplete → recomplete awards exactly once**, because the
- *    ledger's uniqueness says so and not because the UI is careful.
- * 3. **The profile total reconciles with the ledger**, at every point.
- * 4. **The caps hold** however many rows a script creates.
- * 5. **Quests are deterministic** per account and date, and cannot be claimed
- *    early or twice — including after the row they point at is destroyed and
- *    recreated.
- *
- * The suite skips itself cleanly without `MOMENTUM_DB_TESTS=1`, so `pnpm test`
- * stays green with no Docker. Run with:
- *   `MOMENTUM_DB_TESTS=1 pnpm test` against a freshly reset stack.
+ * Progression proved against a real database: no client path mints XP, each
+ * fact awards once, the profile total reconciles with the ledger, the caps
+ * hold, and quests are deterministic. Run with `MOMENTUM_DB_TESTS=1 pnpm test`.
  */
 
 const describeDb = DB_TESTS_ENABLED ? describe : describe.skip;
@@ -67,16 +48,9 @@ describeDb("gamification", () => {
   const created: string[] = [];
 
   /**
-   * The day's slate, cleared once.
-   *
-   * Everything below reasons about *today's* caps and about awards keyed on
-   * this week — both of which are properties of the account rather than of a
-   * run, and both of which survive the suite that filled them. Without this the
-   * file is green on a freshly reset database and red on the second run against
-   * the same one, which is a suite that only works when nobody looks at it
-   * twice. Pruning is the harness reaching past the product's front door to
-   * reset a fixture, not a path the application has: nothing here can delete a
-   * ledger row.
+   * Today's caps and this week's awards survive the run that filled them, so
+   * they are cleared first. This is a harness action; the product has no path
+   * that deletes a ledger row.
    */
   beforeAll(async () => {
     const today = new Date();
@@ -130,10 +104,6 @@ describeDb("gamification", () => {
     return data.map((row) => row.amount);
   }
 
-  /* ---------------------------------------------------------------------- */
-  /* 1. No client path can mint XP                                          */
-  /* ---------------------------------------------------------------------- */
-
   describe("the exploits", () => {
     it("refuses a direct insert into the XP ledger", async () => {
       const before = await profile(owner, ownerId);
@@ -142,9 +112,6 @@ describeDb("gamification", () => {
         .insert({ user_id: ownerId, source_type: "task", amount: 100_000, reason: "free XP" });
 
       expect(error).not.toBeNull();
-      // The profile is untouched. The ledger-versus-profile invariant has its
-      // own test below; asserting it here would make this one depend on no
-      // other suite having pruned a fixture's ledger rows.
       expect((await profile(owner, ownerId)).xp).toBe(before.xp);
     });
 
@@ -156,8 +123,7 @@ describeDb("gamification", () => {
       const updated = await owner.from("xp_events").update({ amount: 9_999 }).eq("id", id!);
       const deleted = await owner.from("xp_events").delete().eq("id", id!);
 
-      // Append-only is enforced by the absence of a policy, so both are refused
-      // or affect nothing; either way the ledger is unchanged.
+      // Append-only is enforced by the absence of a policy: refused or no-op, either way unchanged.
       expect(updated.error !== null || deleted.error !== null || true).toBe(true);
       const { data: after } = await admin.from("xp_events").select("amount").eq("id", id!);
       expect(after?.[0]?.amount).not.toBe(9_999);
@@ -193,17 +159,8 @@ describeDb("gamification", () => {
     });
 
     /**
-     * The claim this test exists for was **false** the first time it ran.
-     *
-     * `20260906121200_grants.sql` closed the function surface with
-     * `alter default privileges ... revoke execute on functions from public,
-     * anon, authenticated`, and that statement does not reach functions created
-     * by later migrations: every one of them carried the built-in PUBLIC
-     * EXECUTE grant. `award_xp(user, source, source_id, amount, reason)` takes
-     * the amount as an argument, and it was callable from the browser — Domain
-     * Rule 6 was true in every line of application code and false in the
-     * database. The Phase 8 migration now revokes by name and re-grants the
-     * sanctioned list; this is the assertion that keeps it that way.
+     * `alter default privileges ... revoke execute` does not reach functions
+     * created by later migrations; grants must be revoked by name.
      */
     it("does not publish the mint, or any other internal, over HTTP", async () => {
       const internals = [
@@ -229,8 +186,7 @@ describeDb("gamification", () => {
     });
 
     it("cannot mint XP even when the arguments are exactly right", async () => {
-      // The shape a real attacker would send, rather than a probe: every
-      // argument correct, and the amount their own choice.
+      // Every argument correct, the amount their own choice.
       const before = await profile(owner, ownerId);
       const { error } = await (owner as unknown as TestClient).rpc(
         "award_xp" as never,
@@ -261,10 +217,6 @@ describeDb("gamification", () => {
     });
   });
 
-  /* ---------------------------------------------------------------------- */
-  /* 2. One award per fact, ever                                            */
-  /* ---------------------------------------------------------------------- */
-
   describe("idempotency", () => {
     it("awards a task once across complete, uncomplete and recomplete", async () => {
       const id = await newTask("Idempotent completion");
@@ -276,7 +228,7 @@ describeDb("gamification", () => {
       expect(awarded).toBeGreaterThan(0);
 
       await tasks.uncomplete(owner, id);
-      // Nothing is withdrawn (Domain Rule 7).
+      // Nothing is withdrawn.
       expect((await profile(owner, ownerId)).xp).toBe(afterFirst.xp);
 
       await tasks.complete(owner, id);
@@ -311,16 +263,10 @@ describeDb("gamification", () => {
     });
   });
 
-  /* ---------------------------------------------------------------------- */
-  /* 3. The total is the ledger                                             */
-  /* ---------------------------------------------------------------------- */
-
   describe("reconciliation", () => {
     it("keeps profiles.xp equal to the sum of the ledger", async () => {
-      // Normalise first: other suites delete their own fixtures' ledger rows,
-      // which is a harness action the product has no equivalent of, and it
-      // leaves the total above the ledger until something reconciles. What is
-      // under test is whether the *trigger* keeps the two in step from here.
+      // Other suites prune ledger rows (a harness action), leaving the total
+      // above the ledger; reconcile first, then test the trigger from here.
       await admin.rpc("reconcile_xp", { p_user_id: ownerId });
       const start = await profile(owner, ownerId);
       expect(start.xp).toBe(await ledgerTotal(ownerId));
@@ -334,7 +280,6 @@ describeDb("gamification", () => {
       expect(after.xp).toBe(start.xp + (award as number));
       expect(after.xp).toBe(await ledgerTotal(ownerId));
 
-      // A second reconcile changes nothing, which is the whole claim.
       await admin.rpc("reconcile_xp", { p_user_id: ownerId });
       expect((await profile(owner, ownerId)).xp).toBe(after.xp);
       expect((await profile(owner, ownerId)).level).toBe(after.level);
@@ -365,17 +310,11 @@ describeDb("gamification", () => {
     });
   });
 
-  /* ---------------------------------------------------------------------- */
-  /* 4. The caps hold                                                        */
-  /* ---------------------------------------------------------------------- */
-
   describe("anti-farming", () => {
     it("bounds a day of task completions at the daily cap", async () => {
       const cap = XP_DAILY_CAPS.task as number;
       const before = await taskXpToday();
 
-      // The exploit: create and complete rows in a loop. Enough of them to pass
-      // the cap several times over.
       for (let i = 0; i < Math.ceil(cap / 10) + 8; i += 1) {
         const id = await newTask(`Farm ${i}`, 1);
         await tasks.complete(owner, id);
@@ -384,7 +323,7 @@ describeDb("gamification", () => {
       const after = await taskXpToday();
       expect(after).toBeLessThanOrEqual(cap);
       expect(after).toBeGreaterThan(before);
-      // Every task still completed: the cap bounds the reward, never the work.
+      // The cap bounds the reward, never the work.
       const { count } = await owner
         .from("tasks")
         .select("id", { count: "exact", head: true })
@@ -404,10 +343,6 @@ describeDb("gamification", () => {
       return data.reduce((total, row) => total + row.amount, 0);
     }
   });
-
-  /* ---------------------------------------------------------------------- */
-  /* 5. Quests                                                               */
-  /* ---------------------------------------------------------------------- */
 
   describe("quests", () => {
     it("assigns the same quests for the same account and day, however often it is asked", async () => {
@@ -437,10 +372,7 @@ describeDb("gamification", () => {
       const daily = assignments.find((row) => row.period === "daily" && row.completedAt === null);
       if (daily === undefined) return;
 
-      // Meet the target honestly, whatever it is, by completing tasks — the
-      // only metric this test can move quickly. Quests on other metrics are
-      // skipped rather than faked, because faking one would be testing the
-      // fixture instead of the rule.
+      // Only the task metric can be moved quickly here; other metrics are skipped, not faked.
       const { data: definition } = await admin
         .from("quest_definitions")
         .select("metric, target, xp_reward, coin_reward")
@@ -460,9 +392,44 @@ describeDb("gamification", () => {
       expect(after.coins).toBe(before.coins + definition.coin_reward);
       expect(after.xp).toBe(before.xp + definition.xp_reward);
 
-      // Claiming again is a no-op, not a second payment.
       await gamification.claimQuest(owner, daily.id);
       expect(await profile(owner, ownerId)).toEqual(after);
+    });
+
+    it("keeps the same quests visible after a timezone change that moves the local date", async () => {
+      const original = (await admin.from("profiles").select("timezone").eq("id", ownerId).single())
+        .data!;
+      const before = await admin.from("quest_assignments").select("id").eq("user_id", ownerId);
+      const beforeIds = new Set((before.data ?? []).map((row) => row.id));
+
+      const ids = (rows: Awaited<ReturnType<typeof gamification.ensureQuests>>) =>
+        rows.map((row) => row.id).sort();
+
+      try {
+        // Kiritimati (UTC+14) and Pago Pago (UTC-11) are 25 hours apart, so the
+        // local date always differs between the two calls.
+        await owner.from("profiles").update({ timezone: "Pacific/Kiritimati" }).eq("id", ownerId);
+        const first = await gamification.ensureQuests(owner);
+        expect(first.filter((row) => row.period === "daily")).toHaveLength(QUEST_SLOTS.daily);
+        expect(first.filter((row) => row.period === "weekly")).toHaveLength(QUEST_SLOTS.weekly);
+        const count = (await admin.from("quest_assignments").select("id").eq("user_id", ownerId))
+          .data!.length;
+
+        await owner.from("profiles").update({ timezone: "Pacific/Pago_Pago" }).eq("id", ownerId);
+        const second = await gamification.ensureQuests(owner);
+
+        expect(ids(second)).toEqual(ids(first));
+        expect(
+          (await admin.from("quest_assignments").select("id").eq("user_id", ownerId)).data!.length,
+        ).toBe(count);
+      } finally {
+        await admin.from("profiles").update({ timezone: original.timezone }).eq("id", ownerId);
+        const after = await admin.from("quest_assignments").select("id").eq("user_id", ownerId);
+        const added = (after.data ?? []).map((row) => row.id).filter((id) => !beforeIds.has(id));
+        if (added.length > 0) {
+          await admin.from("quest_assignments").delete().in("id", added);
+        }
+      }
     });
 
     async function findUnfinished(
@@ -484,21 +451,10 @@ describeDb("gamification", () => {
     }
   });
 
-  /* ---------------------------------------------------------------------- */
-  /* 6. Weekly goals and cosmetics                                           */
-  /* ---------------------------------------------------------------------- */
-
   describe("weekly goals", () => {
     /**
-     * Cleared on both sides of every test in this block.
-     *
-     * `weekly_goals_uniq (user_id, week_start, metric)` means the fixture below
-     * can exist only once per week, and the award it deliberately leaves in the
-     * ledger is permanent by design — so a run that fails part-way through
-     * poisons every later run against the same database, with a duplicate-key
-     * error that says nothing about what actually went wrong. Clearing *before*
-     * as well as after is what makes the suite recoverable rather than merely
-     * tidy.
+     * Cleared before as well as after: `weekly_goals_uniq` allows the fixture
+     * once per week, so a half-failed run would poison every later one.
      */
     async function clearGoalSlate(): Promise<void> {
       const week = await currentWeekStart();
@@ -520,8 +476,7 @@ describeDb("gamification", () => {
     afterEach(clearGoalSlate);
 
     it("cannot be re-claimed by deleting the goal and creating it again", async () => {
-      // The exploit this key exists for: the row is the user's own, so a naive
-      // award keyed on its id would pay again on every recreate.
+      // A naive award keyed on the row id would pay again on every recreate.
       const week = await currentWeekStart();
       const id = crypto.randomUUID();
 
@@ -617,10 +572,6 @@ describeDb("gamification", () => {
     });
   });
 
-  /* ---------------------------------------------------------------------- */
-  /* 7. Achievements                                                         */
-  /* ---------------------------------------------------------------------- */
-
   describe("achievements", () => {
     it("unlocks once and never again", async () => {
       const id = await newTask("First step");
@@ -639,8 +590,6 @@ describeDb("gamification", () => {
         .select("achievement_id, unlocked_at")
         .eq("user_id", ownerId);
 
-      // The same unlocks, with the same timestamps: an achievement is a fact
-      // about the first time, not a counter.
       expect(after).toEqual(first);
     });
 

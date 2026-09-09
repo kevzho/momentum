@@ -11,35 +11,13 @@ import type {
 } from "../types";
 
 /**
- * The contracts of `@momentum/core/scheduling` (specs/05-week-planning.md).
- *
- * Every function in this module is a pure function over an explicit input:
- * the blocks that exist, the user's working hours and focus windows, the task
- * being placed, and the clock — all passed in, none read from anywhere. Same
- * input, same output, always. There is no model, no network and no ambient
- * time in this path, and the types below are what make that checkable: nothing
- * here can hold a database row, a React node or a `Date`.
- *
- * Two quantities run through everything and must not be confused
- * (docs/ARCHITECTURE.md §10): **elapsed** minutes, which is what a block costs
- * the week and what capacity is measured in (Domain Rule 3), and **wall-clock**
- * minutes from a day's midnight, which is where a slot sits on the grid and
- * what a server action takes. Intervals carry instants and are elapsed;
- * `SlotSpan` is wall clock. The two differ by an hour on two days a year.
+ * The contracts of `@momentum/core/scheduling`. Two quantities must not be
+ * confused: elapsed minutes (intervals carry instants; capacity is measured in
+ * them) and wall-clock minutes from midnight (`SlotSpan`). They differ by an
+ * hour on two days a year.
  */
 
-/* -------------------------------------------------------------------------- */
-/* Inputs                                                                     */
-/* -------------------------------------------------------------------------- */
-
-/**
- * A calendar block as the scheduler sees it: the fields every planning
- * question needs and nothing that only rendering needs.
- *
- * `taskCompletedAt` is here because of Domain Rule 13: an unexecuted block of a
- * completed task stays on the calendar but is free time to capacity and Find
- * Time. `occupiesTime` in `intervals.ts` is the one place that rule is applied.
- */
+/** A calendar block as the scheduler sees it. `occupiesTime` in `intervals.ts` is the one place Domain Rule 13 is applied. */
 export interface Commitment {
   id: string;
   kind: BlockKind;
@@ -57,20 +35,16 @@ export interface Commitment {
 }
 
 /**
- * A task competing for the range: what the drawer lists, what the
- * insufficient-time check examines, and what Find Time places.
- *
- * `scheduledOutsideMinutes` is the coverage the range cannot see. The range's
- * own work blocks are among the `Commitment`s, so a caller sums those live and
- * adds this number — never the other way round, or an optimistic block would
- * be counted twice while its write is in flight.
+ * A task competing for the range. The range's own work blocks are among the
+ * `Commitment`s and are summed live; `scheduledOutsideMinutes` adds only what
+ * lies outside, or an optimistic block would be counted twice.
  */
 export interface PlanningTask {
   id: Uuid;
   title: string;
-  /** User intent; never an actual (Domain Rule 3). Null means "no estimate". */
+  /** User intent; never an actual. Null means "no estimate". */
   estimatedMinutes: Minutes | null;
-  /** A deadline, never a schedule (Domain Rule 1). */
+  /** A deadline, never a schedule. */
   dueDate: LocalDate | null;
   /** Elapsed minutes of the task's work blocks that lie outside the planning range. */
   scheduledOutsideMinutes: Minutes;
@@ -84,33 +58,20 @@ export interface PlanningContext {
   focusWindows: readonly TimeWindow[];
   /** The planning range in order: seven local dates for a week, one in day view. */
   days: readonly LocalDate[];
-  /** Today in the profile timezone (Domain Rule 4). Days before it are the past. */
+  /** Today in the profile timezone. Days before it are the past. */
   today: LocalDate;
 }
 
-/* -------------------------------------------------------------------------- */
-/* Intervals                                                                  */
-/* -------------------------------------------------------------------------- */
-
-/**
- * A half-open span of instants `[startAt, endAt)`.
- *
- * Instants are canonical ISO strings (`@momentum/core/types`), so `<` and
- * `===` compare them correctly and no epoch arithmetic is needed to order
- * them; lengths come from `durationMinutes` and are elapsed.
- */
+/** A half-open span of instants `[startAt, endAt)`. */
 export interface InstantInterval {
   startAt: Instant;
   endAt: Instant;
 }
 
 /**
- * An interval together with its wall-clock reading on the local day it starts.
- *
- * `endMinutes` may exceed 1440 when the interval runs past midnight, matching
- * the convention the calendar's actions accept (`endMinuteOfDay` allows up to
- * 2880), and is a clock reading rather than `startMinutes + elapsed` — on a
- * DST day those differ.
+ * An interval with its wall-clock reading on the local day it starts.
+ * `endMinutes` may exceed 1440 past midnight (the actions' `endMinuteOfDay`
+ * allows up to 2880) and is a clock reading, not `startMinutes + elapsed`.
  */
 export interface DayInterval extends InstantInterval {
   date: LocalDate;
@@ -118,29 +79,14 @@ export interface DayInterval extends InstantInterval {
   endMinutes: Minutes;
 }
 
-/**
- * A wall-clock span on a day: the shape every calendar action takes
- * (`features/calendar/types.ts` `DaySpan`) and the shape a Find Time candidate
- * is scheduled with. The server converts it with the profile timezone.
- */
+/** A wall-clock span on a day: the shape every calendar action takes (`features/calendar/types.ts` `DaySpan`). */
 export interface SlotSpan {
   date: LocalDate;
   startMinutes: Minutes;
   endMinutes: Minutes;
 }
 
-/* -------------------------------------------------------------------------- */
-/* Capacity                                                                   */
-/* -------------------------------------------------------------------------- */
-
-/**
- * One day's load against its working window. Every number is elapsed minutes.
- *
- * "Planned" is everything that occupies time — events, work blocks and habit
- * blocks alike — because everything competes for the same finite week
- * (docs/PRODUCT.md). The work/event split is carried so a surface can show the
- * breakdown, never so one of them can be left out of the total.
- */
+/** One day's load against its working window. Every number is elapsed minutes. */
 export interface DayWorkload {
   date: LocalDate;
   weekday: Weekday;
@@ -171,22 +117,13 @@ export interface WeekCapacity {
   days: readonly DayWorkload[];
 }
 
-/* -------------------------------------------------------------------------- */
-/* Conflicts                                                                  */
-/* -------------------------------------------------------------------------- */
-
-/** The block a warning points at: enough to name it and to key a list row. */
+/** The block a warning points at. */
 export interface WarningBlock {
   id: string;
   title: string;
 }
 
-/**
- * The four warnings specs/05 names. All are information: nothing in this
- * module blocks an action, and the copy `describeWarning` produces states a
- * fact about the schedule and never a judgement about the person
- * (Domain Rule 7).
- */
+/** All warnings are information: nothing blocks an action, and `describeWarning` never judges the person (Domain Rule 7). */
 export type PlanningWarning =
   | {
       kind: "overlap";
@@ -224,10 +161,6 @@ export type PlanningWarning =
 
 export type PlanningWarningKind = PlanningWarning["kind"];
 
-/* -------------------------------------------------------------------------- */
-/* Find Time                                                                  */
-/* -------------------------------------------------------------------------- */
-
 export interface FindTimeInput {
   /** What is being placed. Only the title and deadline are read; the length is `durationMinutes`. */
   task: Pick<PlanningTask, "id" | "title" | "dueDate">;
@@ -243,12 +176,7 @@ export interface FindTimeInput {
   limit?: number;
 }
 
-/**
- * The five ranking criteria of specs/05, in their order. Candidates are
- * ordered lexicographically by these fields, then by start instant; nothing
- * is weighted or summed, so every ordering is explainable by pointing at the
- * first field on which two candidates differ (docs/SCHEDULING.md).
- */
+/** The ranking criteria, in order. Candidates are ordered lexicographically by these fields, then by start instant; nothing is weighted. */
 export interface CandidateScore {
   /** 1. The slot ends on or before the end of the due date. True for an undated task. */
   beforeDeadline: boolean;
@@ -277,9 +205,6 @@ export interface FindTimeCandidate {
 }
 
 /**
- * What the search found, so the surface can say so in words rather than show
- * an unexplained empty list.
- *
  *   found                every candidate is an open slot
  *   fallback-overlaps    no open slot fits anywhere in the range, so the
  *                        candidates overlap existing blocks and say which

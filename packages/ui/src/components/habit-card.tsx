@@ -5,21 +5,9 @@ import type { ProjectColor } from "@momentum/core/types";
 import { ProjectDot } from "@momentum/ui/components/project-dot";
 
 /**
- * Name · target · the week · progress · consistency · XP. Deliberately not a
- * card with chrome: a row with a rule under it, like every other dense surface
- * in the product.
- *
- * **Nothing here is punitive** (Domain Rule 7). There is no "missed" state and
- * no red: a scheduled day with nothing on it is drawn as an empty ring and
- * named "not recorded", and a day that has not finished yet is drawn dashed.
- * The consistency figure is a rate; no glyph in this row is a penalty.
- *
- * **And nothing here signals by colour alone** (specs/06-habits.md, WCAG 1.4.1).
- * The five day states differ in *shape* before they differ in hue — filled with
- * a check, half-filled with a bar, a solid ring, a dashed ring, a bare dot —
- * and each cell carries the day and its state as text for assistive technology
- * and as a `title` for a pointer. Turn the page greyscale and the week still
- * reads.
+ * No "missed" state and no red: gamification never punishes. The five day
+ * states differ in shape before hue (WCAG 1.4.1), and each cell carries its
+ * state as text.
  */
 type HabitDayState = "met" | "partial" | "open" | "ahead" | "free";
 
@@ -36,21 +24,15 @@ export interface HabitCardDay {
   disabled?: boolean;
 }
 
-/**
- * The per-state visual. Shape first, hue second — `borderStyle` and the glyph
- * are what survive greyscale, and the background is the redundant cue.
- */
 const DAY_STATE_CLASSES: Record<HabitDayState, string> = {
   met: "border-success bg-success text-success-foreground",
   partial: "border-success bg-success/25 text-foreground",
   open: "border-border text-muted-foreground",
-  // No alpha on the text: the dashed ring and the bare dot already carry the
-  // state by shape, and `text-muted-foreground/60` fell below AA (2.5:1).
+  // No alpha on the text: `text-muted-foreground/60` fell below AA (2.5:1).
   ahead: "border-dashed border-border/60 text-muted-foreground",
   free: "border-transparent text-muted-foreground",
 };
 
-/** The mark inside the cell. `null` leaves the day's initial showing. */
 function DayGlyph({ state, short }: { state: HabitDayState; short: string }) {
   if (state === "met") {
     return (
@@ -92,12 +74,8 @@ function DayGlyph({ state, short }: { state: HabitDayState; short: string }) {
   );
 }
 
-/**
- * The cell's box is the touch target; the ring inside it is the visual. On a
- * fine pointer the two coincide at 20px, so the week strip stays dense; on a
- * coarse pointer the box grows to the 40px floor (`pointer-coarse:`) while the
- * ring keeps its size, so a thumb cannot record the neighbouring day.
- */
+// The box is the touch target and grows to the 40px floor on a coarse pointer;
+// the ring inside keeps its size.
 const CELL_BOX =
   "flex size-5 shrink-0 items-center justify-center rounded-full pointer-coarse:size-10";
 
@@ -129,13 +107,8 @@ function HabitDayCell({ day }: { day: HabitCardDay }) {
       type="button"
       title={day.label}
       aria-pressed={day.state === "met"}
-      /*
-       * Not natively `disabled`: the browser blurs an element the moment it is
-       * disabled, which would drop a keyboard user on `<body>` mid-week. The
-       * cell stays focusable and refuses the press instead (Domain Rule 10) —
-       * and it really refuses: a control that says it is disabled and still
-       * acts would let a quick double press record a day and then un-record it.
-       */
+      // Not natively `disabled`: the browser blurs a disabled element, which
+      // would drop a keyboard user on `<body>` mid-week.
       aria-disabled={day.disabled || undefined}
       onClick={day.disabled ? undefined : day.onSelect}
       className={cn(
@@ -189,9 +162,6 @@ function HabitCard({
   return (
     <div
       data-slot="habit-card"
-      // Below `sm` the row wraps: the name, its figure and the actions share the
-      // first line, and the week strip takes a full line of its own underneath,
-      // so a phone shows the whole habit name instead of "Read 20 p".
       className={cn("flex items-center gap-x-3 gap-y-1 px-2 py-2 max-sm:flex-wrap", className)}
       {...props}
     >

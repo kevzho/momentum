@@ -4,12 +4,8 @@ import { NEW_EVENT_HREF } from "@/features/calendar/navigation";
 import { defineCommands } from "@/features/palette/types";
 
 /**
- * The calendar's one command.
- *
- * It navigates rather than opening an editor from here: the block editor needs
- * the week's items, the grid's spec and the profile's snap setting, all of
- * which are the calendar page's to resolve. `?new=event` is the intent, and the
- * page honours it once and drops it from the URL (specs/11-command-palette.md).
+ * Navigates rather than opening the editor here: the editor needs the week's
+ * items, grid spec and snap setting, which only the calendar page resolves.
  */
 export const calendarCommands = defineCommands("calendar", [
   {

@@ -9,7 +9,7 @@ import {
   uniqueName,
 } from "./fixtures";
 
-/** Workflows 8 and 9 — create a habit and record today. */
+/** Create a habit and record today. */
 test.describe("Habits", () => {
   test.beforeEach(async ({ page }) => {
     await signIn(page);
@@ -26,8 +26,8 @@ test.describe("Habits", () => {
     await dialog.getByRole("button", { name: "Create habit" }).click();
     await expect(dialog).toBeHidden();
 
-    // The row's week strip is a list named after the habit; today's cell is a
-    // real button named with the date and its state (Domain Rule 10).
+    // The week strip is a list named after the habit; today's cell is a button
+    // named with the date and its state.
     const week = page.getByRole("list", { name: `${name}, this week` });
     await expect(week).toBeVisible();
     const todayCell = week.getByRole("button", {

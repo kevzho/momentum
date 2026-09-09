@@ -6,12 +6,6 @@ import type { WorkingHours } from "@momentum/core/types";
 
 import { WorkingHoursEditor } from "@/features/settings/components/working-hours-editor";
 
-/**
- * The editor's contract: it reports the whole `WorkingHours` object with one
- * day changed, and nothing it does is a mutation. What is tested is the value
- * handed to `onChange` for each control, not the markup around it.
- */
-
 const window = (start: string, end: string) => ({ start: localTime(start), end: localTime(end) });
 
 const HOURS: WorkingHours = {
@@ -177,11 +171,9 @@ describe("editing a window", () => {
     const { onChange } = renderEditor();
     const start = screen.getByLabelText<HTMLInputElement>("Monday window 1 start");
 
-    // Genuinely focused, so the component's own `blur()` really dispatches —
-    // which is the whole defect: it runs synchronously, before React has
-    // re-rendered with the reset draft, so the blur handler still sees the
-    // abandoned time. Firing the blur by hand instead lets a re-render happen
-    // in between, which is a sequence the browser never produces.
+    // Genuinely focused, so the component's own `blur()` really dispatches
+    // synchronously, before React re-renders with the reset draft. Firing the
+    // blur by hand would let a re-render happen in between.
     start.focus();
     expect(document.activeElement).toBe(start);
     fireEvent.change(start, { target: { value: "10:00" } });
@@ -200,8 +192,7 @@ describe("editing a window", () => {
     fireEvent.change(start, { target: { value: "10:00" } });
     fireEvent.keyDown(start, { key: "Escape" });
 
-    // Both fields blur into the one `commit`, which is where the flag is read;
-    // a leaked one would silently swallow the next edit to either of them.
+    // Both fields blur into the one `commit`; a leaked flag would swallow the next edit to either.
     end.focus();
     fireEvent.change(end, { target: { value: "18:30" } });
     fireEvent.blur(end);

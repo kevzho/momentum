@@ -18,40 +18,18 @@ import type {
 } from "@momentum/core/types";
 
 /**
- * The calendar feature's view models and the props contracts between its parts.
- *
- * The week grid, the interaction layer, the Plan panel and the block editor are
- * built as separate units against the declarations in this file. It exists so
- * that "what does the grid hand a block?" has exactly one answer that the
- * compiler checks, rather than four components agreeing by convention.
- *
- * Nothing here is a database row. `queries.ts` reads rows, expands recurring
- * series, resolves the task context a work block needs, and hands the client
- * island the shapes below — which are serialisable, timezone-resolved only in
- * the sense that every instant is UTC, and carry no methods.
+ * The calendar feature's view models and the props contracts between its
+ * parts. Nothing here is a database row; everything is serialisable.
  */
 
-/* -------------------------------------------------------------------------- */
-/* View models                                                                */
-/* -------------------------------------------------------------------------- */
-
-/**
- * The context a work block needs beyond its own row: what its task is called,
- * whether the task is already done, and — the part that cannot be derived from
- * one row — whether this is the last block of the task still outstanding.
- *
- * Domain Rule 13 labels the block's completion control by what it will do:
- * the last incomplete block of a task reads "Complete task" and completes both;
- * any other block reads "Done with this block". That decision needs to see the
- * task's other blocks, so the server makes it and sends the answer.
- */
+/** What a work block needs beyond its own row. The server decides `completesTask`, which needs the task's other blocks. */
 export interface WorkBlockContext {
   taskId: Uuid;
   taskTitle: string;
   taskCompletedAt: Instant | null;
-  /** The task's deadline, so the planner can see a block scheduled after it (Phase 5). */
+  /** The task's deadline, so the planner can flag a block scheduled after it. */
   taskDueDate: LocalDate | null;
-  /** The task's estimate, for live coverage while a schedule is in flight (Phase 5). */
+  /** The task's estimate, for live coverage while a schedule is in flight. */
   taskEstimatedMinutes: Minutes | null;
   /** Total work blocks the task owns, across all weeks. */
   blockCount: number;
@@ -66,14 +44,9 @@ export interface OccurrenceRef {
 }
 
 /**
- * One thing on the board, resolved for rendering.
- *
- * `id` is the React key and the identity the optimistic layer works in: a
- * stored block's UUID, or `${seriesId}:${occurrenceDate}` for an occurrence
- * that has no row of its own yet (docs/ARCHITECTURE.md §11). `blockId` is the
- * row a mutation targets, and is null for exactly those virtual occurrences —
- * editing one writes an override, which is a different action from editing a
- * block, so the difference is worth carrying in the type.
+ * One thing on the board. `id` is the React key: a block UUID, or
+ * `${seriesId}:${occurrenceDate}` for a virtual occurrence. `blockId` is the
+ * row a mutation targets, null for exactly those virtual occurrences.
  */
 export interface CalendarItem {
   id: string;
@@ -85,12 +58,8 @@ export interface CalendarItem {
   endAt: Instant;
   allDay: boolean;
   /**
-   * The colour stored on the row, or null when the block inherits.
-   *
-   * Kept beside the resolved `color` because the editor has to round-trip
-   * inheritance: preselecting the resolved colour and saving it would write an
-   * explicit value onto a block that was following its project, and the block
-   * would silently stop tracking it.
+   * The colour stored on the row, or null when the block inherits. Kept beside
+   * `color` so the editor round-trips inheritance instead of writing it explicit.
    */
   ownColor: ProjectColor | null;
   /** Resolved for display: `ownColor`, else the project's, else the kind default. */
@@ -102,30 +71,16 @@ export interface CalendarItem {
   /** Present exactly when `kind === "habit"`. */
   habitId: Uuid | null;
   /**
-   * For a habit block: whether its own date is inside the window
-   * `record_habit_completion` accepts — yesterday, today or tomorrow in the
-   * profile timezone (Phase 6).
-   *
-   * The server decides it, for the same reason it decides `completesTask`: the
-   * control has to promise only what the database will do. A habit block older
-   * than yesterday still renders and can still be un-completed; it simply
-   * offers no way to record a completion, rather than offering one that must
-   * fail (Domain Rule 13's labelling principle).
-   *
-   * Always false for work blocks and events.
+   * For a habit block: whether its date is inside the window
+   * `record_habit_completion` accepts (yesterday, today, tomorrow in the
+   * profile timezone). Server-decided. Always false for other kinds.
    */
   habitRecordable: boolean;
 }
 
 /**
- * A task in the planning drawer: a drag source, a keyboard scheduling target,
- * and what Find Time places.
- *
- * `scheduledOutsideMinutes` is the coverage the displayed range cannot see.
- * The range's own work blocks are `CalendarItem`s on the client, so the drawer
- * sums those live and adds this number — which is what lets the coverage on a
- * row move in the same frame as the drop that changed it, and never counts an
- * optimistic block twice.
+ * A task in the planning drawer. The drawer sums the range's own work blocks
+ * live and adds `scheduledOutsideMinutes`, so a drop moves coverage in the same frame.
  */
 export interface PlanTask {
   id: Uuid;
@@ -140,18 +95,8 @@ export interface PlanTask {
 }
 
 /**
- * A habit in the planning drawer.
- *
- * It carries the habit itself rather than pre-rendered strings, so the drawer's
- * row formats it with the habits feature's own `copy.ts` and the two surfaces
- * cannot describe the same target differently.
- *
- * Habits are not drag sources. A task is dropped onto a slot the user chooses;
- * a habit's schedule already says which days it wants, so its route into the
- * week is "Add to week" — the same action the habits page offers, generating
- * the same blocks (specs/06-habits.md, docs/ARCHITECTURE.md §11). The keyboard
- * route and the pointer route are therefore the same button, which is Domain
- * Rule 10 satisfied by construction.
+ * A habit in the planning drawer. Not a drag source: its schedule already says
+ * which days it wants, so its route into the week is "Add to week".
  */
 export interface PlanningHabit {
   habit: Habit;
@@ -161,7 +106,7 @@ export interface PlanningHabit {
   reservedDates: readonly LocalDate[];
 }
 
-/** A weekly goal, read-only until Phase 8 owns its progress and claiming. */
+/** A weekly goal, read-only in the drawer. */
 export interface PlanningGoal {
   id: Uuid;
   title: string | null;
@@ -171,22 +116,9 @@ export interface PlanningGoal {
 }
 
 /**
- * The planning drawer's sections and the settings its maths runs on
- * (specs/05-week-planning.md).
- *
- * A task appears in exactly one section, decided on the server in this order:
- * OVERDUE (open, due before today), then DUE THIS WEEK (open, due inside the
- * displayed range), then UNSCHEDULED (open, owning no work block anywhere).
- * One row per task is what the user expects of a 320px column, and it is also
- * what dnd-kit requires — `taskDraggableId` is keyed by the task alone, so a
- * task in two sections would register the same draggable id twice.
- *
- * HABITS sits between UNSCHEDULED and WEEKLY GOALS (Phase 6). Its rows are not
- * draggable, for the reason given on `PlanningHabit`.
- *
- * `workingHours` and `focusWindows` come from the profile with the rest of the
- * read, so the client can run capacity, conflict and Find Time maths over the
- * optimistic week without a second request.
+ * The planning drawer's sections. A task appears in exactly one, decided on
+ * the server in order OVERDUE, DUE THIS WEEK, UNSCHEDULED — `taskDraggableId`
+ * is keyed by task alone, so a duplicate would register the same draggable twice.
  */
 export interface PlanningData {
   overdue: readonly PlanTask[];
@@ -204,21 +136,15 @@ export interface CalendarWeekData {
   rangeStart: LocalDate;
   /** Seven dates in week view, one in day view. */
   days: readonly LocalDate[];
-  /** "Today" in the profile timezone, computed once per request on the server (§10). */
+  /** "Today" in the profile timezone, computed once per request on the server. */
   today: LocalDate;
   items: readonly CalendarItem[];
   plan: PlanningData;
 }
 
-/* -------------------------------------------------------------------------- */
-/* Geometry projection                                                        */
-/* -------------------------------------------------------------------------- */
-
 /**
  * One item's slice of one day column, in wall-clock minutes from that day's
- * midnight. A block from 23:30 Monday to 00:30 Tuesday is two segments, so
- * both columns show it and neither has to reason about the other
- * (Domain Rule 4).
+ * midnight. A midnight-crossing block is two segments.
  */
 export interface ItemSegment {
   /** `${item.id}:${date}` — unique across the grid. */
@@ -246,10 +172,6 @@ export interface CalendarDay {
   isToday: boolean;
 }
 
-/* -------------------------------------------------------------------------- */
-/* Drafts — what a create or edit interaction is holding                      */
-/* -------------------------------------------------------------------------- */
-
 /** A wall-clock span on one day. The unit every interaction produces. */
 export interface DaySpan {
   date: LocalDate;
@@ -257,18 +179,8 @@ export interface DaySpan {
   endMinutes: Minutes;
 }
 
-/**
- * The block editor is one component in two modes. A create draft carries the
- * span the user selected and no id; an edit draft carries the item. Keeping
- * them one union means the form, its validation and its keyboard handling are
- * written once.
- */
 export type BlockDraft =
   { mode: "create"; span: DaySpan } | { mode: "edit"; item: CalendarItem; span: DaySpan };
-
-/* -------------------------------------------------------------------------- */
-/* Props contracts between the feature's parts                                */
-/* -------------------------------------------------------------------------- */
 
 /** The settings the whole surface resolves dates and geometry against. */
 export interface CalendarSettings {
@@ -278,10 +190,7 @@ export interface CalendarSettings {
   spec: GridSpec;
 }
 
-/**
- * What the grid can ask the board to do. The grid never mutates and never
- * knows about server actions; it reports intent and the board decides.
- */
+/** What the grid can ask the board to do; the grid reports intent and never mutates. */
 export interface CalendarCallbacks {
   /** Empty space was clicked or a keyboard cursor committed: open a create draft. */
   onCreateAt: (span: DaySpan) => void;
@@ -291,11 +200,10 @@ export interface CalendarCallbacks {
   onToggleComplete: (item: CalendarItem) => void;
   /** Delete, from the block's keyboard shortcut or its editor. */
   onDelete: (item: CalendarItem) => void;
-  /** A committed move or resize, in wall-clock minutes on a day. */
   /**
-   * A block was moved or resized. A keyboard commit passes the sentence to say
-   * once the write has landed; the pointer path passes none, because dnd-kit's
-   * own live region already speaks the drop.
+   * A committed move or resize. A keyboard commit passes the announcement to
+   * make once the write lands; the pointer path passes none, because dnd-kit's
+   * live region already speaks the drop.
    */
   onReschedule: (item: CalendarItem, span: DaySpan, announcement?: string) => void;
   /** A task from the Plan panel was dropped or scheduled onto a span. */
@@ -309,10 +217,7 @@ export interface WeekGridProps {
   segmentsByDate: ReadonlyMap<string, readonly ItemSegment[]>;
   /** All-day items by `LocalDate`, from `buildAllDay`. They are not in the time grid. */
   allDayByDate: ReadonlyMap<string, readonly CalendarItem[]>;
-  /**
-   * Where the grid opens, from `initialScrollMinutes`. The scroll container is
-   * inside the grid, so nothing above it can set the offset.
-   */
+  /** Where the grid opens, from `initialScrollMinutes`. */
   scrollToMinutes: Minutes;
   /** The current instant, or null before hydration — drives the now-line only. */
   now: Instant | null;
@@ -323,12 +228,7 @@ export interface WeekGridProps {
   pendingItemIds: ReadonlySet<string>;
 }
 
-/**
- * The provisional span of an interaction in progress: rendered as a
- * placeholder in the grid so the user sees where the block will land, and
- * never written until the interaction commits (docs/ARCHITECTURE.md §9 step 4 —
- * because mutation happens only on commit, Escape is always a no-op on data).
- */
+/** The provisional span of an interaction in progress; rendered as a placeholder, never written until commit. */
 export interface CandidateSpan extends DaySpan {
   /** The item being moved or resized; null while creating or dragging a task in. */
   itemId: string | null;
@@ -356,27 +256,17 @@ export interface BlockEditorValues {
   color: ProjectColor | null;
 }
 
-/* -------------------------------------------------------------------------- */
-/* The grid ↔ interaction seam                                                */
-/* -------------------------------------------------------------------------- */
-
-/**
- * The week grid owns what the calendar *looks* like; the interaction layer owns
- * what it *does*. They meet at exactly two components, declared here so the
- * two can be built against one another without either importing the other's
- * internals.
- *
- * `DayColumn` is the droppable, the drag-to-create surface and the home of the
- * keyboard grid cursor. `BlockShell` is the draggable, the resize handles, the
- * focus target and the keyboard move/resize modes. Both take their geometry as
- * plain numbers from the grid, so neither does date maths.
+/*
+ * The grid ↔ interaction seam. `DayColumn` is the droppable, drag-to-create
+ * surface and keyboard cursor home; `BlockShell` is the draggable, resize
+ * handles, focus target and keyboard move/resize modes. Both take geometry as
+ * plain numbers, so neither does date maths.
  */
 
 export interface DayColumnProps {
   date: LocalDate;
   settings: CalendarSettings;
   isToday: boolean;
-  /** True in day view, where the single column is not a week's worth of one day. */
   className?: string;
   /** The hour lines and the blocks, positioned by the grid. */
   children: React.ReactNode;

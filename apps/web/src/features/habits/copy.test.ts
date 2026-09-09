@@ -63,8 +63,7 @@ describe("describeTarget", () => {
   });
 
   it("appends the session length without merging it into the target", () => {
-    // The target and the time reserved for it are different facts, and an
-    // amount habit has both (Domain Rule 3's distinction, applied to habits).
+    // The target and the time reserved for it are different facts; an amount habit has both.
     expect(
       describeTarget(
         habitOf({
@@ -136,8 +135,7 @@ describe("rates", () => {
   });
 
   it("renders no data as an em dash, never as 0%", () => {
-    // A habit two days old has not failed a month; it has not had one
-    // (Domain Rules 7 and 8).
+    // A habit two days old has not failed a month; it has not had one.
     expect(formatRate(rate(0, 0))).toBe("—");
     expect(describeRate(rate(0, 0), "week")).toBe("Not enough history yet");
   });
@@ -154,18 +152,7 @@ describe("rates", () => {
   });
 });
 
-/* -------------------------------------------------------------------------- */
-/* Domain Rule 7 — no punitive copy anywhere on this surface                   */
-/* -------------------------------------------------------------------------- */
-
-/**
- * The words the product may not say about a person or their week.
- *
- * This is the enforcement point. Every string the habits surface can render
- * lives in `copy.ts` precisely so that one test can read all of them; a phrase
- * invented at a call site is a phrase this test cannot see, which is why the
- * components import from here rather than writing their own.
- */
+/** The words the product may not say about a person or their week; every rendered string lives in `copy.ts` so this test sees all of them. */
 const FORBIDDEN =
   /\b(lazy|failed?|failure|missed|behind|unproductive|bad|poor|broken|slacking|excuse|guilt|shame|streak lost|you lost|don't break|do not break)\b/i;
 

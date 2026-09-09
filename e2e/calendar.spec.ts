@@ -13,7 +13,7 @@ import {
 
 const TZ = SEED_USERS.owner.timezone;
 
-/** Workflows 4, 5, 6, 7 and 18 — schedule, move, resize, settle, plan next week. */
+/** Schedule, move, resize, settle, plan next week. */
 test.describe("Calendar", () => {
   test.beforeEach(async ({ page }) => {
     await signIn(page);
@@ -26,8 +26,7 @@ test.describe("Calendar", () => {
 
     const title = uniqueName("cal");
     const today = localDay(TZ);
-    // Arrow keys stop at the edge of the displayed week (Monday–Sunday for this
-    // profile), so on a Sunday the block moves left instead of right.
+    // Arrow keys stop at the edge of the displayed week, so on a Sunday the block moves left.
     const direction = today.weekday === 0 ? "ArrowLeft" : "ArrowRight";
     const target = localDay(TZ, today.weekday === 0 ? -1 : 1);
 
@@ -94,8 +93,7 @@ test.describe("Calendar", () => {
       await completeFromList(page, title);
 
       await page.goto("/calendar");
-      // Domain Rule 13: an unexecuted block of a completed task stays on the
-      // board and reads as settled, not as outstanding work.
+      // An unexecuted block of a completed task stays on the board and reads as settled.
       await expect(block).toHaveAccessibleName(/task completed$/);
     });
   });
@@ -113,7 +111,6 @@ test.describe("Calendar", () => {
       page.getByRole("group", { name: new RegExp(`^${nextMonday.long}`) }),
     ).toBeVisible();
 
-    // The panel is open by default; hide it and bring it back through the toggle.
     // The header toggle is the pressed one; the panel's own close button shares its name.
     const panelTitle = page.getByText("Plan my week", { exact: true });
     await expect(panelTitle).toBeVisible();

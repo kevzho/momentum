@@ -1,31 +1,7 @@
 /**
- * The level curve.
- *
- * ```
- * cumulative XP to reach level L = floor(base * (L - 1) ^ exponent)
- *                                = floor(100  * (L - 1) ^ 1.5)
- * ```
- *
- * **Why this shape.** The pacing specs/08-gamification.md asks for is "1–5
- * quick, 5–20 moderate, 20+ progressively harder — not exponentially absurd; a
- * level 40 user should still level up sometimes." An exponential curve fails
- * the last clause by construction: whatever base you pick, the cost per level
- * eventually outruns any amount of real work, and the progression quietly stops
- * meaning anything. A `L ^ 1.5` curve grows the *per-level* cost with the
- * square root of the level instead — 100 XP for level 2, about 300 for level
- * 10, about 940 for level 40 — so a committed user keeps arriving somewhere
- * without the early levels being trivial.
- *
- * `docs/ARCHITECTURE.md` §16 carries the reasoning and the first thirty
- * thresholds.
- *
- * **This module is a mirror, not the source.** `level_for_xp()` and
- * `xp_for_level()` in `20260907140000_gamification_functions.sql` compute the
- * level that is stored on the profile; nothing here is ever written back
- * (Domain Rule 6). What lives here is the same curve, where the interface can
- * ask "how far into this level am I" without a round trip, and where it can be
- * tested exhaustively. `packages/db/src/gamification-rules.test.ts` reads the
- * migration as text and fails if the two disagree.
+ * The level curve: cumulative XP to reach level L = floor(100 * (L - 1) ^ 1.5).
+ * A mirror of `level_for_xp()` / `xp_for_level()` in the gamification
+ * functions migration, never the source; the numbers must match.
  */
 
 export const LEVEL_CURVE = {
@@ -44,13 +20,7 @@ export function xpForLevel(level: number): number {
   return Math.floor(LEVEL_CURVE.base * Math.pow(level - 1, LEVEL_CURVE.exponentPct / 100));
 }
 
-/**
- * The level a total buys.
- *
- * The analytic inverse, then corrected against the thresholds themselves —
- * floating point must never decide a level. A user one XP short of level 12 has
- * to be shown level 11, however `Math.pow` rounds.
- */
+/** The level a total buys: the analytic inverse, corrected against the thresholds so floating point never decides a level. */
 export function levelForXp(xp: number): number {
   if (!Number.isFinite(xp) || xp <= 0) return FIRST_LEVEL;
 
@@ -101,11 +71,7 @@ export function levelProgress(xp: number): LevelProgress {
 /** How many thresholds the documentation and the tests tabulate. */
 export const DOCUMENTED_LEVELS = 30;
 
-/**
- * `LEVEL_THRESHOLDS[n]` is the XP needed to reach level `n + 1`, for the first
- * `DOCUMENTED_LEVELS` levels. Derived from `xpForLevel` rather than written
- * out, so the table in `docs/ARCHITECTURE.md` and the curve cannot disagree.
- */
+/** `LEVEL_THRESHOLDS[n]` is the XP needed to reach level `n + 1`, for the first `DOCUMENTED_LEVELS` levels. */
 export const LEVEL_THRESHOLDS: readonly number[] = Array.from(
   { length: DOCUMENTED_LEVELS },
   (_, index) => xpForLevel(index + 1),

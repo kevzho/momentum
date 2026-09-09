@@ -5,17 +5,9 @@ import type { ActionResult } from "@/lib/actions/result";
 import type { QuickAddDefaults } from "@/features/tasks/components/quick-add";
 import type { ProjectSummaryWithCount, TaskSummary } from "@/features/tasks/types";
 
-/**
- * The command registry's vocabulary.
- *
- * Everything the palette can do is one of these declarations, and the palette
- * itself knows nothing about tasks, habits or focus sessions — it renders a
- * list and calls `run`. A feature adds a command by writing one object in its
- * own `commands.ts`; no file under `features/palette/components` changes
- * (specs/11-command-palette.md).
- */
+// The palette renders a list and calls `run`; features declare commands in
+// their own `commands.ts`.
 
-/** The three headings the spec names, plus the data results the palette finds. */
 export const COMMAND_GROUPS = ["navigate", "create", "action"] as const;
 export type CommandGroup = (typeof COMMAND_GROUPS)[number];
 
@@ -25,12 +17,7 @@ export const GROUP_HEADINGS: Record<CommandGroup, string> = {
   action: "Actions",
 };
 
-/**
- * What a command may do when it runs. Deliberately small: a command declares
- * intent, and the palette owns the mechanics of navigating, closing, focusing
- * and reporting — so thirty commands cannot end up with thirty ways to report
- * a failed write.
- */
+/** What a command may do when it runs; the palette owns the mechanics. */
 export interface CommandContext {
   /** Follow a typed route and close the palette. */
   navigate: (href: Route) => void;
@@ -40,10 +27,7 @@ export interface CommandContext {
   enter: (mode: PaletteMode) => void;
   close: () => void;
   announce: (message: string) => void;
-  /**
-   * Run a server action from a command: one transition, one toast on failure
-   * with a working Retry, one announcement on success (Domain Rules 10, 11).
-   */
+  /** Run a server action: one transition, a toast with Retry on failure, a toast on success. */
   perform: (work: PaletteWork) => void;
 }
 
@@ -68,13 +52,7 @@ export interface PaletteCommand {
   run: (context: CommandContext) => void;
 }
 
-/**
- * A picker over the user's own data, entered by a command.
- *
- * `Complete task` and `Schedule task` are the same list with different
- * consequences, so the consequence — and nothing else — is what the feature
- * declares.
- */
+/** A picker over the user's own data, entered by a command. */
 export type PaletteMode = RootMode | TaskPickerMode | ProjectPickerMode;
 
 export interface RootMode {
@@ -102,10 +80,7 @@ export interface ProjectPickerMode extends PickerMode {
 
 export const ROOT_MODE: RootMode = { kind: "root" };
 
-/**
- * A feature's contribution to the registry: its commands, declared where the
- * feature lives rather than in a file the palette owns.
- */
+/** A feature's contribution to the registry. */
 export interface CommandSource {
   feature: string;
   commands: readonly PaletteCommand[];

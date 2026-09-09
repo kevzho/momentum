@@ -20,7 +20,7 @@ export interface Profile {
   /** Week start preference; default Monday (`1`). A setting, never a constant (Domain Rule 4). */
   weekStart: Weekday;
   workingHours: WorkingHours;
-  /** Preferred deep-focus windows used by Find Time ranking (Phase 5). */
+  /** Preferred deep-focus windows used by Find Time ranking. */
   focusWindows: TimeWindow[];
   /** Calendar snapping increment; default 15. */
   snapMinutes: SnapMinutes;

@@ -8,16 +8,7 @@ function block(startAt: string, endAt: string): { startAt: Instant; endAt: Insta
   return { startAt: instant(startAt), endAt: instant(endAt) };
 }
 
-/**
- * The spec's own worked example (specs/04-task-manager.md, Domain Rule 2):
- *
- *   Essay due Friday, estimated 135m
- *     Mon 45m · Tue 60m · Thu 30m
- *
- * Three blocks on three days, none of them the due date. A model that stored
- * one `scheduled_start` per task could not express this list at all, so this
- * fixture is the regression test for the data model as much as for the maths.
- */
+// Essay due Friday, estimated 135m: Mon 45m · Tue 60m · Thu 30m.
 const ESSAY_BLOCKS = [
   block("2026-09-07T16:00:00.000Z", "2026-09-07T16:45:00.000Z"), // Mon, 45m
   block("2026-09-08T17:00:00.000Z", "2026-09-08T18:00:00.000Z"), // Tue, 60m
@@ -34,8 +25,7 @@ describe("scheduledMinutesOf", () => {
   });
 
   it("sums elapsed time, so a DST day is not 24 hours of wall clock", () => {
-    // 2026-11-01, America/New_York falls back: 01:00–02:00 local happens twice,
-    // so a block drawn 01:00–02:00 is 120 minutes of the user's actual week.
+    // 2026-11-01, America/New_York falls back: 01:00–02:00 local happens twice.
     expect(
       scheduledMinutesOf([block("2026-11-01T05:00:00.000Z", "2026-11-01T07:00:00.000Z")]),
     ).toBe(120);

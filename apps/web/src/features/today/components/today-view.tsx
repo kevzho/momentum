@@ -30,24 +30,10 @@ import { useNow } from "@/lib/time/use-now";
 import { useUserSettings } from "@/lib/time/user-settings";
 
 /**
- * The Today page: one client island over server-resolved data.
- *
- * It fetches nothing and does no date arithmetic — `page.today`, every instant
- * and every number arrived already resolved in the profile timezone
- * (docs/ARCHITECTURE.md §5). The only clock it reads is `useNow()`, and only to
- * decide what is past, current and next; before it ticks, and on the server,
- * the same functions run against `serverNow`, so the markup React hydrates is
- * the markup it renders (docs/ARCHITECTURE.md §10).
- *
- * `useMidnightRollover` re-renders the route at the user's own local midnight,
- * so a tab left open overnight becomes tomorrow's page rather than yesterday's
- * — and on a DST transition it waits 23 or 25 hours, because
- * `nextLocalMidnight` resolves in the profile timezone (Domain Rule 4).
- *
- * Four mutations run through one optimistic overlay
- * (`useTodayMutations`). Claiming a quest deliberately does not: a claim is a
- * server recomputation from four source tables, and an optimistic "claimed"
- * would be the client asserting a reward (Domain Rule 6).
+ * The Today page island. The only clock it reads is `useNow()`, and only to
+ * decide what is past, current and next; before it ticks the same functions run
+ * against `serverNow`, so hydration matches. Claiming a quest is deliberately
+ * not optimistic: an optimistic "claimed" would be the client asserting a reward.
  */
 export function TodayView({ data }: { data: TodayPageData }) {
   const announce = useAnnounce();
@@ -55,9 +41,7 @@ export function TodayView({ data }: { data: TodayPageData }) {
   useMidnightRollover(data.timezone);
 
   const tick = useNow();
-  // Null until the store has been subscribed to, which is the server render and
-  // React's hydration pass. Falling back to the instant the server rendered at
-  // keeps both sides identical and still correct to the minute.
+  // Null on the server render and through hydration; `serverNow` keeps both sides identical.
   const now = tick ?? data.serverNow;
 
   const { state, pendingIds, mutate } = useTodayMutations(data);
@@ -86,27 +70,11 @@ export function TodayView({ data }: { data: TodayPageData }) {
     [mutate],
   );
 
-  /**
-   * Claiming a quest.
-   *
-   * Not optimistic, and not in the overlay: the client sends an assignment id
-   * and the database recomputes the work from `tasks`, `focus_sessions`,
-   * `habit_completions` and `calendar_blocks` before it writes anything. A
-   * failure surfaces with the server's own message and a working Retry, which
-   * is what Domain Rule 11 asks of a mutation without an overlay.
-   *
-   * "Failure" is a returned `{ ok: false }` *or* a rejected call — offline, a
-   * 5xx, an action id gone stale after a deploy. Both take the same path, the
-   * one `useOptimisticAction` takes for the four mutations beside this one:
-   * without the catch, React re-throws the rejection out of the transition at
-   * the next render and the route's error boundary replaces the whole page
-   * over one failed press (Domain Rules §19, "a rejected action is a failed
-   * action"). `unstable_rethrow` first, because `redirect()` and `notFound()`
-   * travel as thrown values and are control flow, not failure.
-   */
+  // A rejected call is a failure like `{ ok: false }`: without the catch React
+  // re-throws it out of the transition and the error boundary blanks the page.
+  // `unstable_rethrow` first, because `redirect()` and `notFound()` travel as
+  // thrown values. Named so the failure toast's Retry can call it again.
   const claim = React.useCallback(
-    // Named, so the failure toast's Retry can call it again — the same shape
-    // `useOptimisticAction`'s own `run` uses for the same reason.
     function claim(assignmentId: string) {
       setClaimingId(assignmentId);
       startClaim(async () => {
@@ -127,8 +95,7 @@ export function TodayView({ data }: { data: TodayPageData }) {
         setClaimingId(null);
         if (!result.ok) {
           toast.error(result.error.message, {
-            // A validation refusal cannot be retried into success; every other
-            // failure can, because a claim is idempotent.
+            // A validation refusal cannot be retried into success; a claim is otherwise idempotent.
             action:
               result.error.code === "validation"
                 ? undefined
@@ -147,12 +114,8 @@ export function TodayView({ data }: { data: TodayPageData }) {
           title={greeting(state.dayPart, state.displayName)}
           description={longDate(state.today)}
         />
-        {/* Below `md` the header's own text is visually hidden and the top bar
-            shows the section name instead (docs/DESIGN_SYSTEM.md — one heading
-            per page). The greeting and the date are content rather than chrome
-            on this page, so they are repeated visually there and marked
-            `aria-hidden`, because the `h1` above is still the accessible
-            heading — the same arrangement `TopBar` uses for the same reason. */}
+        {/* Below `md` the header's text is visually hidden, so the greeting is
+            repeated here `aria-hidden`; the `h1` above stays the accessible heading. */}
         <div aria-hidden="true" className="flex flex-col gap-0.5 md:hidden">
           <p className="text-lg font-semibold tracking-tight">
             {greeting(state.dayPart, state.displayName)}
@@ -164,8 +127,7 @@ export function TodayView({ data }: { data: TodayPageData }) {
 
       <AtRiskPanel risks={risks} />
 
-      {/* Next Up first at every width. It is the answer the page exists to
-          give, and on a phone between classes it is often the only one read. */}
+      {/* Next Up first at every width. */}
       <NextUpPanel
         nextUp={nextUp}
         timezone={state.timezone}

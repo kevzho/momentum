@@ -14,12 +14,8 @@ const THEMES = [
 
 type ThemeValue = (typeof THEMES)[number]["value"];
 
-/**
- * Theme choice as a three-way segmented control: light, dark, and following the
- * system. Until the provider has read the stored choice, `theme` is undefined;
- * rendering "system" then would be a lie, so the control renders nothing
- * selected rather than the wrong thing.
- */
+// Until the provider has read the stored choice, `theme` is undefined; the
+// control renders nothing selected rather than the wrong thing.
 export function ThemeToggle({ className }: { className?: string }) {
   const { theme, setTheme } = useTheme();
   const hydrated = useIsHydrated();

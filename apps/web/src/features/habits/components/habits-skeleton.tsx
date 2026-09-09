@@ -9,9 +9,7 @@ export function HabitsSkeleton() {
       <PageHeaderSkeleton />
       <div className="flex flex-col divide-y">
         {Array.from({ length: 4 }, (_, index) => (
-          // The same shape as `HabitCard`, including the wrap below `sm`: the
-          // week strip takes its own line there, so the skeleton and the row
-          // it stands in for are the same height at every width.
+          // Same shape as `HabitCard`, including the wrap below `sm`, so heights match at every width.
           <div key={index} className="flex items-center gap-x-3 gap-y-1 px-2 py-2 max-sm:flex-wrap">
             <div className="min-w-0 flex-1">
               <Skeleton className="h-5 w-40" />

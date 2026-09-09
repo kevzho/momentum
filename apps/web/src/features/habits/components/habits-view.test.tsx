@@ -8,15 +8,6 @@ import type { Habit, HabitCompletion, LocalDate } from "@momentum/core/types";
 import { HABITS_COPY } from "@/features/habits/copy";
 import type { HabitView, HabitsPageData } from "@/features/habits/types";
 
-/**
- * The habits page, end to end from the island down.
- *
- * Two things are worth testing here that no pure function can answer: which
- * days the page lets a user record (the control has to be offered exactly where
- * the database will accept it), and that nothing rendered on this surface
- * characterises the user (Domain Rule 7).
- */
-
 const {
   setHabitCompletionMock,
   addHabitToWeekMock,
@@ -35,10 +26,7 @@ const {
   replaceMock: vi.fn(),
 }));
 
-/*
- * The page drops the palette's `?new=habit` from the URL once it has opened the
- * form, which needs a router; there is none in jsdom.
- */
+// The page calls `router.replace` after opening the palette's form; jsdom has no router.
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: replaceMock, refresh: vi.fn() }),
 }));
@@ -168,8 +156,7 @@ describe("HabitsView", () => {
   it("offers a control only on the three days the database will record", () => {
     render(<HabitsView data={pageOf([viewOf(habitOf())])} />);
 
-    // Yesterday, today and tomorrow, and nothing else — the same window
-    // `record_habit_completion` enforces.
+    // Yesterday, today and tomorrow: the window `record_habit_completion` enforces.
     const recordable = screen
       .getAllByRole("button")
       .map((button) => button.getAttribute("title") ?? "")
@@ -270,8 +257,7 @@ describe("HabitsView", () => {
   });
 
   it("refuses a second press while the first is still in flight", async () => {
-    // A quick double press used to read the optimistic "done" and un-record
-    // the day the first press had just recorded (Domain Rule 11).
+    // A quick double press must not read the optimistic "done" and un-record the day.
     let release: () => void = () => {};
     setHabitCompletionMock.mockImplementationOnce(
       () =>
@@ -311,9 +297,7 @@ describe("HabitsView", () => {
   });
 
   it("says the week was already reserved rather than claiming blocks it did not create", async () => {
-    // Pressing it twice creates nothing the second time, because the plan is
-    // differenced against the blocks that already exist. The message has to
-    // match, or the toast contradicts the calendar.
+    // The second press creates nothing, and the toast must say so.
     addHabitToWeekMock.mockResolvedValueOnce({ ok: true as const, data: [] });
     render(<HabitsView data={pageOf([viewOf(habitOf())])} />);
 
@@ -361,9 +345,8 @@ describe("HabitsView", () => {
 
 describe("the habit form", () => {
   it("mints the new habit's id once per opened form, so a retry cannot duplicate it", async () => {
-    // Domain Rule 17 / docs/DOMAIN_RULES.md §19: the id identifies the row,
-    // not the attempt. A lost response and a second press must send the same
-    // one, or `createHabit`'s unique-violation-as-success path never fires.
+    // The id identifies the row, not the attempt: a retry must send the same one
+    // or `createHabit`'s unique-violation-as-success path never fires.
     createHabitMock.mockResolvedValueOnce({
       ok: false as const,
       error: { code: "unavailable" as const, message: "Could not reach the server." },
@@ -421,10 +404,6 @@ describe("the habit form", () => {
   });
 });
 
-/**
- * Deleting cascades to every recorded day and every block, and there is no
- * undo — so it asks first, and it says what goes.
- */
 describe("deleting a habit", () => {
   it("asks first, with Cancel as the default, and deletes nothing until confirmed", async () => {
     render(<HabitsView data={pageOf([viewOf(habitOf())])} />);
@@ -485,11 +464,6 @@ describe("deleting a habit", () => {
   });
 });
 
-/**
- * The command palette's "Add habit" arrives as `?new=habit`, for the same
- * reason the calendar's "Add event" does: the form belongs to the page that
- * owns the data it writes.
- */
 describe("the palette's Add habit intent", () => {
   it("opens the form once and drops the intent from the URL", async () => {
     render(<HabitsView data={pageOf([viewOf(habitOf())])} newHabit />);

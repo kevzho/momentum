@@ -1,11 +1,7 @@
 /**
- * The one shape every server action returns.
- *
- * Actions never throw for an expected failure: a thrown error is a bug and
- * belongs to an error boundary. Everything a user can legitimately cause —
- * invalid input, a row that is not theirs, a conflicting write, an offline
- * device — comes back as `{ ok: false }` with a code the UI can branch on and a
- * message it can show verbatim (docs/ARCHITECTURE.md §6).
+ * The one shape every server action returns. Actions never throw for an
+ * expected failure: everything a user can legitimately cause comes back as
+ * `{ ok: false }` with a code the UI can branch on and a message it can show verbatim.
  */
 
 export type ActionErrorCode =
@@ -14,7 +10,7 @@ export type ActionErrorCode =
 export interface ActionError {
   code: ActionErrorCode;
   message: string;
-  /** Keyed by form field name, ready to render next to the input that failed. */
+  /** Keyed by form field name. */
   fieldErrors?: Record<string, string[]>;
 }
 
@@ -33,14 +29,9 @@ export function failure(
 }
 
 /**
- * Flattens a zod error into the `fieldErrors` shape forms expect.
- *
- * The message is the first thing zod said, whichever field it said it about.
- * A surface that owns the form renders `fieldErrors` next to its inputs; every
- * other surface — a toast after a sheet's commit, a dialog with one field —
- * shows `message` alone, and "check the highlighted fields" with nothing
- * highlighted told those users nothing. The generic sentence is kept only for
- * the case with no message at all.
+ * Flattens a zod error into `fieldErrors`. `message` is the first thing zod
+ * said, whichever field it was about: surfaces without highlighted inputs show
+ * it alone, and "check the highlighted fields" told them nothing.
  */
 export function validationError(issues: readonly StandardIssue[]): ActionResult<never> {
   const fieldErrors: Record<string, string[]> = {};

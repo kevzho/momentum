@@ -8,21 +8,10 @@ import type { CompletionPatch, HabitView, HabitsPageData } from "@/features/habi
 export type PatchableHabit = Pick<Habit, "id" | "userId" | "frequencyType">;
 
 /**
- * The optimistic overlay for recording and un-recording a day.
- *
- * It does not patch the *displayed* numbers; it patches the *completions* and
- * then re-runs the same `@momentum/core/habits` functions the server ran
- * (docs/ARCHITECTURE.md §8). That is the point: the week strip, the progress
- * line, consistency, the two rates and both streaks all move together and stay
- * consistent with one another, because they are derived from one changed fact
- * rather than nudged individually. A reducer that incremented a percentage
- * would be a second implementation of the maths, and the two would disagree the
- * first time a week boundary or an amount habit was involved.
- *
- * It is pure, and the server's answer replaces it wholesale on reconcile — so
- * the only thing it has to get right is what the server will conclude, not how
- * to undo itself. On failure the transition settles against unchanged props and
- * React discards it (Domain Rule 11).
+ * Optimistic overlay for recording or un-recording a day. It patches the
+ * completions and re-runs the same `@momentum/core/habits` functions the server
+ * ran, so every derived number moves together; never nudge displayed numbers
+ * individually. Pure; the server's answer replaces it on reconcile.
  */
 export function applyCompletion(page: HabitsPageData, patch: CompletionPatch): HabitsPageData {
   const patchView = (view: HabitView): HabitView =>
@@ -60,24 +49,11 @@ function recompute(view: HabitView, patch: CompletionPatch, page: HabitsPageData
 }
 
 /**
- * The one row for `(habit, date)` — added, added to, or removed.
- *
- * This mirrors `record_habit_completion` exactly, because an overlay's job is
- * to predict what that function will write (Domain Rule 14):
- *
- * - a boolean habit's second completion on a day is a no-op;
- * - an amount habit's accumulates;
- * - removing a day deletes the row rather than decrementing it, which is what
- *   `remove_habit_completion` does.
- *
- * Exported because `/today` records the same fact through the same action and
- * must predict the same row. Two reducers guessing separately at one database
- * function is exactly the duplication that ends with two surfaces showing
- * different numbers for the same day.
- *
- * The optimistic row's `id` and `completedAt` are placeholders: nothing reads
- * them, and the server's real values arrive on reconcile. `completedAt` uses
- * the client clock, which docs/ARCHITECTURE.md §8 permits for display only.
+ * The one row for `(habit, date)` — added, added to, or removed — mirroring
+ * `record_habit_completion` / `remove_habit_completion`: a boolean habit's
+ * second completion on a day is a no-op, an amount habit's accumulates, and
+ * removal deletes the row. Exported because `/today` must predict the same row.
+ * The optimistic `id` and `completedAt` are placeholders replaced on reconcile.
  */
 export function patchCompletions(
   history: readonly HabitCompletion[],

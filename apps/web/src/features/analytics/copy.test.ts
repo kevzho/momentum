@@ -8,28 +8,14 @@ import { localDate } from "@momentum/core/time";
 import * as copy from "@/features/analytics/copy";
 
 /**
- * Domain Rules 7 and 8, enforced on the surface that is most tempted to break
- * them.
- *
- * `/analytics` is where a product starts telling its user what kind of person
- * they are. Two guards stop this one doing it. The first is the vocabulary
- * below, checked against every string the copy module can produce **and**
- * against the comment-stripped source of every other file in the feature — so a
- * sentence written straight into a component is caught as surely as one written
- * here. Comments are stripped because the JSDoc explaining these rules names
- * the words it forbids.
- *
- * The second guard lives in `@momentum/core/analytics`: the insight sentences
- * are computed and gated there, and `insights.test.ts` reads them for the same
- * vocabulary. Between the two, no path exists from a number to a verdict.
- *
- * `FORBIDDEN` is this surface's own list. It shares most of its words with
- * `features/today/copy.test.ts` and adds the ones a chart page reaches for:
- * the comparatives ("better", "worse"), the labels ("productive"), and the
- * causal connectives that would turn a measurement into an explanation.
+ * Forbidden vocabulary, checked against every string the copy module can
+ * produce and against the comment-stripped source of every other file in the
+ * feature. Comments are stripped because the JSDoc explaining these rules
+ * names the words it forbids. The insight sentences are gated in
+ * `@momentum/core/analytics` and checked by `insights.test.ts`.
  */
 
-/** Words that judge the person or the period (Domain Rule 7). */
+/** Words that judge the person or the period. */
 const FORBIDDEN = [
   "lazy",
   "unproductive",
@@ -60,7 +46,7 @@ const FORBIDDEN = [
   "streak",
 ] as const;
 
-/** Connectives that would claim a cause the data cannot support (Domain Rule 8). */
+/** Connectives that would claim a cause the data cannot support. */
 const CAUSAL = [
   "because",
   "due to",

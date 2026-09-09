@@ -4,11 +4,9 @@ import { Skeleton } from "@momentum/ui/components/skeleton";
 import { PageHeaderSkeleton, SeparatorSkeleton } from "@/components/skeletons";
 
 /**
- * The settings sections have four different control shapes, so this skeleton
- * spells them out rather than repeating one generic field. The heights track
- * the real controls: `Label` is `text-sm leading-none` (14px), `Input` and
- * `SelectTrigger` are `h-8`, a time-window row is two `h-8` fields beside
- * `size-7` icon buttons, and the segmented control is `h-7`.
+ * Heights track the real controls: `Label` is `text-sm leading-none` (14px),
+ * `Input` and `SelectTrigger` are `h-8`, a time-window row is two `h-8` fields
+ * beside `size-7` icon buttons, and the segmented control is `h-7`.
  */
 function SectionShell({ children }: { children: React.ReactNode }) {
   return (
@@ -32,10 +30,7 @@ function FieldSkeleton() {
   );
 }
 
-/**
- * One `TimeWindowList` row: an optional `w-24` day label, two `w-30` time
- * fields either side of a dash, the remove button and the add button.
- */
+/** One `TimeWindowList` row: optional `w-24` day label, two `w-30` fields, dash, remove and add buttons. */
 function WindowRowSkeleton({ labelled }: { labelled: boolean }) {
   return (
     <div className="flex items-center gap-3">
@@ -70,7 +65,6 @@ export function SettingsSkeleton() {
       </SectionShell>
       <SeparatorSkeleton />
 
-      {/* Working hours: seven day rows at the editor's `gap-3`. */}
       <SectionShell>
         <div className="flex flex-col gap-3">
           {WEEKDAY_ROWS.map((day) => (
@@ -80,18 +74,32 @@ export function SettingsSkeleton() {
       </SectionShell>
       <SeparatorSkeleton />
 
-      {/* Focus windows: one unlabelled row. */}
       <SectionShell>
         <WindowRowSkeleton labelled={false} />
       </SectionShell>
       <SeparatorSkeleton />
 
       <SectionShell>
-        {/* Appearance: a plain `text-sm` label (20) over the segmented control. */}
         <div className="flex flex-col gap-1.5">
           <Skeleton className="h-5 w-16" />
           <Skeleton className="h-7 w-28" />
         </div>
+      </SectionShell>
+      <SeparatorSkeleton />
+
+      <SectionShell>
+        <div className="flex flex-col gap-1.5">
+          <div className="flex h-5 items-center justify-between gap-3">
+            <Skeleton className="h-3.5 w-56" />
+            <Skeleton className="h-5 w-8 rounded-full" />
+          </div>
+          <Skeleton className="h-4 w-48" />
+        </div>
+      </SectionShell>
+      <SeparatorSkeleton />
+
+      <SectionShell>
+        <Skeleton className="h-8 w-40" />
       </SectionShell>
     </PageContainer>
   );

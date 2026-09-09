@@ -124,9 +124,8 @@ describe("buildHeatmap", () => {
   });
 
   it("counts a DST week as one column", () => {
-    // 2026-03-08 is a US spring-forward Sunday and belongs to the Monday week
-    // beginning 2026-03-02. Completion dates are calendar dates, so the 23-hour
-    // day is one day (Domain Rule 4).
+    // 2026-03-08 is a US spring-forward Sunday in the Monday week of 2026-03-02.
+    // Completion dates are calendar dates, so the 23-hour day is one day.
     const from = localDate("2026-03-02");
     const weeks = buildHeatmap({
       habit: habitOf(),

@@ -5,14 +5,8 @@ import { formatMinutesOfDay } from "@momentum/core/time";
 import type { Minutes } from "@momentum/core/types";
 
 /**
- * The hour ruler, in its two forms: the labels down the left edge and the
- * lines across each day column. They live together because they are one
- * measurement — a label that disagrees with its line is worse than no label —
- * and because the row count is derived once, from the grid spec, rather than
- * hardcoded at each call site.
- *
- * The grid is a known-size structure (docs/ARCHITECTURE.md §9): one line per
- * hour, not one cell per snap increment. Nineteen nodes a column, not seventy-six.
+ * The hour ruler: labels down the left edge and lines across each day column,
+ * both from one row count. One line per hour, not one cell per snap increment.
  */
 
 /** The wall-clock minute of every hour line, from the spec's window. */
@@ -22,15 +16,7 @@ export function hourMarks(spec: GridSpec): Minutes[] {
   return Array.from({ length: count }, (_, index) => spec.dayStartMinutes + index * 60);
 }
 
-/**
- * The time labels. `aria-hidden` on purpose: every block already carries its
- * own time range in its accessible name and every column is labelled by its
- * date, so a screen reader reading nineteen bare numbers on entry would be
- * noise standing between the user and the week.
- *
- * Sticky horizontally, because the week is wider than a phone: the labels have
- * to survive a sideways scroll or the columns lose their meaning.
- */
+/** The time labels. `aria-hidden`: every block already carries its own time range in its name. */
 export const TimeGutter = React.memo(function TimeGutter({ spec }: { spec: GridSpec }) {
   return (
     <div
@@ -52,13 +38,9 @@ export const TimeGutter = React.memo(function TimeGutter({ spec }: { spec: GridS
 });
 
 /**
- * The lines inside one day column, and the thing that gives the column its
- * height — the blocks are absolutely positioned and contribute nothing.
- *
- * `pointer-events-none` is load-bearing rather than cosmetic: the column
- * treats a click on itself as "create here" and a click on a child as that
- * child's, so a line that swallowed the pointer would make most of the grid
- * uncreatable.
+ * The lines inside one day column; they give the column its height, since the
+ * blocks are absolutely positioned. `pointer-events-none` is load-bearing: the
+ * column treats a click on itself as "create here".
  */
 export const HourLines = React.memo(function HourLines({ spec }: { spec: GridSpec }) {
   return (

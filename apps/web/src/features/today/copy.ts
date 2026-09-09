@@ -5,25 +5,11 @@ import type { LocalDate } from "@momentum/core/types";
 import type { DayPart, NextUpReason, TimelineState, TodayRisk } from "@/features/today/types";
 
 /**
- * Every word `/today` says.
- *
- * One module, for the reason `features/habits/copy.ts` and
- * `features/planning/copy.ts` are one module each: Domain Rule 7 is a
- * constraint on *language*, and a constraint on language can only be enforced
- * where the language lives. `copy.test.ts` reads this file and the
- * comment-stripped source of every other file in the feature and fails on the
- * vocabulary the rule forbids.
- *
- * The vocabulary this surface uses. A day's work is **left**, never owed. A
- * deadline has **passed**, and the task is **overdue** — a fact about a date,
- * which is what the database column means. A block is **done**, an item is
- * **earlier** or **now**. Nothing here tells the user what kind of person their
- * day made them, and nothing counts what they did not do.
+ * Every user-facing string of `/today`, in one module; `copy.test.ts` scans it
+ * and the feature's comment-stripped source for forbidden vocabulary. Work is
+ * "left", never owed; a task is "overdue" as a fact about a date; nothing
+ * counts what the user did not do.
  */
-
-/* -------------------------------------------------------------------------- */
-/* Header                                                                     */
-/* -------------------------------------------------------------------------- */
 
 const GREETINGS: Record<DayPart, string> = {
   morning: "Good morning",
@@ -31,12 +17,7 @@ const GREETINGS: Record<DayPart, string> = {
   evening: "Good evening",
 };
 
-/**
- * "Good morning, Kevin" — or just "Good morning" for a profile with no name.
- *
- * The greeting is the page's one title and lives in `PageHeader`
- * (docs/DESIGN_SYSTEM.md — one heading per page, at every width).
- */
+/** "Good morning, Kevin" — or just "Good morning" for a profile with no name. */
 export function greeting(dayPart: DayPart, displayName: string): string {
   const name = displayName.trim();
   return name === "" ? GREETINGS[dayPart] : `${GREETINGS[dayPart]}, ${name}`;
@@ -46,10 +27,6 @@ export function greeting(dayPart: DayPart, displayName: string): string {
 export function longDate(date: LocalDate): string {
   return formatLocalDate(date, "long");
 }
-
-/* -------------------------------------------------------------------------- */
-/* Sections                                                                   */
-/* -------------------------------------------------------------------------- */
 
 export const TODAY_COPY = {
   nextUp: {
@@ -135,23 +112,12 @@ export const TODAY_COPY = {
   },
 } as const;
 
-/* -------------------------------------------------------------------------- */
-/* Timeline                                                                   */
-/* -------------------------------------------------------------------------- */
-
-/**
- * The state as a word, so the timeline never signals past, current and future
- * by colour alone (docs/DESIGN_SYSTEM.md — accessibility floor).
- */
+/** The state as a word, so the timeline never signals it by colour alone. */
 export const TIMELINE_STATE_LABELS: Record<TimelineState, string> = {
   past: "Earlier",
   current: "Now",
   future: "Later",
 };
-
-/* -------------------------------------------------------------------------- */
-/* Next up                                                                    */
-/* -------------------------------------------------------------------------- */
 
 /** Why the offered task is the one being offered. A date, never a verdict. */
 export function nextUpReasonLabel(reason: NextUpReason, dueDate: LocalDate | null): string {
@@ -169,26 +135,12 @@ export function nextUpReasonLabel(reason: NextUpReason, dueDate: LocalDate | nul
   }
 }
 
-/* -------------------------------------------------------------------------- */
-/* At risk                                                                    */
-/* -------------------------------------------------------------------------- */
-
-/**
- * A stable key per row, so a list does not re-key as the page refreshes.
- * The two warnings reuse the engine's own key for the same reason.
- */
+/** A stable key per row, so the list does not re-key as the page refreshes. */
 export function riskKey(risk: TodayRisk): string {
   return risk.kind === "overdue" ? `overdue:${risk.task.id}` : warningKey(risk.warning);
 }
 
-/**
- * One factual sentence per row.
- *
- * The two warnings are `describeWarning`'s, verbatim — the engine already
- * writes them, they are already tested against the forbidden vocabulary, and a
- * second phrasing here would be a second thing to keep in step. The overdue
- * sentence states the deadline and how long ago it was, and says nothing else.
- */
+/** One factual sentence per row; engine warnings use `describeWarning` verbatim. */
 export function describeRisk(risk: TodayRisk): string {
   if (risk.kind !== "overdue") return describeWarning(risk.warning);
 

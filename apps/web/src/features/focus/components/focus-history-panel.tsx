@@ -20,18 +20,7 @@ import { StatTile } from "@momentum/ui/components/stat-tile";
 import { FOCUS_COPY, describeTotals, describeXpInCapWindow } from "@/features/focus/copy";
 import type { FocusPageData } from "@/features/focus/types";
 
-/**
- * Today, this week, by project, and the recent sessions.
- *
- * Every number arrived computed from one read of the same rows
- * (`summariseFocus` in `@momentum/core/focus`), so the totals and the list
- * underneath them cannot disagree — there is no per-panel query to fall out of
- * step.
- *
- * The XP line reports what the ledger holds and states the cap; it never
- * predicts what the running session will earn, because that is the server's to
- * decide (Domain Rule 6).
- */
+/** Totals, by-project and recent sessions, all from one server read. The XP line never predicts what a running session will earn. */
 
 export function FocusHistoryPanel({ data }: { data: FocusPageData }) {
   const { history, recent, timezone, today } = data;
@@ -117,26 +106,14 @@ export function FocusHistoryPanel({ data }: { data: FocusPageData }) {
   );
 }
 
-/**
- * "14:05" for today, "Mon 14:05" for any other day.
- *
- * The date comes from the payload's own `today`, resolved in the profile
- * timezone on the server, so the label cannot disagree with the totals above it
- * (Domain Rule 4).
- */
+/** "14:05" for today, "Mon 14:05" for any other day, using the server-resolved `today`. */
 function when(startedAt: Instant, timezone: IanaTimeZone, today: LocalDate): string {
   const date = localDateOf(startedAt, timezone);
   const time = formatTime(startedAt, timezone);
   return date === today ? time : `${formatLocalDate(date, "monthDay")} ${time}`;
 }
 
-/**
- * The four statuses, in the product's own words.
- *
- * `abandoned` is a value in a database enum. What it means to a person is that
- * they stopped early, which is a thing that happens and not a verdict on them
- * (Domain Rule 7).
- */
+/** `abandoned` is a database enum value; a person reads "Ended early". */
 function statusLabel(status: FocusSessionStatus): string {
   switch (status) {
     case "completed":

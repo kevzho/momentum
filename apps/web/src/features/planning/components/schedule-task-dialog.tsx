@@ -33,28 +33,11 @@ import { SCHEDULE_TASK, minimumBlockMessage } from "@/features/planning/copy";
 import { taskBlockMinutes } from "@/features/planning/live";
 
 /**
- * The manual route to scheduling a task (Domain Rule 10,
- * docs/ARCHITECTURE.md §9: "Focus task → `S` → slot picker → Enter").
- *
- * It commits through the same `onScheduleTask(taskId, span)` callback the drop
- * path and Find Time use, and sizes the block with the same `taskBlockMinutes`,
- * so the three routes cannot drift apart in what they create.
- *
- * `ScheduleTaskContent` — the header and the form without a dialog around
- * them — is exported so Find Time can offer "Pick a time instead" inside its
- * own dialog. Closing one Radix dialog and opening another in the same event
- * would hand focus to whatever was under the pointer, and the second dialog
- * would return it to `<body>` on close; staying in one dialog keeps the opener
- * the row the user came from.
+ * The manual route to scheduling a task. `ScheduleTaskContent` is exported so
+ * Find Time can swap to it inside its own dialog: closing one Radix dialog
+ * and opening another in the same event would lose the opener for focus return.
  */
 
-/**
- * Where the picker opens when the user has expressed no preference.
- *
- * 09:00 — or the top of the grid when the grid starts later. The "next free
- * slot" is Find Time's answer, one keystroke away on the same row; this dialog
- * is for the user who already has a time in mind.
- */
 const DEFAULT_START_MINUTES: Minutes = 9 * 60;
 
 export interface ScheduleTaskDialogProps {
@@ -112,15 +95,14 @@ export interface ScheduleTaskContentProps {
   onSchedule: (taskId: Uuid, span: DaySpan) => void;
   onClose: () => void;
   /**
-   * Focus the date field on mount. Off by default, because a freshly opened
-   * dialog lets Radix focus the first field itself — and reads the opener from
-   * `document.activeElement` first, which a mount-time focus would overwrite.
-   * On when the form replaces other content inside an already open dialog.
+   * Focus the date field on mount. Off by default: Radix focuses the first
+   * field itself and reads the opener from `document.activeElement` first,
+   * which a mount-time focus would overwrite.
    */
   autoFocusDate?: boolean;
 }
 
-/** The header and the form. Keyed by task, so each open starts from that task's own defaults. */
+/** Keyed by task, so each open starts from that task's own defaults. */
 export function ScheduleTaskContent({ task, ...form }: ScheduleTaskContentProps) {
   return (
     <>
@@ -165,9 +147,7 @@ function ScheduleTaskForm({
   const [start, setStart] = React.useState<string>(
     formatMinutesOfDay(Math.max(DEFAULT_START_MINUTES, settings.spec.dayStartMinutes)),
   );
-  // Seeded from the estimate, which is what the drop path uses as the block's
-  // length (specs/03-weekly-calendar.md). Editable, because a keyboard user
-  // picking a slot is exactly the moment to say "only an hour of this today".
+  // Seeded from the same length the drop path uses; editable.
   const [duration, setDuration] = React.useState<string>(String(taskBlockMinutes(task)));
   const [error, setError] = React.useState<FieldError | null>(null);
 
@@ -209,8 +189,7 @@ function ScheduleTaskForm({
       endMinutes: startMinutes + durationMinutes,
     };
     onSchedule(task.id, span);
-    // The same sentence the drop path speaks, so a keyboard user and a pointer
-    // user hear the same thing for the same result.
+    // The same sentence the drop path speaks.
     announce(scheduledMessage(task.title, span));
     onClose();
   }
@@ -223,8 +202,7 @@ function ScheduleTaskForm({
       : null;
 
   return (
-    // `noValidate`: the inline messages below say what to do about a bad value;
-    // the browser's own bubbles would pre-empt them.
+    // `noValidate`: the browser's own bubbles would pre-empt the inline messages.
     <form noValidate onSubmit={handleSubmit} className="flex flex-col gap-3">
       <div className="flex flex-col gap-1.5">
         <Label htmlFor={`${ids}-date`}>{SCHEDULE_TASK.date}</Label>

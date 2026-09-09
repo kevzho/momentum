@@ -40,11 +40,6 @@ describe("summariseAnalytics", () => {
     expect(summary.insights).toEqual([]);
   });
 
-  /**
-   * The question the empty state asks. It is about evidence, not about the age
-   * of the account: a user returning after three months away sees the same
-   * designed page rather than six charts of flat zero.
-   */
   it("reports an empty period as empty", () => {
     expect(summariseAnalytics(EMPTY).isEmpty).toBe(true);
   });
@@ -69,12 +64,6 @@ describe("summariseAnalytics", () => {
     expect(withOneTask.isEmpty).toBe(false);
   });
 
-  /**
-   * A per-week habit expects nothing on a given date, so it cannot make the
-   * period non-empty through `expected`. Its completions still count as
-   * evidence — otherwise a user who only tracks habits would be told there is
-   * nothing to show while their heatmap has marks on it.
-   */
   it("counts a recorded habit completion as evidence even with no daily target", () => {
     const summary = summariseAnalytics({
       ...EMPTY,
@@ -116,12 +105,10 @@ describe("summariseAnalytics", () => {
     expect(summary.totals.blocks.scheduled).toBe(2);
     expect(summary.totals.blocks.completed).toBe(1);
 
-    // The estimate totals cover one of the two tasks, and say so.
     expect(summary.totals.estimates.plannedMinutes).toBe(60);
     expect(summary.totals.estimates.actualMinutes).toBe(75);
     expect(summary.totals.estimates.withoutEstimate).toBe(1);
 
-    // And the day series agrees with the total it was rolled up from.
     const focusTotal = summary.focusByDay.reduce((sum, point) => sum + point.value, 0);
     expect(focusTotal).toBe(summary.totals.focusedMinutes);
   });
@@ -131,12 +118,6 @@ describe("summariseAnalytics", () => {
   });
 });
 
-/**
- * The same rows through the three ranges the page offers. Nothing here is a
- * different code path — that is the point: the narrow windows are the wide
- * window's function applied to a narrower period, so a number can never mean
- * one thing on 7 days and another on 90.
- */
 describe("the three ranges over one read", () => {
   const rows: Omit<AnalyticsInput, "period"> = {
     timezone: NEW_YORK,

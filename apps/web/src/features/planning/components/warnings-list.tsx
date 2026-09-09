@@ -11,13 +11,8 @@ import {
 import { WARNINGS } from "@/features/planning/copy";
 
 /**
- * The conflict warnings (specs/05-week-planning.md): overlap, past deadline,
- * over capacity, insufficient time.
- *
- * Information only. Nothing here is a button, nothing blocks an action, and
- * the sentence for each comes from `describeWarning` — a fact about the
- * schedule, never a judgement about the person (Domain Rule 7). The glyph is
- * one per kind so the kinds are told apart by shape, not only by reading.
+ * The conflict warnings. Information only: nothing here is a button and
+ * nothing blocks an action. One glyph per kind, so kinds are told apart by shape.
  */
 
 const WARNING_ICON: Record<PlanningWarningKind, typeof CalendarClockIcon> = {

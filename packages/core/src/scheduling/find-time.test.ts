@@ -16,11 +16,6 @@ import { intervalOfSlot } from "./intervals";
 import type { Commitment, FindTimeInput, FindTimeResult, PlanningContext } from "./types";
 
 /**
- * Hand-built weeks, no mocks. The suite runs under `TZ=UTC` and
- * `TZ=America/Los_Angeles`; every assertion below is in the profile
- * timezone, so a function that read the process timezone would fail one of
- * the two runs.
- *
  *   America/New_York  2026-03-08 spring forward (02:00 -> 03:00), a Sunday
  *                     2026-11-01 fall back      (02:00 -> 01:00), a Sunday
  *   America/Santiago  2026-09-06 spring forward at midnight: the day starts at 01:00
@@ -126,8 +121,6 @@ function explanations(result: FindTimeResult): string[] {
   return result.candidates.map((c) => c.explanation);
 }
 
-/* -------------------------------------------------------------------------- */
-
 describe("the search span", () => {
   it("offers nothing for an empty range", () => {
     expect(findTime(input({ context: context({ days: [] }) }))).toEqual({
@@ -172,10 +165,7 @@ describe("the search span", () => {
   });
 
   it("still offers today's opening when now carries seconds or milliseconds", () => {
-    // `now` is a millisecond clock, and 14:30:27.456 reads 870 minutes — on
-    // the 15-minute grid, so the snap has to move to 14:45 rather than return
-    // an instant no wall-clock span resolves to. It used to return it, and the
-    // day's entire free window went with the candidate.
+    // 14:30:27.456 reads 870 minutes, on the 15-minute grid; the snap must move to 14:45.
     for (const now of [i("2026-09-07T18:30:00.003Z"), i("2026-09-07T18:30:27.456Z")]) {
       const result = findTime(input({ now, context: context({ days: [MONDAY] }) }));
       expect(result.outcome).toBe("found");
@@ -185,9 +175,7 @@ describe("the search span", () => {
   });
 
   it("does not let a start rejected by one opening blank the next", () => {
-    // The 15-minute gap at 10:40 snaps to 11:00, which does not fit inside it.
-    // The 11:00–12:00 opening's own start is the same instant, and it is the
-    // only candidate of the day inside working hours.
+    // The 15-minute gap at 10:40 snaps to 11:00, the 11:00–12:00 opening's own start.
     const result = findTime(
       input({
         durationMinutes: 15,
@@ -320,8 +308,7 @@ describe("each ranking rule in isolation", () => {
   });
 
   it("4. fragmentation — a window that would leave a 15-minute scrap ranks after a window that would not", () => {
-    // 10:00–11:15 (75m) and 13:00–16:00 (3h). A 60m block at 10:00 leaves 15
-    // minutes: at least one snap increment, under the useful minimum.
+    // 10:00–11:15 (75m) and 13:00–16:00 (3h). A 60m block at 10:00 leaves a 15-minute fragment.
     const commitments = [
       block("Morning", MONDAY, 0, 600),
       block("Lunch", MONDAY, 675, 780),
@@ -335,8 +322,7 @@ describe("each ranking rule in isolation", () => {
     expect(withSnap15.candidates.map((c) => c.score.fragments)).toEqual([0, 1]);
     expect(withSnap15.candidates.map((c) => c.openWindowMinutes)).toEqual([180, 75]);
 
-    // With a 30-minute snap the 15-minute scrap could never hold a block
-    // anyway, so it is not a fragment and the earlier slot wins.
+    // With a 30-minute snap the 15-minute scrap is not a fragment, so the earlier slot wins.
     const withSnap30 = findTime(
       input({ commitments, snapMinutes: 30, context: context({ days: [MONDAY] }) }),
     );
@@ -482,8 +468,7 @@ describe("a fully booked week", () => {
   });
 
   it("never offers a free slot outside the suggestion window unless working hours cover it", () => {
-    // Free only from 22:00: valid free time, useless suggestion — unless the
-    // user works evenings, in which case it is working hours and is offered.
+    // Free only from 22:00: offered only when the user's working hours cover it.
     const commitments = WEEK.map((date) => block("Busy", date, 0, 1320));
     const dayWorker = findTime(input({ commitments }));
     expect(dayWorker.outcome).toBe("fallback-overlaps");
@@ -566,8 +551,7 @@ describe("a task longer than any gap", () => {
   });
 
   it("reports nothing when even an overlapping placement cannot end inside a day", () => {
-    // 23:30 on the last day of the range, with nothing on the calendar: the
-    // day's only boundary starts are in the past.
+    // 23:30 on the last day of the range: the day's only boundary starts are in the past.
     const result = findTime(
       input({ context: context({ days: [MONDAY] }), now: at(MONDAY, 1410), durationMinutes: 120 }),
     );
@@ -612,8 +596,7 @@ describe("a deadline inside the range", () => {
         commitments: WEEK.flatMap(bookedOutsideHours),
       }),
     );
-    // Saturday and Sunday have the same open window but no working hours,
-    // so they trail the weekdays on the second criterion, not the first.
+    // Saturday and Sunday have no working hours, so they trail on the second criterion.
     expect(slots(result)).toEqual([
       [MONDAY, 540, 600],
       [TUESDAY, 540, 600],
@@ -690,9 +673,8 @@ describe("DST transitions", () => {
   });
 
   it("does not offer a slot whose wall-clock span the action would resolve to different instants", () => {
-    // 01:10 in the *second* pass of the repeated hour. A slot starting 01:15
-    // EST reads the same as 01:15 EDT, which is what the action would write,
-    // so no candidate may start inside the repeated hour.
+    // 01:10 in the second pass of the repeated hour: 01:15 EST reads the same as
+    // 01:15 EDT, which is what the action would write.
     const secondPass = i("2026-11-01T06:10:00.000Z");
     const result = findTime(
       input({

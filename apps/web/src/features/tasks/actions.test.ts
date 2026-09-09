@@ -3,18 +3,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { instant, localDate } from "@momentum/core/time";
 import type { Task } from "@momentum/core/types";
 
-/**
- * Bulk completion is a fan-out of `complete_task` RPCs, and each one is its own
- * transaction. So a selection can half-commit: one row refused while the rest
- * are already `status = 'completed'` in Postgres.
- *
- * The rule is Domain Rule 11 — the failure is surfaced, but the rows that
- * landed have to reach the client too. Reporting a total failure and
- * revalidating nothing would leave the list rendering completed tasks as open
- * until the next navigation, which is exactly the silent divergence the rule
- * calls a P0.
- */
-
 const { completeMock, uncompleteMock, updateMock, refreshMock, revalidatePathMock } = vi.hoisted(
   () => ({
     completeMock: vi.fn(),
@@ -71,7 +59,7 @@ function completed(id: string): Task {
   };
 }
 
-/** What PostgREST passes through when `complete_task` cannot find the row. */
+// What PostgREST passes through when `complete_task` cannot find the row.
 const GONE = { code: "P0002", message: "task not found" };
 
 beforeEach(() => {
@@ -100,8 +88,7 @@ describe("bulkSetCompletion", () => {
 
     const result = await bulkSetCompletion({ ids: IDS, completed: true });
 
-    // The failure is the user's answer — but the other two rows really are
-    // complete, so the client has to be told before it discards its overlay.
+    // The other two rows really are complete, so the client must be told.
     expect(result).toEqual({
       ok: false,
       error: { code: "not_found", message: "That task no longer exists." },
@@ -137,11 +124,6 @@ describe("bulkSetCompletion", () => {
   });
 });
 
-/**
- * A reorder is a batch: every row whose number changed, each with its own
- * number. One write per row rather than `updateMany`'s single patch, and the
- * whole batch bounded like the bulk actions.
- */
 describe("reorderTask", () => {
   it("writes every row in the batch with its own number", async () => {
     updateMock.mockImplementation((_client: unknown, id: string, patch: { sortOrder: number }) =>

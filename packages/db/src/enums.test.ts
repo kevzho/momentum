@@ -26,14 +26,8 @@ import {
 import type { Enums } from "./types";
 
 /**
- * Enum parity, checked by the compiler.
- *
- * The schema is the source of truth for what exists; the domain constants are
- * the vocabulary the app speaks (docs/ARCHITECTURE.md §3). A migration that
- * adds or renames an enum value regenerates `database.types.ts`, and every
- * line below stops compiling until the matching `as const` array in
- * `@momentum/core/types` is updated. That is the whole point: the drift is
- * caught by `pnpm typecheck`, not by a runtime surprise.
+ * Enum parity, checked by the compiler: a regenerated `database.types.ts`
+ * stops compiling until the matching `as const` array in `@momentum/core/types` is updated.
  */
 
 type Equal<A, B> =
@@ -53,9 +47,7 @@ export type _ProjectColor = Expect<Equal<Enums["project_color"], ProjectColor>>;
 
 describe("enum parity", () => {
   it("keeps the runtime arrays in step with the compile-time assertions above", () => {
-    // The assertions are erased at runtime, so this test exists to make the
-    // file part of the suite and to catch the one mistake types cannot see:
-    // an array that lists a member twice or drops one silently.
+    // The type assertions are erased at runtime; this catches a duplicated member.
     const arrays: readonly (readonly string[])[] = [
       TASK_STATUSES,
       BLOCK_KINDS,

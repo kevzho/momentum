@@ -12,16 +12,7 @@ import { TimelineRow } from "@/features/today/components/timeline-row";
 import { TodaySection } from "@/features/today/components/today-section";
 import type { TodayItem } from "@/features/today/types";
 
-/**
- * What am I doing today: every event, work block and habit block that touches
- * today, in chronological order.
- *
- * An ordered list, because the order is the content. The state of each row is
- * derived from `now` on every tick rather than stored, so a row becomes current
- * and then past without a request — and the server's markup and the first
- * client render agree, because both are the same function of `serverNow`
- * (docs/ARCHITECTURE.md §10).
- */
+/** Today's timeline. Row state is derived from `now` on every tick, never stored. */
 export function TodayTimeline({
   entries,
   now,

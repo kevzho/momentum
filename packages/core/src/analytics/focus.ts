@@ -14,21 +14,12 @@ import type { FocusSessionFact } from "./facts";
 import { periodContains, type AnalyticsPeriod } from "./period";
 
 /**
- * Focused time, bucketed three ways.
- *
- * "Focused" means measured minutes a session recorded, an abandoned session
- * included — the same definition `@momentum/core/focus` uses for the history
- * strip, and for the same reason: time spent is time spent, and dropping the
- * sessions a user ended early would quietly under-report the actual half of the
- * product's estimate signal (Domain Rule 3).
- *
- * A running session contributes nothing. Its minutes are not a fact until
- * `finish_focus_session` writes them.
+ * "Focused" means measured minutes a session recorded, abandoned sessions
+ * included, matching `@momentum/core/focus`. A running session contributes nothing.
  */
 
-/** Minutes and the number of sessions behind them, for one project. */
 export interface ProjectMinutes {
-  /** Null is "no project": a real bucket the user can see, not a gap. */
+  /** Null is "no project": a real bucket. */
   projectId: Uuid | null;
   minutes: Minutes;
   sessions: number;
@@ -61,12 +52,7 @@ export function focusMinutesByDay(
   );
 }
 
-/**
- * Chart 2: focus time by project, largest first.
- *
- * Ties break on the id so the order is stable between two renders of the same
- * data — a chart whose bars swap places on a refresh reads as a bug.
- */
+/** Chart 2: focus time by project, largest first; ties break on id so the order is stable. */
 export function focusMinutesByProject(
   sessions: readonly FocusSessionFact[],
   period: AnalyticsPeriod,
@@ -94,7 +80,7 @@ export function focusMinutesByProject(
   );
 }
 
-/** Focus minutes per hour of the local clock — the time-of-day figure's second measure. */
+/** Focus minutes per hour of the local clock. */
 export function focusMinutesByHour(
   sessions: readonly FocusSessionFact[],
   period: AnalyticsPeriod,
@@ -107,12 +93,7 @@ export function focusMinutesByHour(
   );
 }
 
-/**
- * Focus minutes per weekday, with the session count behind each.
- *
- * Feeds the weekday insight, which may only speak when enough sessions sit
- * behind the answer (Domain Rule 8).
- */
+/** Focus minutes per weekday, with the session count behind each. */
 export function focusMinutesByWeekday(
   sessions: readonly FocusSessionFact[],
   period: AnalyticsPeriod,

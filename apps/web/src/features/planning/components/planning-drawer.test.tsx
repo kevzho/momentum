@@ -28,16 +28,8 @@ import type {
 import { PlanningDrawer } from "@/features/planning/components/planning-drawer";
 import type { PlanningDrawerProps } from "@/features/planning/types";
 
-/**
- * The drawer as a whole: the sections, the numbers, the warnings, the two
- * keyboard routes, and — the point of deriving everything from `items` — that
- * a row's coverage and its section follow the board in the same render.
- *
- * The engine is stubbed at the module boundary. `weekCapacity`,
- * `detectConflicts` and `findTime` return fixtures; `scheduledMinutesOf` is
- * given a small real implementation so live coverage can be tested end to end
- * without depending on the engine's own arithmetic.
- */
+// The engine is stubbed; `scheduledMinutesOf` gets a small real
+// implementation so live coverage can be tested end to end.
 
 const { engine } = vi.hoisted(() => ({
   engine: {
@@ -263,8 +255,7 @@ function drawerProps(overrides: Partial<PlanningDrawerProps> = {}): PlanningDraw
     open: true,
     onOpenChange: vi.fn(),
     presentation: "panel",
-    // Nothing to return focus to unless the case builds a real toggle; the
-    // panel tolerates an empty ref and simply closes.
+    // The panel tolerates an empty ref and simply closes.
     returnFocusTo: { current: null },
     plan: PLAN,
     onAddHabitToWeek: vi.fn(),
@@ -314,8 +305,6 @@ describe("PlanningDrawer", () => {
     const sections = headings.filter((text) =>
       ["Overdue", "Due this week", "Unscheduled", "Habits", "Weekly goals"].includes(text ?? ""),
     );
-    // HABITS arrived with Phase 6 and sits between UNSCHEDULED and WEEKLY
-    // GOALS (specs/05-week-planning.md).
     expect(sections).toEqual(["Overdue", "Due this week", "Unscheduled", "Habits", "Weekly goals"]);
   });
 
@@ -327,14 +316,6 @@ describe("PlanningDrawer", () => {
   });
 
   it("hands focus to the board's toggle when its own header button hides it", () => {
-    /*
-     * Domain Rule 10. The header button that hides the drawer is inside the
-     * drawer, so pressing it removes the pressed element from the page. This
-     * is not a modal and there is no focus scope around it: unless the drawer
-     * forwards the board's toggle to `SidePanel`, focus lands on `<body>` and
-     * a keyboard user resumes from the top of the shell. The toggle is the
-     * only control that brings the drawer back, so it is where focus belongs.
-     */
     function Board() {
       const toggle = React.useRef<HTMLButtonElement>(null);
       const [open, setOpen] = React.useState(true);
@@ -491,7 +472,7 @@ describe("PlanningDrawer", () => {
 
     expect(screen.queryByRole("button", { name: /statistics homework/ })).toBeNull();
     expect(within(sectionFor("Unscheduled")).getByText("Everything has a time")).toBeDefined();
-    // The task is still counted for capacity: its remaining estimate is unscheduled work.
+    // Still counted for capacity: its remaining estimate is unscheduled work.
     expect(engine.weekCapacity.mock.lastCall?.[0].tasks.map((task) => task.id)).toContain(
       "task-homework",
     );
@@ -543,7 +524,6 @@ describe("PlanningDrawer", () => {
 
     expect(onScheduleTask).toHaveBeenCalledWith("task-homework", CANDIDATE.span);
     expect(screen.queryByRole("dialog")).toBeNull();
-    // The keyboard route puts the user back where they were (Domain Rule 10).
     await waitFor(() => expect(document.activeElement).toBe(row));
   });
 
@@ -591,17 +571,12 @@ describe("PlanningDrawer", () => {
     await waitFor(() => expect(document.activeElement).toBe(row));
   });
 
-  /*
-   * Scheduling an UNSCHEDULED row removes it from the list in the same frame
-   * the block appears (`liveSections`), so the element the dialog opened from
-   * is gone by the time the dialog would return focus to it. Domain Rule 10:
-   * focus goes to the row that follows, never to `<body>`.
-   */
+  // Scheduling removes the row in the same frame the block appears, so the
+  // dialog's opener is gone by the time focus would return to it.
   describe("focus after scheduling removes the row it came from", () => {
     const READING = planTask({ id: "task-reading", title: "Reading", estimatedMinutes: 30 });
     const TWO_UNSCHEDULED: PlanningData = { ...PLAN, unscheduled: [HOMEWORK, READING] };
 
-    /** The board, minimally: the optimistic overlay grows a block for what was scheduled. */
     function Board({ deferApply = false }: { deferApply?: boolean }) {
       const [items, setItems] = React.useState<readonly CalendarItem[]>([]);
       const [queued, setQueued] = React.useState<CalendarItem | null>(null);
@@ -650,8 +625,7 @@ describe("PlanningDrawer", () => {
 
     it("lands on the next row when the row leaves after the dialog has closed", async () => {
       // The optimistic commit is a transition and may land a frame after the
-      // dialog's own close: focus first returns to the row, and the row then
-      // hands it on as it unmounts.
+      // dialog's close.
       render(<Board deferApply />);
       const homework = screen.getByRole("button", { name: /statistics homework/ });
       const reading = screen.getByRole("button", { name: /^Reading/ });
@@ -685,11 +659,6 @@ describe("PlanningDrawer", () => {
     });
   });
 
-  /*
-   * Below `lg` the calendar needs the whole width, so the same content is a
-   * sheet over it rather than a column beside it — and week planning, the
-   * `S`/`F` routes and "Add to week" stay reachable on a phone.
-   */
   describe("as a sheet", () => {
     it("presents the same sections and hint in a dialog named for the drawer", () => {
       renderDrawer({ presentation: "sheet" });

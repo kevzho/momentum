@@ -17,8 +17,7 @@ describe("DurationInput", () => {
 
     fireEvent.blur(input, { target: { value: "abc" } });
 
-    // The draft is gone and "1h 30m" is showing again: a field showing a valid
-    // value must not go on saying it is invalid.
+    // A field showing a valid value must not go on saying it is invalid.
     expect(input.getAttribute("value")).toBe("1h 30m");
     expect(input.hasAttribute("aria-invalid")).toBe(false);
     expect(onValueChange).not.toHaveBeenCalled();

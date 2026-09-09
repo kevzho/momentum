@@ -2,13 +2,8 @@ import * as React from "react";
 import { cn } from "cn";
 
 /**
- * The one page title.
- *
- * A page renders exactly one of these and nothing else renders its name at the
- * same time: the top bar shows the section name only on the widths where this
- * heading is visually hidden (docs/DESIGN_SYSTEM.md — duplicate headers are an
- * audit finding). The heading element stays in the accessibility tree at every
- * width so the document always has an `h1`.
+ * The one page title. The top bar shows the section name only where this
+ * heading is visually hidden; the `h1` stays in the accessibility tree at every width.
  */
 function PageHeader({
   title,

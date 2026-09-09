@@ -43,19 +43,9 @@ import type {
 } from "@/features/calendar/types";
 
 /**
- * Creating and editing a block, in a side sheet.
- *
- * docs/DESIGN_SYSTEM.md lists `SideSheet` as the modal-free detail surface for
- * exactly this ("task detail, block edit"), and the spec's "popover" is the
- * worse surface here: a popover anchored to an absolutely-positioned block
- * inside a scrolling grid moves with the grid, is clipped by it, and gets in
- * the way of the time the user is trying to see. The sheet sits beside the
- * board, keeps the block visible, and already solves focus and Escape.
- *
- * The editor mutates nothing. It reports intent through the callbacks in its
- * props and the board routes them through `useOptimisticAction`
- * (docs/ARCHITECTURE.md §8), which is also why it does not close itself on
- * save: the board owns `pending` and the rollback, so it owns the closing.
+ * Creating and editing a block, in a side sheet. The editor mutates nothing
+ * and does not close itself on save: the board owns `pending` and the
+ * rollback, so it owns the closing.
  */
 
 /** Minutes in a day. A span's end may exceed it — a block can run past midnight. */
@@ -70,7 +60,7 @@ const KIND_LABEL: Record<BlockKind, string> = {
   habit: "Habit block",
 };
 
-/** What the read-only title line is *of*: the parent the block takes its name from. */
+/** The parent the read-only title line is of. */
 const OWNER_LABEL: Record<BlockKind, string> = {
   event: "Event",
   work: "Task",
@@ -83,29 +73,15 @@ const OWNER_ICON: Record<BlockKind, LucideIcon> = {
   habit: RepeatIcon,
 };
 
-/**
- * Only a plain event owns its title.
- *
- * A work block displays its task's and a habit block its habit's, so an
- * editable field here would write a copy into `calendar_blocks.title` that
- * silently stops tracking the parent (Domain Rule 2 — the block is time
- * allocated toward the task, not a second copy of it). An occurrence of a
- * recurring event owns nothing of its own until an override exists, and the
- * recurring-event editor is an explicit non-goal of this phase
- * (specs/03-weekly-calendar.md), so its title is the series' too.
- */
+// Only a plain event owns its title: work and habit blocks display their
+// parent's, and an editable field would write a copy that stops tracking it.
 function isTitleEditable(draft: BlockDraft): boolean {
   if (draft.mode === "create") return true;
   return draft.item.kind === "event" && draft.item.occurrence === null;
 }
 
-/**
- * An occurrence of a recurring event has times of its own and nothing else:
- * the board writes its span through the override path and nothing writes its
- * content (the recurring-event editor is the non-goal above). A field that
- * accepts what will not be saved is a silent discard, so the occurrence's
- * description and colour are not offered as fields at all.
- */
+// An occurrence has times of its own and nothing else; a field that accepts
+// what will not be saved is a silent discard.
 function isContentEditable(draft: BlockDraft): boolean {
   return draft.mode === "create" || draft.item.occurrence === null;
 }
@@ -121,14 +97,12 @@ function asProjectColor(value: string): ProjectColor | null {
   return PROJECT_COLORS.find((color) => color === value) ?? null;
 }
 
-/** The palette's names are the accessible names of the swatches; colour is never the only signal. */
 function colorLabel(color: ProjectColor): string {
   return `${color.charAt(0).toUpperCase()}${color.slice(1)}`;
 }
 
-// `settings` is deliberately unused: the editor works entirely in wall-clock
-// minutes on a named day, and the board converts that to instants with the
-// profile timezone (`fromLocal`). Nothing here needs the grid spec either.
+// `settings` is deliberately unused: the editor works in wall-clock minutes
+// and the board converts them to instants.
 export function BlockEditor({
   draft,
   onClose,
@@ -137,13 +111,11 @@ export function BlockEditor({
   onToggleComplete,
   pending,
 }: BlockEditorProps) {
-  // The Save button lives in the sheet's footer, outside the form element, and
-  // is associated with it by id rather than by lifting the form's state up.
+  // The Save button lives in the sheet's footer, outside the form, and is associated by id.
   const formId = React.useId();
   const item = draft?.mode === "edit" ? draft.item : null;
-  // `open` as well as the handlers: the sheet animates out, and a keyboard
-  // user's next key must find the block, not the ~200ms gap before Radix
-  // would have restored it (see `useOpenerFocus`).
+  // The sheet animates out; the next key must find the block, not the gap
+  // before Radix would have restored focus (see `useOpenerFocus`).
   const openerFocus = useOpenerFocus(draft !== null);
 
   return (
@@ -170,14 +142,7 @@ export function BlockEditor({
             </Button>
           )}
           <div className="ml-auto flex items-center gap-2">
-            {/*
-              Starting a focus session from the block that reserved the time
-              (Phase 7). The block's own length becomes the session's planned
-              length, so the reservation and the measurement start out agreeing;
-              the user can still change it on `/focus` before pressing start.
-              A completed block does not offer it — the span it named has
-              already been executed.
-            */}
+            {/* Start a focus session from the block; not offered on a completed block. */}
             {item === null || item.work === null || item.completedAt !== null ? null : (
               <Button asChild type="button" variant="outline" size="sm">
                 <Link href={`/focus?task=${item.work.taskId}&minutes=${focusMinutes(item)}`}>
@@ -213,14 +178,7 @@ export function BlockEditor({
   );
 }
 
-/**
- * The length a block's "Start focus" suggests.
- *
- * The block's own elapsed length, so the reservation and the measurement start
- * out agreeing. `focus_planned_chk` caps a session at four hours, so a longer
- * block suggests the cap rather than a length the database would refuse; the
- * user can change it on `/focus` before pressing start either way.
- */
+// The block's own length, capped at the four hours `focus_planned_chk` allows.
 function focusMinutes(item: CalendarItem): Minutes {
   return Math.min(240, Math.max(1, durationMinutes(item.startAt, item.endAt)));
 }
@@ -253,18 +211,13 @@ function BlockEditorForm({
   const [title, setTitle] = React.useState(item?.title ?? "");
   const [description, setDescription] = React.useState(item?.description ?? "");
   const [date, setDate] = React.useState<string>(draft.span.date);
-  // Minutes rather than clock strings, and the end as a clock reading: a block
-  // that ends after midnight has an end past 1440, which no `<input
-  // type="time">` can hold. Which day the end falls on is not typed, it is
-  // read off the two fields by `resolveEnd` — an end at or before the start is
-  // the next day's — so 23:30 to 00:30 is an overnight block and the summary
-  // says so, rather than a rejected one.
+  // The end is held as a clock reading: an end past 1440 fits no
+  // `<input type="time">`, so `resolveEnd` reads the day off the two fields.
   const [startMinutes, setStartMinutes] = React.useState<Minutes>(draft.span.startMinutes);
   const [endClock, setEndClock] = React.useState<Minutes>(draft.span.endMinutes % MINUTES_PER_DAY);
   const endMinutes = resolveEnd(startMinutes, endClock);
-  // `ownColor`, not `color`: the resolved colour is what the block is *drawn*
-  // in, and preselecting it would write an explicit value onto a block that was
-  // following its project and silently stop it tracking (see `CalendarItem`).
+  // `ownColor`, not `color`: preselecting the resolved colour would write an
+  // explicit value onto a block that was following its project.
   const [color, setColor] = React.useState<ProjectColor | null>(item?.ownColor ?? null);
   const [error, setError] = React.useState<FieldError | null>(null);
 
@@ -303,8 +256,7 @@ function BlockEditorForm({
   const crossesMidnight = endMinutes >= MINUTES_PER_DAY;
 
   return (
-    // `noValidate`: the browser's own bubbles would pre-empt the inline
-    // messages below, which are the ones that say what to do about it.
+    // `noValidate`: the browser's own bubbles would pre-empt the inline messages.
     <form id={formId} noValidate onSubmit={handleSubmit} className="flex flex-col gap-4">
       {titleEditable ? (
         <div className="flex flex-col gap-1.5">
@@ -429,10 +381,6 @@ function BlockEditorForm({
   );
 }
 
-/**
- * The name a block cannot edit here, labelled by whose name it is: a work
- * block's task, a habit block's habit, an occurrence's event.
- */
 function ReadOnlyTitle({ item }: { item: CalendarItem }) {
   const Icon = OWNER_ICON[item.kind];
   return (
@@ -446,11 +394,7 @@ function ReadOnlyTitle({ item }: { item: CalendarItem }) {
   );
 }
 
-/**
- * The end a start and an end clock reading describe. An end at or before the
- * start is the next day's — 23:30 to 00:30 is an hour, not a rejected span —
- * and the editor's summary says "next day" for it.
- */
+/** An end at or before the start is the next day's: 23:30 to 00:30 is an hour, not a rejected span. */
 export function resolveEnd(startMinutes: Minutes, endClock: Minutes): Minutes {
   return endClock > startMinutes ? endClock : endClock + MINUTES_PER_DAY;
 }

@@ -77,16 +77,23 @@ function idsIn(view: TaskView): string[] {
   return filterByView(ALL, view, context).map((t) => t.id);
 }
 
-describe("the six views", () => {
-  it("names exactly the six the spec lists", () => {
-    expect([...TASK_VIEWS]).toEqual(["inbox", "today", "upcoming", "all", "completed", "project"]);
+describe("the seven views", () => {
+  it("names exactly the six the spec lists, plus the archive", () => {
+    expect([...TASK_VIEWS]).toEqual([
+      "inbox",
+      "today",
+      "upcoming",
+      "all",
+      "completed",
+      "project",
+      "archived",
+    ]);
     expect(isTaskView("inbox")).toBe(true);
     expect(isTaskView("someday")).toBe(false);
   });
 
   it("INBOX is open work with no project", () => {
-    // The overdue and due-today fixtures have no project either, so they are
-    // captured-but-unfiled too — Inbox is about filing, not about dates.
+    // The overdue and due-today fixtures have no project either.
     expect(idsIn("inbox")).toEqual(["a", "b", "c", "d"]);
   });
 
@@ -123,10 +130,19 @@ describe("the six views", () => {
     expect(filterByView(ALL, "project", { today: TODAY })).toEqual([]);
   });
 
-  it("excludes archived tasks from every view", () => {
+  it("excludes archived tasks from every view but ARCHIVED", () => {
     for (const view of TASK_VIEWS) {
+      if (view === "archived") continue;
       expect(idsIn(view)).not.toContain("h");
     }
+  });
+
+  it("ARCHIVED shows archived tasks and nothing else", () => {
+    expect(idsIn("archived")).toEqual(["h"]);
+    // Either column marks a row archived.
+    const byTimestamp = task({ id: "j", archivedAt: instant("2026-09-05T10:00:00.000Z") });
+    expect(matchesView(byTimestamp, "archived", context)).toBe(true);
+    expect(matchesView(byTimestamp, "all", context)).toBe(false);
   });
 
   it("excludes subtasks from every view: they are shown inside their parent", () => {
@@ -136,8 +152,6 @@ describe("the six views", () => {
   });
 
   it("never reads a work block: a due date is not a schedule (Domain Rule 1)", () => {
-    // The same task, scheduled or not, is in the same view. Scheduled-ness is a
-    // filter, and is answered from calendar_blocks, never from the task.
     const unscheduled = task({ id: "z", dueDate: TODAY });
     expect(matchesView(unscheduled, "today", context)).toBe(true);
     expect(matchesView({ ...unscheduled, estimatedMinutes: 120 }, "today", context)).toBe(true);
@@ -189,7 +203,6 @@ describe("the toolbar filters", () => {
     );
     expect(selected.map((t) => t.id)).toEqual(["b"]);
 
-    // A filter that would match a completed task still cannot pull it into TODAY.
     const widened = selectTasks(
       ALL,
       "today",
@@ -203,10 +216,6 @@ describe("the toolbar filters", () => {
 
 describe("timezone independence", () => {
   it("takes today as a parameter and reads no clock", () => {
-    // The same list, two different "todays" — the answer moves with the
-    // parameter, which is what makes the profile timezone the only clock
-    // (Domain Rule 4). This test is meaningful because the suite runs twice,
-    // under UTC and under America/Los_Angeles.
     const yesterday: LocalDate = localDate("2026-09-05");
     expect(filterByView(ALL, "today", { today: yesterday }).map((t) => t.id)).toEqual(["a"]);
     expect(filterByView(ALL, "today", { today: TODAY }).map((t) => t.id)).toEqual(["a", "b"]);

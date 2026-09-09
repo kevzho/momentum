@@ -21,15 +21,6 @@ import type {
 } from "@/features/calendar/types";
 import { useCalendarDnd } from "@/features/calendar/use-calendar-dnd";
 
-/**
- * The keyboard paths, which are the half of Domain Rule 10 that a regression
- * breaks silently: a pointer drag that stops working is noticed the first time
- * anyone opens the calendar, and `M` + arrows + Enter is not.
- *
- * These assert what the interaction reports — which callback ran and with which
- * span — rather than what it renders. The geometry behind each span is covered
- * directly in `use-calendar-dnd.test.ts`.
- */
 const SPEC: GridSpec = {
   dayStartMinutes: 300,
   dayEndMinutes: 1440,
@@ -173,10 +164,7 @@ function setup(segments: readonly ItemSegment[] = [makeSegment(makeItem(), MON, 
   return { callbacks, columns, blocks, view };
 }
 
-/**
- * Focus first, then the key: every handler here guards on the event's target,
- * because a key pressed on a block inside a column belongs to the block.
- */
+// Focus first, then the key: every handler guards on the event's target.
 function press(element: HTMLElement, key: string, options: { shiftKey?: boolean } = {}) {
   act(() => element.focus());
   fireEvent.keyDown(element, { key, ...options });
@@ -200,9 +188,6 @@ describe("keyboard move mode", () => {
   });
 
   it("hands the result sentence to the board instead of announcing it before the write lands", () => {
-    // Announced on the keystroke, "Moved …" would stand uncorrected when the
-    // write failed and the block rolled back (Domain Rule 11). The board says
-    // it once the server has agreed, so the sentence travels with the callback.
     const { callbacks, blocks, view } = setup();
     const block = blocks[0]!;
 
@@ -250,7 +235,6 @@ describe("keyboard move mode", () => {
     expect(callbacks.onReschedule).not.toHaveBeenCalled();
     expect(block.hasAttribute("aria-pressed")).toBe(false);
 
-    // The block is back to its idle keys: Enter opens it rather than committing.
     press(block, "Enter");
     expect(callbacks.onOpenItem).toHaveBeenCalledTimes(1);
   });
@@ -315,15 +299,9 @@ describe("keyboard resize mode", () => {
   });
 });
 
-/**
- * A moved block is a different element: its React key carries the day, so a
- * move to another day unmounts one `BlockShell` and mounts another, and a
- * deleted block is simply gone. Either way the keyboard user who pressed Enter
- * has to land on something real — the block under its new key, or a neighbour
- * — never on `<body>`, where the next `M` does nothing (Domain Rule 10).
- */
+// A block's React key carries the day, so a move to another day unmounts one
+// `BlockShell` and mounts another.
 describe("focus after the focused block leaves the grid", () => {
-  /** The board, minimally: it applies the reschedule or delete it is told about. */
   function LiveBoard({
     initial,
     callbacks,
@@ -415,10 +393,6 @@ describe("focus after the focused block leaves the grid", () => {
 
 describe("touch", () => {
   it("leaves scrolling to the browser until a press-and-hold picks the block up", () => {
-    // `touch-action: none` would make every block a dead zone for scrolling
-    // the grid on a phone; `auto` lets the browser claim a drag. The block
-    // opts out of double-tap zoom only, and the touch sensor's hold does the
-    // rest.
     const { blocks } = setup();
     expect(blocks[0]!.className).toContain("touch-manipulation");
     expect(blocks[0]!.className).not.toContain("touch-none");
@@ -448,14 +422,7 @@ describe("block keys outside a mode", () => {
   });
 });
 
-/**
- * What a block says it can do has to be what it does. A description that offers
- * a key the element ignores is the mirror image of an undiscoverable keyboard
- * model: the user presses it and gets silence, with nothing to tell them why
- * (docs/DESIGN_SYSTEM.md's accessibility floor, Domain Rule 10).
- */
 describe("a block's accessible description", () => {
-  /** The text a screen reader would read after the block's name. */
   function description(block: HTMLElement): string {
     return (block.getAttribute("aria-describedby") ?? "")
       .split(" ")
@@ -476,9 +443,6 @@ describe("a block's accessible description", () => {
   });
 
   it("offers neither on a clipped half of a midnight-crossing block", () => {
-    // `M` and `R` return without doing anything when a segment is only part of
-    // its block, and dragging is disabled — so the description says so instead
-    // of promising both twice.
     const clipped = makeSegment(makeItem(), MON, 1410, 1440, { isEnd: false });
     const { blocks } = setup([clipped]);
     const text = description(blocks[0]!);
@@ -486,7 +450,7 @@ describe("a block's accessible description", () => {
     expect(text).not.toContain("to move");
     expect(text).not.toContain("to resize");
     expect(text).toContain("crosses midnight");
-    // Nor is it announced as a draggable, which dnd-kit sets even when disabled.
+    // dnd-kit sets `aria-roledescription` even when disabled.
     expect(blocks[0]!.getAttribute("aria-roledescription")).toBeNull();
   });
 
@@ -572,12 +536,6 @@ describe("the grid cursor", () => {
   });
 });
 
-/**
- * The tab order is the whole of Domain Rule 10's "reachable": a grid with no
- * tab stop has a complete keyboard model that nobody can start. It is also the
- * thing a plain re-render breaks silently, because every block still looks and
- * behaves correctly once something focuses it.
- */
 describe("the roving tab order", () => {
   function tabStops(elements: readonly HTMLElement[]): number {
     return elements.filter((element) => element.tabIndex === 0).length;
@@ -595,13 +553,8 @@ describe("the roving tab order", () => {
   });
 
   it("keeps a block tab stop when the block holding it unmounts", async () => {
-    // Deleting a block unmounts the element that held the stop. Releasing it
-    // is not enough on its own: `register` runs on mount and every surviving
-    // block is already mounted, so nothing re-claims and the whole week leaves
-    // the tab order — every block unreachable by keyboard until the route
-    // remounts. Promoting a survivor inside the cleanup is not enough either,
-    // because a commit can unmount several and the survivor picked first may
-    // be gone by the last.
+    // Deleting the block that held the stop: every survivor is already
+    // mounted, so nothing re-claims unless the controller repairs it.
     const segments = [
       makeSegment(makeItem({ id: "a" }), MON, 540, 600),
       makeSegment(makeItem({ id: "b" }), MON, 660, 720),
@@ -633,8 +586,7 @@ describe("the roving tab order", () => {
 
     await act(async () => {
       fireEvent.click(view.getByRole("button", { name: "drop the first" }));
-      // The repair runs on a microtask, after every cleanup and every
-      // re-registration of the commit has settled.
+      // The repair runs on a microtask.
       await Promise.resolve();
     });
 

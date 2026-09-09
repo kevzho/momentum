@@ -15,11 +15,6 @@ import type {
   WorkBlockContext,
 } from "@/features/calendar/types";
 
-/**
- * The editor's contract: it prefills from the draft, refuses a span that runs
- * backwards, hands the board plain values, and never mutates anything itself.
- */
-
 const SETTINGS: CalendarSettings = {
   timezone: ianaTimeZone("America/New_York"),
   weekStart: 1,
@@ -35,7 +30,7 @@ const SPAN: DaySpan = {
 
 const CREATE_DRAFT: BlockDraft = { mode: "create", span: SPAN };
 
-/** 23:30 to 00:30, counted from the day the block starts on — what `spanOf` returns. */
+// 23:30 to 00:30, counted from the day the block starts on, as `spanOf` returns it.
 const CROSSING_SPAN: DaySpan = {
   date: localDate("2026-09-08"),
   startMinutes: 23 * 60 + 30,
@@ -95,14 +90,10 @@ describe("BlockEditor", () => {
     expect(screen.getByLabelText<HTMLInputElement>("Date").value).toBe("2026-09-08");
     expect(screen.getByLabelText<HTMLInputElement>("Start").value).toBe("16:00");
     expect(screen.getByLabelText<HTMLInputElement>("End").value).toBe("16:45");
-    // The first field takes focus, so the sheet is usable without a pointer.
     expect(document.activeElement).toBe(screen.getByLabelText("Title"));
   });
 
   it("reads an end at or before the start as the next day's, and says so", () => {
-    // 23:30 to 00:30 is an hour, not a mistake: no other route creates an
-    // overnight block, so refusing it here would leave none. The summary names
-    // the day so the reading cannot be mistaken for a rejected span.
     const { onSubmit } = renderEditor();
 
     fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Study group" } });
@@ -122,7 +113,6 @@ describe("BlockEditor", () => {
     const { onSubmit } = renderEditor();
 
     fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Study group" } });
-    // 16:00 – 15:00 reads as overnight; 14:00 – 15:00 is an ordinary hour again.
     fireEvent.change(screen.getByLabelText("End"), { target: { value: "15:00" } });
     expect(screen.getByText(/next day/)).toBeDefined();
     fireEvent.change(screen.getByLabelText("Start"), { target: { value: "14:00" } });
@@ -175,9 +165,6 @@ describe("BlockEditor", () => {
   });
 
   it("names the parent a habit block or an occurrence takes its title from", () => {
-    // The read-only line is labelled by whose name it shows. "Task" over a
-    // habit block, with a sentence about work blocks, was a label for a
-    // different kind of block.
     const habit = workItem({ kind: "habit", title: "Gym", work: null, habitId: "habit-1" });
     const { unmount } = render(
       <BlockEditor
@@ -209,9 +196,6 @@ describe("BlockEditor", () => {
   });
 
   it("offers an occurrence only its times, so nothing typed can be discarded", () => {
-    // An occurrence's content has no write path (the recurring-event editor is
-    // a stated non-goal); a Description field or a Color picker here would
-    // accept input that Save silently dropped.
     const occurrence = workItem({
       kind: "event",
       title: "Statistics lecture",
@@ -223,7 +207,6 @@ describe("BlockEditor", () => {
 
     expect(screen.queryByLabelText("Description")).toBeNull();
     expect(screen.queryByRole("radio", { name: "Amber" })).toBeNull();
-    // What the series says is still readable — just not editable.
     expect(screen.getByText("Room 204")).toBeDefined();
     expect(screen.getByLabelText("Start")).toBeDefined();
     expect(screen.getByLabelText("End")).toBeDefined();
@@ -248,14 +231,8 @@ describe("BlockEditor", () => {
     );
   });
 
-  /*
-   * A block that runs past midnight has an end above 1440, which no
-   * `<input type="time">` can hold — the field can only show the wrapped
-   * reading. The day it belongs to lives in the state beside it, and touching
-   * the field must not drop it: an end that came back as a bare 0..1439 parse
-   * would fail `endMinutes > startMinutes` and leave the one surface that can
-   * edit such a block unable to save it at all.
-   */
+  // An end above 1440 fits no `<input type="time">`; retyping the field must
+  // not drop the day it belongs to.
   describe("a block that crosses midnight", () => {
     function renderCrossing() {
       const item = workItem({ endAt: instant("2026-09-09T04:30:00.000Z") });
@@ -335,8 +312,6 @@ describe("BlockEditor", () => {
   it("closes on Escape without emitting anything, and returns focus to the opener", async () => {
     const onSubmit = vi.fn();
 
-    // The editor is controlled: it reports the close and the board clears the
-    // draft. The harness is that board, minimally.
     function Board() {
       const [draft, setDraft] = React.useState<BlockDraft | null>(null);
       return (
@@ -367,19 +342,12 @@ describe("BlockEditor", () => {
 
     expect(screen.queryByLabelText("Title")).toBeNull();
     expect(onSubmit).not.toHaveBeenCalled();
-    // Focus goes back to whatever opened the sheet — a block in the grid, on
-    // the real board (Domain Rule 10).
     await waitFor(() => expect(document.activeElement).toBe(opener));
   });
 
   it("returns focus in the commit that closes it, not after the sheet's exit", () => {
-    /*
-     * Radix restores focus from the focus scope's unmount, which for a sheet
-     * is after its exit animation — some 200ms during which the active element
-     * is `<body>` and a fast `M` after Escape is lost (the Phase 3 known
-     * issue). The board clears the draft; focus has to be back on the opener
-     * by the time that render has committed, before any timer runs.
-     */
+    // Radix restores focus after the sheet's exit animation, some 200ms
+    // during which a fast `M` after Escape would be lost.
     function Board() {
       const [draft, setDraft] = React.useState<BlockDraft | null>(null);
       return (
@@ -413,10 +381,6 @@ describe("BlockEditor", () => {
   });
 });
 
-/* -------------------------------------------------------------------------- */
-/* Phase 7 — the second of the three routes into a focus session               */
-/* -------------------------------------------------------------------------- */
-
 describe("Start focus, from a work block", () => {
   function editDraft(item: CalendarItem): BlockDraft {
     return { mode: "edit", item, span: SPAN };
@@ -425,8 +389,6 @@ describe("Start focus, from a work block", () => {
   it("carries the task and the block's own length", () => {
     renderEditor({ draft: editDraft(workItem()) });
 
-    // 20:00–20:45 is a 45-minute block, which is a custom length the user did
-    // not have to type.
     expect(screen.getByRole("link", { name: "Start focus" }).getAttribute("href")).toBe(
       "/focus?task=task-1&minutes=45",
     );

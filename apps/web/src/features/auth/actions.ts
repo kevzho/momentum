@@ -13,37 +13,18 @@ import {
   updatePasswordInput,
 } from "@/features/auth/schemas";
 
-/**
- * Auth mutations.
- *
- * Each takes `FormData` so the forms work before JavaScript loads and keep
- * working if it fails; the client wrappers add `useActionState` on top for
- * pending state and inline errors. Every failure comes back as an
- * `ActionResult` — nothing throws for something a user can legitimately do
- * (docs/ARCHITECTURE.md §6).
- */
+// Each action takes `FormData` so the forms work before JavaScript loads.
 
 export type AuthResult = ActionResult<{ message: string | null }>;
 
-/** Where an authenticated user lands. Kept here so every path agrees. */
 const SIGNED_IN_HOME = "/today";
 
-/** Only a route the app actually has is honoured; see `returnableRoute`. */
 function safeNext(value: FormDataEntryValue | null) {
   return returnableRoute(typeof value === "string" ? value : null);
 }
 
-/**
- * An optional text field, read the way HTML means it.
- *
- * `FormData.get()` reports an untouched input as `""`, not as absent, and for
- * `displayName` and `timezone` those are the same thing: no suggestion. The
- * signup form's timezone input is empty until the client fills it from `Intl`,
- * so without this a form submitted before hydration — or in a browser where
- * `Intl` is unavailable — is rejected for a field the user never sees, instead
- * of starting the profile at UTC as the trigger intends
- * (docs/DATABASE.md § profiles).
- */
+// `FormData.get()` reports an untouched input as `""`; for these optional
+// fields that means absent, so a pre-hydration submit is not rejected.
 function optionalField(value: FormDataEntryValue | null): string | undefined {
   return typeof value === "string" && value.trim() !== "" ? value : undefined;
 }
@@ -62,8 +43,8 @@ export async function signIn(
   const { error } = await supabase.auth.signInWithPassword(parsed.data);
 
   if (error) {
-    // Deliberately one message for "no such account" and "wrong password":
-    // distinguishing them tells an attacker which addresses are registered.
+    // One message for "no such account" and "wrong password": distinguishing
+    // them would reveal which addresses are registered.
     return failure("unauthenticated", "That email and password do not match an account.");
   }
 
@@ -89,9 +70,8 @@ export async function signUp(
     email,
     password,
     options: {
-      // Read by handle_new_user() as raw_user_meta_data. The timezone is a
-      // suggestion the trigger validates; an unrecognised one becomes UTC
-      // rather than failing the signup (docs/DATABASE.md § profiles).
+      // Read by handle_new_user() as raw_user_meta_data; an unrecognised
+      // timezone becomes UTC rather than failing the signup.
       data: {
         ...(displayName ? { display_name: displayName } : {}),
         ...(timezone ? { timezone } : {}),
@@ -100,16 +80,9 @@ export async function signUp(
     },
   });
 
-  // A signed-up address that already exists must not be distinguishable from a
-  // fresh one, or the sign-up screen becomes an account-existence oracle — the
-  // same reason signIn and requestPasswordReset use one uniform message. GoTrue
-  // answers a duplicate with `user_already_exists`; return the very message a new
-  // account gets below. (With email confirmations enabled in production a fresh
-  // sign-up also returns no session and this identical message, so the two are
-  // indistinguishable; production must enable email confirmations — see the
-  // Security audit section of docs/ROADMAP.md.)
-  // Other errors — a weak password, an address GoTrue rejects — are the caller's
-  // own input and are surfaced.
+  // A duplicate address must get the exact message a fresh sign-up gets, or
+  // this screen becomes an account-existence oracle (requires email
+  // confirmations enabled in production so a fresh sign-up also has no session).
   if (error) {
     if (error.code === "user_already_exists" || /already registered/i.test(error.message)) {
       return success({
@@ -119,8 +92,7 @@ export async function signUp(
     return failure("validation", error.message);
   }
 
-  // Email confirmation on: no session yet, so say what happens next rather
-  // than dropping the user on a sign-in screen with no explanation.
+  // Email confirmation on: no session yet.
   if (!data.session) {
     return success({
       message: `Check ${email} for a link to confirm your account.`,
@@ -144,19 +116,14 @@ export async function requestPasswordReset(
   if (!parsed.success) return validationError(parsed.error.issues);
 
   const supabase = await createSupabaseServerClient();
-  /*
-   * The email itself is `supabase/templates/recovery.html`, which links to the
-   * callback with a `token_hash` rather than the PKCE `{{ .ConfirmationURL }}`
-   * — the PKCE code could only be exchanged by this browser, and a reset link
-   * is opened wherever the email is read. `redirectTo` is kept for the
-   * default template, and is a no-op with ours.
-   */
+  // `supabase/templates/recovery.html` links with a `token_hash` rather than
+  // the PKCE URL, since a reset link is opened in any browser; `redirectTo`
+  // only matters for the default template.
   await supabase.auth.resetPasswordForEmail(parsed.data.email, {
     redirectTo: `${env().NEXT_PUBLIC_APP_URL}/auth/callback?next=/update-password`,
   });
 
-  // The same answer whether or not the address has an account: the response
-  // must not be an account-enumeration oracle.
+  // Same answer whether or not the address has an account (no enumeration).
   return success({
     message: `If ${parsed.data.email} has an account, a reset link is on its way.`,
   });
@@ -175,7 +142,7 @@ export async function updatePassword(
   const supabase = await createSupabaseServerClient();
 
   // The recovery link signs the user in first; without that session there is
-  // nothing to update, and saying so is more useful than a generic failure.
+  // nothing to update.
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) {
     return failure(

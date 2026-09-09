@@ -1,14 +1,6 @@
 import { OfflineNotice } from "@/components/offline-notice";
 
-/**
- * The signed-out frame. Deliberately not `AppShell`: there is no navigation to
- * offer someone without an account, and the rail would be a row of links that
- * all bounce back here.
- *
- * A column rather than a single centred box, so that `OfflineNotice` has a row
- * of its own: signing in is the one thing on these screens, and it is the one
- * thing that cannot work without a connection.
- */
+// A column rather than a single centred box, so `OfflineNotice` has a row of its own.
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-dvh flex-col safe-overlay">

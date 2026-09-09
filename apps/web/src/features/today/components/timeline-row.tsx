@@ -10,20 +10,10 @@ import { TIMELINE_STATE_LABELS, TODAY_COPY } from "@/features/today/copy";
 import type { TimelineState, TodayItem } from "@/features/today/types";
 
 /**
- * One row of today's timeline.
- *
- * Past, current and future are distinguished three ways and never by colour
- * alone: the row's emphasis, the shape of its marker, and a word in the
- * accessible name (docs/DESIGN_SYSTEM.md — never signal state by colour alone).
- * A completed block additionally carries a check and a struck-through title,
- * which is the same encoding the calendar block uses, so the two surfaces read
- * the same.
- *
- * The completion control is offered exactly where the calendar offers it —
- * `isCompletable`, one definition for the block's pointer control, its keyboard
- * route and this row — and labelled by what it will do, which the server
- * decided (Domain Rule 13). An event has no completion state; a habit block
- * outside the recording window shows no control rather than one that must fail.
+ * One row of today's timeline. State is carried by emphasis, marker shape and
+ * a word, never colour alone. The completion control is offered exactly where
+ * the calendar offers it (`isCompletable`) and labelled by what the server
+ * decided it will do.
  */
 export function TimelineRow({
   entry,
@@ -73,9 +63,7 @@ export function TimelineRow({
         {time}
       </span>
 
-      {/* The rail: a hairline through the whole list, with one marker per row.
-          The marker's shape carries the state, so the timeline reads in
-          greyscale as well as in colour. */}
+      {/* The rail; the marker's shape carries the state so it reads in greyscale. */}
       <span aria-hidden="true" className="relative flex w-3 shrink-0 justify-center self-stretch">
         <span className="absolute inset-y-0 w-px bg-border" />
         <span
@@ -120,14 +108,11 @@ export function TimelineRow({
           />
         </span>
       ) : (
-        // The row is still readable and still announced; there is simply
-        // nothing to record. Reserving the width keeps the column straight.
+        // Reserving the width keeps the column straight.
         <span className="w-4 shrink-0" />
       )}
 
-      {/* The one part of the row that is otherwise only a visual difference.
-          "Now" is already a visible chip; opacity and a strike-through are
-          not announced by anything, so the word is supplied here. */}
+      {/* "Now" is already a visible chip; opacity and strike-through are not announced, so the word is supplied here. */}
       {state === "current" ? null : (
         <span className="sr-only">
           {completed ? TODAY_COPY.timeline.done : TIMELINE_STATE_LABELS[state]}

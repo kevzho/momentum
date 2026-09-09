@@ -10,18 +10,9 @@ import { TODAY, todayTask } from "@/features/today/fixtures";
 import type { TodayRisk } from "@/features/today/types";
 
 /**
- * Domain Rule 7, enforced.
- *
- * Nothing `/today` says may characterise the user or their day. The guard scans
- * two things — every string the copy module can produce, and the source of
- * every non-test file in the feature with comments stripped, so a JSDoc
- * explaining the rule cannot trip it.
- *
- * The list is this surface's own. It shares most of its words with
- * `features/planning/copy.test.ts` and `features/habits/copy.test.ts` and
- * differs in one place on purpose: "good" is permitted, because the page opens
- * with "Good morning" and a greeting is not a verdict. Everything that *is* a
- * verdict about the person, or about the day as a whole, is here.
+ * Scans every string the copy module can produce and the comment-stripped
+ * source of every non-test file in the feature. Unlike the habits and planning
+ * lists, "good" is permitted: the page opens with "Good morning".
  */
 
 const FORBIDDEN = [

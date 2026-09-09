@@ -77,6 +77,7 @@ was designed rather than as one wall of SQL.
 | `20260909120200_security_weekly_goals.sql` | _(Phase 13 audit)_ `guard_weekly_goals`: current-week-only insert, frozen `week_start`/`metric`/`target`; `weekly_goals_target_cap_chk` |
 | `20260909120300_security_quest_multiplication.sql` | _(Phase 13 audit)_ `quest_assignments.timezone`; `assign_quests` skips window-overlapping sets |
 | `20260909120400_security_freeze_created_at.sql` | _(Phase 13 audit)_ `freeze_created_at` on every client-writable table |
+| `20260909150000_quest_visibility.sql` | _(Phase 13 fix pass)_ `ensure_quest_assignments` returns every assignment whose window, in the zone it was assigned in, contains `now()` |
 
 ---
 
@@ -471,6 +472,22 @@ future day's quests or generate a hundred past days of them. The assignment's `i
 attempt that wrote it, the same reasoning as `habit_completion_id`, so the XP award behind
 it stays idempotent even if a row were ever removed.
 
+The return set follows the same rule the anti-multiplication guard applies
+(`20260909150000_quest_visibility.sql`): every assignment of the caller whose window —
+`[period_start 00:00, +1 day)` for daily, `[period_start 00:00, +7 days)` for weekly, evaluated
+in `coalesce(quest_assignments.timezone, profile timezone)` — contains `now()`. Today and the
+week's first day are still resolved from the profile for the two `assign_quests` calls; only the
+returned rows changed, so a timezone change that moves the local date keeps the held set visible
+instead of returning nothing until the next period.
+
+**Export.** `GET /api/export` reads every user-owned table through the session's client with
+`select("*")`, so row-level security is the only scoping. Any new user-owned table must be added
+to `exportTablesFor` in `apps/web/src/features/export/queries.ts`. Repository writes added by the
+fix pass: `projects.insert` (client id), `projects.update` (name, color), `projects.setArchived`
+(`archived_at` only — tasks keep `project_id`), `projects.findById`; `tasks.listArchivedFor`
+(`archived_at is not null`, newest first). `projects.listFor` still returns archived rows so blocks
+keep their colour; list surfaces filter on `archivedAt`.
+
 Phase 8 also strengthened `quest_definitions_volume_chk`: Phase 2 bounded five of the twelve
 `(period, metric)` pairs and ended in `else true`, which left a weekly `blocks_completed`
 quest for 400 blocks representable. All twelve are now named and the fallback is `false`, so
@@ -558,7 +575,7 @@ owner and publishing it would add an endpoint no caller has a use for.
 | **Phase 7** `mark_interruption(id)`                                      | `interruption_count += 1`. **Shipped.** Only ever called because the user said so; nothing is inferred and nothing is deducted (Domain Rule 7). |
 | **Phase 7** `finish_focus_session(id)`                                   | `actual_minutes = floor((now() - started_at - sum(pauses)) / 1 min)`, `status = completed`, `ended_at = now()`; `tasks.actual_minutes += actual_minutes`; awards focus XP per `xp_rule()` (1/min, ≥ `min_session_minutes` else 0, +10% when `actual >= planned`, priority bonus, then `session_cap`, then what is left of `daily_cap` computed over `xp_events` in the profile's local day). **Shipped**, as a thin wrapper over the internal `end_focus_session(id, status)`. Idempotent: a session that has already ended returns unchanged before any clock is read or any row is written, so the minutes reach the task once and the ledger row is minted once (Domain Rules 6, 17); `xp_events_source_uniq` is the second line of defence behind that. `evaluate_achievements()` remains Phase 8's, exactly as it is for `complete_task`. |
 | **Phase 7** `abandon_focus_session(id)`                                  | `status = abandoned`, `ended_at = now()`, `actual_minutes` recorded on the session **and added to the linked task**, no XP. **Shipped.** _(Phase 7 decided the half this row left open: the minutes reach the task. Work done is work done — twenty-five minutes are twenty-five minutes whether or not the bell rang — and Domain Rule 3 calls that number the product's most valuable long-term signal, so dropping it would make every estimate-versus-actual comparison quietly under-report. The XP is what distinguishes the two endings, because XP is the reward and the minutes are the measurement; nothing already earned is withdrawn (Domain Rule 7).)_ |
-| **Phase 8** `ensure_quest_assignments()`                                 | Assigns and returns the caller's quests for today and this week. **Shipped** (`20260907140000_gamification_functions.sql`). Takes no arguments: the period is resolved from the profile's timezone and week-start preference, so no caller can choose it. Deterministic per (account, date) — see the rotation above — and `on conflict do nothing`, so calling it on every page load is free. |
+| **Phase 8** `ensure_quest_assignments()`                                 | Assigns today's and this week's quests, and returns every assignment whose window (in the zone it was assigned in) contains now. **Shipped** (`20260907140000_gamification_functions.sql`, amended by `20260909150000_quest_visibility.sql`). Takes no arguments: the period is resolved from the profile's timezone and week-start preference, so no caller can choose it. Deterministic per (account, date) — see the rotation above — and `on conflict do nothing`, so calling it on every page load is free. |
 | **Phase 8** `quest_progress(assignment_id)` · `weekly_goal_progress(goal_id)` · `metric_progress(user, metric, from, to)` | Recompute a metric over a window of local dates in the profile timezone. **Shipped.** `metric_progress` is the one implementation both wrappers call; progress is never stored, so un-completing something lowers the count instead of leaving a stale total. `focus_minutes` counts every measured minute an ended session recorded, an abandoned one included (Domain Rules 3, 7). |
 | **Phase 8** `claim_quest(assignment_id)`                                 | Verifies `progress >= target` from the source rows, sets `completed_at`, awards XP and coins once. **Shipped.** Idempotent twice over: an already-claimed assignment returns before anything is written, and the coin credit is gated on the ledger accepting the XP row. |
 | **Phase 8** `claim_weekly_goal(goal_id)`                                 | Same pattern, with one difference that matters: the award's `source_id` is `weekly_goal_award_id(user, week_start, metric)`, not the goal's row id. `weekly_goals` is fully client-writable, so an id-keyed award would be mintable again by deleting the goal and creating it. The key is the goal's natural one — the same reasoning as `habit_completion_id`. The reward is flat (`weekly_goal_base`, `weekly_goal_coins`), so a bigger target buys nothing. **Shipped.** |

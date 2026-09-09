@@ -34,25 +34,10 @@ import {
 import { requireSession } from "@/lib/auth/session";
 
 /**
- * Every mutation the calendar can make.
- *
- * All of them share one shape (docs/ARCHITECTURE.md §6): validate with zod,
- * take the session, convert wall-clock input to instants with the *profile's*
- * timezone, call a repository, `refresh()` on success, and return an
- * `ActionResult`. Nothing here throws for a failure a user can legitimately
- * cause — a thrown error is a bug and belongs to an error boundary, and a drag
- * that lands on someone else's row is not a bug.
- *
- * The timezone conversion is the reason these take `{ date, startMinutes,
- * endMinutes }` rather than instants. The client is not allowed to assert an
- * instant: the profile timezone is the server's to apply (Domain Rule 4), and
- * keeping the conversion here means the DST rules below are decided once
- * instead of in every caller.
+ * Every calendar mutation: validate, take the session, convert wall-clock
+ * input to instants with the profile's timezone, call a repository, refresh on
+ * success, return an `ActionResult`. User-causable failures never throw.
  */
-
-/* -------------------------------------------------------------------------- */
-/* Blocks                                                                     */
-/* -------------------------------------------------------------------------- */
 
 export async function createBlock(input: unknown): Promise<ActionResult<CalendarBlock>> {
   const parsed = createBlockInput.safeParse(input);
@@ -86,13 +71,7 @@ export async function updateBlock(input: unknown): Promise<ActionResult<Calendar
   return attempt(() => blocks.update(supabase, id, { title, description, color }));
 }
 
-/**
- * Move and resize, in one row write.
- *
- * A drag that changes the day and the duration at once is a single update, so
- * there is no instant at which the block has moved but not yet resized — and no
- * second failure that could leave it half-moved.
- */
+/** Move and resize, in one row write. */
 export async function rescheduleBlock(input: unknown): Promise<ActionResult<CalendarBlock>> {
   const parsed = rescheduleBlockInput.safeParse(input);
   if (!parsed.success) return validationError(parsed.error.issues);
@@ -105,7 +84,7 @@ export async function rescheduleBlock(input: unknown): Promise<ActionResult<Cale
   );
 }
 
-/** Deleting a block never touches its task or habit (Domain Rule 13). */
+/** Deleting a block never touches its task or habit. */
 export async function deleteBlock(input: unknown): Promise<ActionResult<{ id: Uuid }>> {
   const parsed = deleteBlockInput.safeParse(input);
   if (!parsed.success) return validationError(parsed.error.issues);
@@ -119,14 +98,7 @@ export async function deleteBlock(input: unknown): Promise<ActionResult<{ id: Uu
   });
 }
 
-/**
- * A task dropped on the grid becomes a work block linked to it.
- *
- * The block carries no title of its own: it renders its task's, so the two can
- * never disagree (Domain Rule 2 — one task, many blocks). The block's time is
- * not the task's due date and nothing here touches `due_date`
- * (Domain Rule 1).
- */
+/** A task dropped on the grid becomes a work block linked to it; `due_date` is never touched. */
 export async function scheduleTask(input: unknown): Promise<ActionResult<CalendarBlock>> {
   const parsed = scheduleTaskInput.safeParse(input);
   if (!parsed.success) return validationError(parsed.error.issues);
@@ -139,17 +111,8 @@ export async function scheduleTask(input: unknown): Promise<ActionResult<Calenda
 }
 
 /**
- * The completion control on a block.
- *
  * `completed_at` is a guarded column, so this is an RPC and not an update: the
- * database stamps the time with its own clock and the browser could not write
- * the column even by talking to PostgREST directly (Domain Rule 15).
- *
- * `alsoCompleteTask` carries the label's promise — the block was the task's only
- * one, or its last incomplete one — and is resolved on the server in
- * `queries.ts`, so the control's wording and its effect come from the same
- * calculation (Domain Rule 13). It is meaningless when un-completing: a block
- * that was executed and then was not says nothing about the task.
+ * database stamps the time with its own clock.
  */
 export async function setBlockCompletion(input: unknown): Promise<ActionResult<CalendarBlock>> {
   const parsed = setBlockCompletionInput.safeParse(input);
@@ -158,18 +121,8 @@ export async function setBlockCompletion(input: unknown): Promise<ActionResult<C
   const { id, completed, alsoCompleteTask, alsoUncompleteTask, habitId } = parsed.data;
   const { supabase } = await requireSession();
 
-  /*
-   * A habit block takes a different function, not a different argument
-   * (Phase 6). Completing one is two facts in one transaction — the span was
-   * executed, and the habit was done on the block's own local date — and
-   * `complete_block` deliberately does only the first, which is all Domain
-   * Rule 13 says it does. Splitting them into two calls from here would leave a
-   * window in which the block was complete and the habit had no record of the
-   * day, and a failed second call would strand it there.
-   *
-   * `habitId` only routes the call; the database re-reads the block and refuses
-   * a non-habit block, so the client cannot reach this path with a work block.
-   */
+  // A habit block's completion also records the habit's day, in one
+  // transaction. `habitId` only routes the call; the database refuses a non-habit block.
   if (habitId !== null) {
     return attempt(() =>
       completed ? blocks.completeHabit(supabase, id) : blocks.uncompleteHabit(supabase, id),
@@ -183,19 +136,7 @@ export async function setBlockCompletion(input: unknown): Promise<ActionResult<C
   );
 }
 
-/* -------------------------------------------------------------------------- */
-/* One occurrence of a recurring event                                        */
-/* -------------------------------------------------------------------------- */
-
-/**
- * Moving or resizing one occurrence writes an override row linked to the series
- * and the occurrence date (docs/ARCHITECTURE.md §11). The series is untouched;
- * every other occurrence keeps the rule's wall-clock time.
- *
- * Phase 3 does not build the recurring-event editor — "this and following" and
- * "all" are not here — but it does have to let a user drag one of these blocks,
- * and dragging one occurrence has exactly one correct meaning.
- */
+/** Moving or resizing one occurrence writes an override row; the series is untouched. */
 export async function rescheduleOccurrence(input: unknown): Promise<ActionResult<CalendarBlock>> {
   const parsed = rescheduleOccurrenceInput.safeParse(input);
   if (!parsed.success) return validationError(parsed.error.issues);
@@ -217,15 +158,9 @@ export async function rescheduleOccurrence(input: unknown): Promise<ActionResult
 }
 
 /**
- * Deleting one occurrence writes a *cancelled* override rather than removing
- * anything: the series has no row for that occurrence to delete, and the
- * expansion needs a marker to know to skip it. Nothing is destroyed, so
- * restoring the occurrence later is a row update.
- *
- * The cancelled row keeps the occurrence's own times. It has to carry a valid
- * span (`blocks_span_chk`), and the honest one is the span it is cancelling —
- * computed the way `expandSeries` computes it, from the series' wall clock in
- * the series' timezone (Domain Rule 16).
+ * Deleting one occurrence writes a cancelled override; nothing is destroyed.
+ * The row must carry a valid span (`blocks_span_chk`), so it keeps the
+ * occurrence's own times.
  */
 export async function deleteOccurrence(input: unknown): Promise<ActionResult<CalendarBlock>> {
   const parsed = deleteOccurrenceInput.safeParse(input);
@@ -246,30 +181,11 @@ export async function deleteOccurrence(input: unknown): Promise<ActionResult<Cal
   });
 }
 
-/* -------------------------------------------------------------------------- */
-/* Wall clock → instants                                                      */
-/* -------------------------------------------------------------------------- */
-
 /**
- * The one conversion from what the user drew to what is stored.
- *
- * Both ends go through `fromLocal` with the profile timezone, because the grid
- * is laid out in wall clock and a block has to come back to the row the user
- * put it on. That is right on all but two days a year:
- *
- * - **Fall back.** Local 01:00–02:00 happens over two hours. `fromLocal` takes
- *   the first occurrence of an ambiguous reading, so the stored span is two
- *   hours long and renders on the rows the user drew. Preserving the drawn
- *   *length* instead would store one hour and draw a block half the height of
- *   the gesture that made it.
- * - **Spring forward.** Local 02:00–03:00 does not exist; `fromLocal` moves a
- *   reading inside the gap forward by the gap's width. Both ends move together
- *   unless the span straddles the gap's far edge — 02:30 to 03:00 resolves to
- *   03:30 and 03:00, in that order — which would be a block that ends before it
- *   starts and a `blocks_span_chk` violation. There the drawn length is the only
- *   meaning left, so it wins. `expandSeries` resolves the same collision the
- *   same way, and Domain Rule 3 is why: a block's length is the amount of the
- *   user's week it consumes.
+ * Wall clock → instants. Both ends go through `fromLocal` so the block lands
+ * on the rows the user drew (a fall-back 01:00–02:00 is two hours). A span
+ * straddling the far edge of a spring-forward gap resolves inverted, so there
+ * the drawn length wins. Must match `expandSeries` and `intervalOfSlot`.
  */
 function spanInstants(
   date: LocalDate,
@@ -284,11 +200,7 @@ function spanInstants(
     : { startAt, endAt: addMinutes(startAt, endMinutes - startMinutes) };
 }
 
-/**
- * The span the rule would have given this occurrence, in the series' own
- * timezone — the same three lines `expandSeries` runs, because a cancelled or
- * newly created override has to describe the occurrence it replaces.
- */
+/** The span the rule would have given this occurrence; the same computation as `expandSeries`. */
 function occurrenceSpan(
   series: EventBlock,
   occurrenceDate: LocalDate,
@@ -305,10 +217,6 @@ function occurrenceSpan(
   );
   return { startAt, endAt: addMinutes(startAt, durationMinutes(series.startAt, series.endAt)) };
 }
-
-/* -------------------------------------------------------------------------- */
-/* Repository plumbing                                                        */
-/* -------------------------------------------------------------------------- */
 
 async function requireSeries(client: MomentumClient, seriesId: Uuid): Promise<EventBlock> {
   const series = await blocks.findById(client, seriesId);
@@ -328,19 +236,10 @@ interface OverrideWrite {
 }
 
 /**
- * Writes the one override row an occurrence may have.
- *
- * `blocks_override_uniq` is a unique index on `(series_id, occurrence_date)`, so
- * "already overridden" is a fact the database owns and the read-then-write below
- * cannot get wrong for long: a retry that races itself loses on the index and
- * takes the update path on the way back through. That is what makes dragging the
- * same occurrence twice, or retrying a lost response, idempotent
- * (Domain Rule 17).
- *
- * The row copies the series' title and colour because an override is a whole
- * event row, and `blocks_event_title_chk` requires events to have a title. It
- * carries no `recurrence` of its own — only a series row may
- * (`blocks_recurrence_kind_chk`).
+ * Writes the one override row an occurrence may have. A racing insert loses
+ * on `blocks_override_uniq` and takes the update path, which is what makes a
+ * retry idempotent. The row copies the series' title because
+ * `blocks_event_title_chk` requires one.
  */
 async function writeOverride(client: MomentumClient, write: OverrideWrite): Promise<CalendarBlock> {
   const existing = await blocks.findOverride(client, write.series.id, write.occurrenceDate);
@@ -379,14 +278,9 @@ async function writeOverride(client: MomentumClient, write: OverrideWrite): Prom
 }
 
 /**
- * An insert a retry may repeat.
- *
- * Ids are generated by the client (Domain Rule 17), so a create that was
- * persisted but whose response was lost collides with itself on the primary key
- * the second time round. That is the retry succeeding, not a conflict: the row
- * the user asked for exists and is theirs, so the action returns it. Any other
- * unique violation, and a collision whose row cannot be read back, is a real
- * failure and is re-thrown.
+ * An insert a retry may repeat: with client-generated ids a lost response
+ * collides with itself on the primary key, and that row is the success. Any
+ * other unique violation is re-thrown.
  */
 async function insertOnce(
   client: MomentumClient,
@@ -403,10 +297,6 @@ async function insertOnce(
   }
 }
 
-/* -------------------------------------------------------------------------- */
-/* Failure                                                                    */
-/* -------------------------------------------------------------------------- */
-
 const UNIQUE_VIOLATION = "23505";
 
 /** Raised by this module where a repository would otherwise return null. */
@@ -414,17 +304,8 @@ class NotFound extends Error {}
 
 /**
  * Runs a mutation and turns anything it throws into an `ActionResult`.
- *
- * `refresh()` re-renders the current route with server truth, which is what
- * replaces the optimistic state the client applied (docs/ARCHITECTURE.md §8).
- * It runs only on success: a failed mutation changed nothing, and re-rendering
- * would only cost a round trip on the way to a toast.
- *
- * `/today` and `/tasks` are invalidated as well, for the reason
- * `features/tasks/actions.ts` invalidates `/calendar`: a block moved or
- * completed on the board is on Today's timeline and is a task's coverage, and
- * a route that kept a stale copy of either would be showing the user something
- * the database no longer says (Phase 9).
+ * `refresh()` replaces the optimistic state with server truth, on success
+ * only. `/today` and `/tasks` show the same blocks, so they are invalidated too.
  */
 async function attempt<T>(operation: () => Promise<T>): Promise<ActionResult<T>> {
   try {
@@ -460,14 +341,7 @@ function isCode(error: unknown, code: string): boolean {
   return isDatabaseError(error) && error.code === code;
 }
 
-/**
- * Messages for the constraints a calendar interaction can actually trip.
- *
- * A constraint violation reaching the user means the client sent something the
- * grid should not have produced, so the message says what the rule is rather
- * than repeating Postgres at them. Anything not listed falls back to the
- * database's own message, which is still better than a generic apology.
- */
+// Anything not listed falls back to the database's own message.
 const CONSTRAINT_MESSAGES: Record<string, string> = {
   blocks_span_chk: "A block has to end after it starts, and can be at most seven days long.",
   blocks_kind_shape_chk: "A work block needs a task, a habit block needs a habit.",
@@ -480,25 +354,11 @@ const CONSTRAINT_MESSAGES: Record<string, string> = {
 };
 
 /**
- * Maps a thrown value onto the six codes the UI branches on.
- *
- * The codes are Postgres SQLSTATEs, which PostgREST passes through verbatim:
- *
- *   42501  the row belongs to another account — `assert_caller`, or the
- *          guard triggers refusing a write to a guarded column
- *   P0002  the trusted functions' "no such row"
- *   PGRST116  a `.single()` that matched nothing, which RLS makes
- *          indistinguishable from a row that is not the caller's, by design
- *   23514  a check constraint; the constraint name is in the message
- *   22023  an argument the database rejected, e.g. completing a task from a
- *          block that has none
- *   23503  a foreign key: the task or series was deleted underneath the drag
- *   23505  a unique violation that was not the idempotent-create case above
- *
- * Anything else — including a fetch that never reached the database — is
- * `unavailable`. It is deliberately not re-thrown: an error boundary would
- * replace the whole calendar over one failed drag, and Domain Rule 11 asks for
- * the opposite, a visible failure and a clean roll-back.
+ * Maps a thrown value onto the codes the UI branches on. SQLSTATEs pass
+ * through PostgREST verbatim: 42501 another account's row or a guarded column;
+ * P0002 / PGRST116 no such row (RLS makes the two indistinguishable by design);
+ * 23514 check constraint; 22023 rejected argument; 23503 parent deleted.
+ * Anything else is `unavailable` and deliberately not re-thrown.
  */
 function describe(error: unknown): { code: ActionErrorCode; message: string } {
   if (error instanceof NotFound) {

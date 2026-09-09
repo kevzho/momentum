@@ -17,7 +17,7 @@ const KOLKATA = ianaTimeZone("Asia/Kolkata");
 const d = localDate;
 const i = instant;
 
-/** U+2013. Asserted by codepoint so a hyphen substituted by an editor fails loudly. */
+/** U+2013, not a hyphen. */
 const EN_DASH = "–";
 
 describe("formatMinutesOfDay", () => {
@@ -36,8 +36,7 @@ describe("formatMinutesOfDay", () => {
   });
 
   it("uses a plain space before the meridiem, not ICU's narrow no-break space", () => {
-    // Recent ICU versions emit U+202F here. It is invisible, it breaks string
-    // comparison, and it leaks into anything that copies these labels.
+    // Recent ICU versions emit U+202F here.
     expect(formatMinutesOfDay(540, { hour12: true })).toBe("9:00 AM");
   });
 
@@ -97,8 +96,7 @@ describe("formatLocalDate", () => {
   });
 
   it("never shifts the date, whatever the host timezone is", () => {
-    // The suite runs under TZ=UTC and TZ=America/Los_Angeles. A formatter that
-    // forgot `timeZone: "UTC"` would render "Sep 6" here under the second one.
+    // Under TZ=America/Los_Angeles a formatter without `timeZone: "UTC"` would render "Sep 6".
     expect(formatLocalDate(d("2026-09-07"), "dayOfMonth")).toBe("7");
     expect(formatLocalDate(d("2026-01-01"), "medium")).toBe("Jan 1, 2026");
     expect(formatLocalDate(d("2025-12-31"), "medium")).toBe("Dec 31, 2025");

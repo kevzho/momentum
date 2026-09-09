@@ -11,12 +11,6 @@ import {
   type ScheduleTaskDialogProps,
 } from "@/features/planning/components/schedule-task-dialog";
 
-/**
- * The manual route (Domain Rule 10). What is tested is that it produces the
- * same span the drop path would — one built from the task's estimate — and
- * that it refuses what the grid could not hold.
- */
-
 const DAYS: readonly LocalDate[] = [
   "2026-09-07",
   "2026-09-08",

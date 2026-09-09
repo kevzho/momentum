@@ -20,32 +20,11 @@ import type {
 } from "./types";
 
 /**
- * Capacity: the three lines of the planning drawer and the bar under each day
- * (specs/05-week-planning.md; docs/SCHEDULING.md "Capacity and conflicts").
- *
- *   PLANNED            what the user has committed — every block that occupies
- *                      time, summed block by block, clipped to each day
- *   AVAILABLE          working time no commitment covers, today and after
- *   UNSCHEDULED WORK   estimate no work block covers yet, over the tasks given
- *
- * Two different sums run through this file, and the difference is the point.
- * Planned time is **summed without merging**: two blocks at 10:00 are two
- * claims on the same hour, and the number the drawer prints is what the user
- * has committed to, not how much of the day those commitments happen to
- * cover. Available time is **merged before it is measured**: a minute cannot
- * be freed twice, so the busy list is coalesced (`busyIntervals`) before it is
- * subtracted from the working windows. Both are elapsed minutes (Domain
- * Rule 3): a block across a DST transition costs the week what the clock
- * actually ran, and a working window on such a day is an hour longer or
- * shorter than it reads.
- *
- * Nothing here reads a clock. "Today" is `context.today`, resolved by the
- * caller in the profile timezone (Domain Rule 4), and the week's available
- * minutes count today in full: the server renders this number, the client's
- * first paint has to match it (docs/ARCHITECTURE.md §10), and the "~" the
- * drawer prints before it is the acknowledgement that part of today has gone.
- * Which blocks count at all is decided in one place, `occupiesTime`
- * (Domain Rule 13); this file never re-derives that rule.
+ * Capacity (docs/SCHEDULING.md). Planned time is summed without merging: two
+ * blocks at 10:00 are two claims on the hour. Available time is merged before
+ * it is measured: a minute cannot be freed twice. Today's available minutes
+ * count in full so the server render and the client's first paint agree.
+ * Which blocks count is decided by `occupiesTime` alone.
  */
 
 export interface CapacityInput {
@@ -57,14 +36,9 @@ export interface CapacityInput {
 }
 
 /**
- * Elapsed minutes reserved for a task: its work blocks in the range plus what
- * lies outside it (`scheduledOutsideMinutes`).
- *
- * Coverage is *planned* time, so every work block of the task counts,
- * executed or not, and `occupiesTime` is deliberately not consulted: a block
- * that was already worked is still time that was scheduled toward the
- * estimate. The in-range blocks are summed live from `commitments` so an
- * optimistic block counts exactly once while its write is in flight.
+ * Elapsed minutes reserved for a task: its work blocks in the range plus
+ * `scheduledOutsideMinutes`. `occupiesTime` is deliberately not consulted:
+ * a block already worked is still time scheduled toward the estimate.
  */
 export function scheduledMinutesOf(
   task: PlanningTask,
@@ -79,14 +53,7 @@ export function scheduledMinutesOf(
   return scheduled;
 }
 
-/**
- * Estimate minus scheduled, floored at zero. Zero for an unestimated task.
- *
- * The same floor `coverageOf` applies (`packages/core/src/tasks/coverage.ts`):
- * an unestimated task has no remainder because there is no denominator to
- * invent one from, and a task with more booked than estimated has nothing
- * left rather than a negative amount.
- */
+/** Estimate minus scheduled, floored at zero; zero for an unestimated task. Same floor as `coverageOf`. */
 export function remainingMinutesOf(
   task: PlanningTask,
   commitments: readonly Commitment[],
@@ -95,14 +62,7 @@ export function remainingMinutesOf(
   return Math.max(0, task.estimatedMinutes - scheduledMinutesOf(task, commitments));
 }
 
-/**
- * One day's load against its working window.
- *
- * `busy` is the merged busy list of the whole range, computed once by the
- * caller; a commitment from another day subtracts nothing from this day's
- * windows, so passing the whole list is correct and avoids re-merging it
- * seven times.
- */
+/** One day's load against its working window. `busy` is the whole range's merged list, computed once by the caller. */
 function dayWorkload(
   date: LocalDate,
   context: PlanningContext,
@@ -111,9 +71,7 @@ function dayWorkload(
 ): DayWorkload {
   const bounds = dayBounds(date, context.timezone);
 
-  // Clipped to the day and summed block by block: a block from 23:30 to 00:30
-  // gives 30 minutes to each of two days, and two blocks in the same hour
-  // give the hour twice.
+  // Clipped to the day and summed block by block, without merging.
   let workMinutes = 0;
   let eventMinutes = 0;
   for (const commitment of commitments) {

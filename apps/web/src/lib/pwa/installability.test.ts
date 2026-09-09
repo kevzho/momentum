@@ -5,25 +5,14 @@ import { describe, expect, it, vi } from "vitest";
 
 import manifest from "@/app/manifest";
 
-/*
- * `proxy.ts` is imported for its matcher alone. Its one import reaches the
- * request-scoped Supabase client, which is `server-only` and refuses to load
- * outside a server component; the matcher is a plain string and has nothing to
- * do with any of that.
- */
+// `proxy.ts` is imported for its matcher alone; its one import reaches the
+// `server-only` Supabase client.
 vi.mock("@/lib/supabase/proxy", () => ({ refreshSession: vi.fn() }));
 
 const { config: proxyConfig } = await import("@/proxy");
 
-/**
- * Installability, asserted against the files a browser actually fetches.
- *
- * Every check here stands in for something that fails silently in a browser: an
- * icon whose declared size is not its real size is simply not used, a manifest
- * that 307s to /login is "not installable" with no error anywhere, and a
- * maskable icon without its safe-zone padding just looks wrong on one platform
- * and fine on the others.
- */
+// Every check stands in for something that fails silently in a browser: a
+// wrong icon size is simply not used, a manifest that 307s is "not installable".
 
 const PUBLIC_DIR = join(import.meta.dirname, "..", "..", "..", "public");
 
@@ -46,17 +35,14 @@ describe("web app manifest", () => {
   });
 
   it("never falls back to a browser tab, and never asks for the title-bar overlay", () => {
-    // An installed window that quietly became a tab is the failure this phase
-    // exists to prevent, so `browser` must not be in the fallback chain.
+    // `browser` must not be in the fallback chain.
     expect(value.display_override).not.toContain("browser");
-    // And declaring `window-controls-overlay` *enables* it: Chrome would draw
-    // the window controls into a top bar that has not reserved room for them.
+    // Declaring `window-controls-overlay` enables it, over a top bar that has not reserved room.
     expect(value.display_override).not.toContain("window-controls-overlay");
   });
 
   it("keeps the splash colours in step with the design tokens", () => {
-    // `--background`, light theme. Changing it in globals.css without changing
-    // it here shows up as a flash of the wrong colour on every cold launch.
+    // `--background`, light theme; must match globals.css or every cold launch flashes.
     expect(value.theme_color).toBe("#fdfdfe");
     expect(value.background_color).toBe("#fdfdfe");
   });
@@ -80,8 +66,7 @@ describe("web app manifest", () => {
     expect(by("any")).toEqual(expect.arrayContaining(["192x192", "512x512"]));
     expect(by("maskable")).toEqual(expect.arrayContaining(["192x192", "512x512"]));
 
-    // Never one file serving both: a maskable icon carries 10% of padding the
-    // platform crops, so the same PNG used as `any` renders small and floating.
+    // Never one file serving both: a maskable icon carries 10% padding the platform crops.
     const maskableSources = new Set(
       (value.icons ?? []).filter((i) => i.purpose === "maskable").map((i) => String(i.src)),
     );
@@ -91,9 +76,8 @@ describe("web app manifest", () => {
   });
 
   it("draws the maskable icons inside the safe zone", () => {
-    // The guarantee is only a centred circle of 80% diameter; the corners of
-    // the canvas are cropped on Android. The mark is therefore drawn at 54.7%,
-    // whose own corners sit inside that circle.
+    // Only a centred circle of 80% diameter is guaranteed; the mark is drawn at
+    // 54.7% so its own corners sit inside that circle.
     const source = readFileSync(join(PUBLIC_DIR, "icons", "icon-maskable.svg"), "utf8");
     const [, translate] = /translate\((\d+(?:\.\d+)?) /.exec(source) ?? [];
     const [, scale] = /scale\((\d+(?:\.\d+)?)\)/.exec(source) ?? [];
@@ -108,16 +92,14 @@ describe("web app manifest", () => {
 });
 
 describe("the auth proxy", () => {
-  /** The matcher, as the exemption it encodes: does this path reach `proxy()`? */
+  /** Does this path reach `proxy()`? */
   function isProxied(pathname: string): boolean {
     const [pattern] = proxyConfig.matcher;
     return new RegExp(`^${pattern}$`).test(pathname);
   }
 
   it("exempts the files a browser fetches without credentials", () => {
-    // Each of these would otherwise be answered with a 307 to /login for a
-    // signed-out visitor: the manifest would not parse, and the worker would be
-    // registered from a text/html document and rejected.
+    // Each would otherwise be answered with a 307 to /login for a signed-out visitor.
     expect(isProxied("/manifest.webmanifest")).toBe(false);
     expect(isProxied("/sw.js")).toBe(false);
     expect(isProxied("/offline.html")).toBe(false);

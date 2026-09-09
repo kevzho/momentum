@@ -3,17 +3,9 @@ import type { Insight } from "@momentum/core/analytics";
 import { ANALYTICS_COPY } from "@/features/analytics/copy";
 
 /**
- * The patterns panel.
- *
  * Every sentence here was computed and gated in `@momentum/core/analytics`;
- * this component adds no words of its own beyond the heading and the caveat,
- * which is deliberate — the place a causal claim would get written is a
- * component, and there is nothing to write one in.
- *
- * An empty panel is the ordinary state for a new account and says so plainly,
- * rather than being hidden. Hiding it would leave a user who has just started
- * wondering whether the feature is broken; showing an unearned pattern would be
- * worse (Domain Rule 8).
+ * this component adds no words beyond the heading and the caveat. An empty
+ * panel is shown, not hidden.
  */
 export function InsightsPanel({ insights }: { insights: readonly Insight[] }) {
   return (

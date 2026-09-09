@@ -6,7 +6,7 @@ export type FocusSessionStatus = (typeof FOCUS_SESSION_STATUSES)[number];
 /**
  * Timer truth is `startedAt` plus the pause records, all stamped server-side.
  * Elapsed and remaining time are derived from these on every tick; a client
- * counter is never the source of truth (specs/07-focus-mode.md).
+ * counter is never the source of truth.
  */
 export interface FocusSession {
   id: Uuid;

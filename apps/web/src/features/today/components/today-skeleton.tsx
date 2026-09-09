@@ -4,17 +4,8 @@ import { Skeleton } from "@momentum/ui/components/skeleton";
 import { PageHeaderSkeleton, RowsSkeleton, SectionLabelSkeleton } from "@/components/skeletons";
 
 /**
- * Built from the same layout as `TodayView`, so the skeleton occupies the space
- * the content will occupy and nothing moves when it arrives.
- *
- * The numbers mirror the real page: the greeting block repeats visually below
- * `md` (28px + 16px), `DayProgress` is one 20px row, Next Up is a bordered
- * surface holding a title, a meta line and a row of controls, and the timeline
- * rows are 40px each at `py-1`.
- *
- * At Risk is deliberately absent. It is not rendered when there is nothing at
- * risk, which is most days, so reserving its height would make the common case
- * shift *down* when the content arrived.
+ * Mirrors `TodayView`'s layout and dimensions so nothing moves when content
+ * arrives. At Risk is deliberately absent: it is not rendered on most days.
  */
 export function TodaySkeleton() {
   return (

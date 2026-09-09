@@ -20,20 +20,12 @@ import { InsightsPanel } from "@/features/analytics/components/insights-panel";
 import { ANALYTICS_COPY, duration, percent, rangeSentence } from "@/features/analytics/copy";
 import type { AnalyticsPageData } from "@/features/analytics/types";
 
-/** The window the page opens on: long enough to hold a pattern, short enough to be this month. */
 const DEFAULT_RANGE: AnalyticsRange = "30";
 
 /**
- * The analytics surface.
- *
- * One client island over one server read. All three windows arrive as props
- * already aggregated (`features/analytics/queries.ts`), so switching range is a
- * state change and nothing else — no fetch, no route transition, no skeleton,
- * and no chance of two windows disagreeing about the same day.
- *
- * The island does no arithmetic on the numbers it is given and no date maths at
- * all (Domain Rule 5). It chooses which pre-computed window to render and hands
- * arrays to charts.
+ * One client island over one server read: all three windows arrive already
+ * aggregated, so switching range is a state change and nothing else. No
+ * arithmetic and no date maths here.
  */
 export function AnalyticsView({ data }: { data: AnalyticsPageData }) {
   const [range, setRange] = React.useState<AnalyticsRange>(DEFAULT_RANGE);

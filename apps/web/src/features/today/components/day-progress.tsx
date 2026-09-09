@@ -4,19 +4,7 @@ import { cn } from "@momentum/ui/lib/utils";
 
 import { TODAY_COPY } from "@/features/today/copy";
 
-/**
- * Level, progress through it, and what today has added.
- *
- * specs/09-today.md asks the header for "current level and XP progress"; the
- * design system asks that the game layer stay a number and a bar, never a hero
- * banner (Domain Rule 7). This is both: one 24px row, no tile, no icon, no
- * celebration. The top bar carries the same level on every route — here it is
- * joined by the number that is actually today's, which is the question the page
- * exists to answer.
- *
- * Every figure is display-only. XP is computed by trusted database logic and
- * the client never asserts an amount (Domain Rule 6).
- */
+/** Level, progress through it, and what today has added: one row, no banner. Display-only; the client never asserts XP. */
 export function DayProgress({ level, xpToday }: { level: LevelProgress; xpToday: number }) {
   return (
     <div className="flex items-center gap-3">

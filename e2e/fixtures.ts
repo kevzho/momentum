@@ -10,6 +10,11 @@ export type SeedUser = keyof typeof SEED_USERS;
 
 export async function signIn(page: Page, user: SeedUser = "owner"): Promise<void> {
   const { email, password } = SEED_USERS[user];
+  await signInAs(page, email, password);
+}
+
+/** Signs in with any credentials — for accounts a spec creates or re-keys. */
+export async function signInAs(page: Page, email: string, password: string): Promise<void> {
   await page.goto("/login");
   await page.getByLabel(/email/i).fill(email);
   await page.getByLabel(/password/i).fill(password);
@@ -30,15 +35,7 @@ export const test = base.extend<{ signedIn: void }>({
 
 export { expect };
 
-/* -------------------------------------------------------------------------- */
-/* Helpers shared by the workflow specs                                       */
-/* -------------------------------------------------------------------------- */
-
-/**
- * Everything a spec creates is prefixed `E2E-` and suffixed with a timestamp,
- * so a run never collides with the seed data, with another run, or with the
- * other audit lanes working against the same database.
- */
+/** `E2E-` prefix plus timestamp, so a run never collides with seed data or another run. */
 export function uniqueName(prefix: string): string {
   return `E2E-${prefix}-${Date.now().toString(36)}`;
 }
@@ -48,10 +45,7 @@ export function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-/**
- * Captures a task through Quick Add (the top bar's `+`) and waits for the
- * confirmation toast, which is the app's own signal that the row committed.
- */
+/** Captures a task through Quick Add and waits for the confirmation toast. */
 export async function quickAdd(page: Page, title: string): Promise<void> {
   await page.getByRole("button", { name: "Quick add" }).click();
   const dialog = page.getByRole("dialog", { name: "New task" });
@@ -61,12 +55,7 @@ export async function quickAdd(page: Page, title: string): Promise<void> {
   await expect(dialog).toBeHidden();
 }
 
-/**
- * Completes a task from the list on `/tasks` and waits for the write to land.
- *
- * The row leaves the view optimistically, before the server has answered
- * (Domain Rule 11), so the action's response is awaited before returning.
- */
+/** Completes a task from the list on `/tasks` and waits for the write to land. */
 export async function completeFromList(page: Page, title: string): Promise<void> {
   const complete = page.getByRole("checkbox", { name: `Complete "${title}"` });
   await committed(page, () => complete.click());
@@ -75,12 +64,8 @@ export async function completeFromList(page: Page, title: string): Promise<void>
 
 /**
  * Performs an interaction and waits for the server action it fires to finish.
- *
- * Every write is optimistic (Domain Rule 11): the page shows the result before
- * the request has even left, so a reload or navigation on the visual cue alone
- * races the write — the server logs "The destination stream closed early" and
- * the reloaded page can predate the commit. The action's own response, read to
- * the end, is the honest "it landed".
+ * Every write is optimistic, so reloading on the visual cue alone races the
+ * write; the action's response read to the end is the honest "it landed".
  */
 export async function committed<T>(page: Page, act: () => Promise<T>): Promise<T> {
   const response = page.waitForResponse(
@@ -92,10 +77,7 @@ export async function committed<T>(page: Page, act: () => Promise<T>): Promise<T
   return result;
 }
 
-/**
- * The toast stack (sonner's region), so an assertion on a toast's text is not
- * also matched by the live-region announcement that carries the same words.
- */
+/** The toast stack, so a text assertion is not also matched by the live-region announcement. */
 export function toasts(page: Page): Locator {
   return page.getByRole("region", { name: /^Notifications/ });
 }
@@ -110,13 +92,7 @@ export interface LocalDay {
   weekday: number;
 }
 
-/**
- * Today in the user's timezone, or a day near it.
- *
- * The app resolves "today" in the profile timezone, never the machine's
- * (Domain Rule 4), so the specs have to as well: a test run at 23:30 in
- * London must still click the cell the New York profile calls today.
- */
+/** Today in the profile's timezone (never the machine's), or a day near it. */
 export function localDay(timeZone: string, offsetDays = 0): LocalDay {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone,
@@ -140,10 +116,7 @@ export function localDay(timeZone: string, offsetDays = 0): LocalDay {
   };
 }
 
-/**
- * Records every console error and uncaught exception from now on. Attach it
- * before navigating, so hydration and the first render are covered too.
- */
+/** Records console errors and uncaught exceptions from now on; attach before navigating. */
 export function collectConsoleErrors(page: Page): string[] {
   const errors: string[] = [];
   page.on("console", (message) => {
@@ -161,4 +134,72 @@ export async function readXpBadge(page: Page): Promise<{ level: number; remainin
   const match = /^Level (\d+)\. ([\d,]+) XP to level \d+\.$/.exec(label ?? "");
   if (match === null) throw new Error(`Unexpected XP badge label: ${label}`);
   return { level: Number(match[1]), remaining: Number(match[2]?.replace(/,/g, "")) };
+}
+
+/** The Mailpit API (`supabase start` exposes it on 54324); every auth email lands here. */
+export const MAILPIT_URL = process.env.E2E_MAILPIT_URL ?? "http://127.0.0.1:54324";
+
+export interface MailpitSummary {
+  ID: string;
+  To: { Address: string; Name: string }[];
+  Subject: string;
+}
+
+export interface MailpitMessage extends MailpitSummary {
+  Text: string;
+  HTML: string;
+}
+
+async function mailpit<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`${MAILPIT_URL}/api/v1${path}`, init);
+  if (!response.ok) throw new Error(`Mailpit ${path}: ${response.status} ${response.statusText}`);
+  return (await response.json()) as T;
+}
+
+export const mail = {
+  async list(): Promise<MailpitSummary[]> {
+    const { messages } = await mailpit<{ messages: MailpitSummary[] }>("/messages");
+    return messages;
+  },
+  read(id: string): Promise<MailpitMessage> {
+    return mailpit<MailpitMessage>(`/message/${id}`);
+  },
+  /** Empties the inbox. Mailpit answers this one with plain "ok", not JSON. */
+  async clear(): Promise<void> {
+    const response = await fetch(`${MAILPIT_URL}/api/v1/messages`, { method: "DELETE" });
+    if (!response.ok) throw new Error(`Mailpit clear: ${response.status} ${response.statusText}`);
+  },
+  /** Polls until a message addressed to `to` arrives. */
+  async waitForMessage(to: string, { timeout = 15_000 } = {}): Promise<MailpitMessage> {
+    const deadline = Date.now() + timeout;
+    const address = to.toLowerCase();
+    while (Date.now() < deadline) {
+      const match = (await mail.list()).find((message) =>
+        message.To.some((recipient) => recipient.Address.toLowerCase() === address),
+      );
+      if (match) return mail.read(match.ID);
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+    throw new Error(`No email for ${to} within ${timeout}ms`);
+  },
+};
+
+/** The first link whose path is one of `pathnames`; the auth server writes `&amp;` between query parameters. */
+export function linkTo(message: MailpitMessage, pathnames: readonly string[]): string {
+  const hrefs = [...message.HTML.matchAll(/href="([^"]+)"/g)].map(
+    ([, href]) => href?.replace(/&amp;/g, "&") ?? "",
+  );
+  const link = hrefs.find((href) => {
+    try {
+      return pathnames.includes(new URL(href).pathname);
+    } catch {
+      return false;
+    }
+  });
+  if (!link) {
+    throw new Error(
+      `No link to ${pathnames.join(" or ")} in "${message.Subject}": ${hrefs.join(", ")}`,
+    );
+  }
+  return link;
 }

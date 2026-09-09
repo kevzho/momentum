@@ -12,10 +12,8 @@ import {
 } from "lucide-react";
 
 /**
- * The navigation registry. One list, used by the sidebar, the mobile drawer and
- * the top bar's section name, so a route can never appear in one and not the
- * others. `href` is a typed route: a link to a page that does not exist is a
- * compile error.
+ * The navigation registry: one list for the sidebar, the mobile drawer and the
+ * top bar's section name. `href` is a typed route.
  */
 export interface NavItem {
   href: Route;
@@ -41,10 +39,7 @@ export const SETTINGS_NAV: NavItem = {
 
 const ALL_NAV: readonly NavItem[] = [...PRIMARY_NAV, SETTINGS_NAV];
 
-/**
- * The section a pathname belongs to. Used only for the top bar's mobile
- * section name — the page's own `PageHeader` owns the title everywhere else.
- */
+/** The section a pathname belongs to, for the top bar's mobile section name. */
 export function sectionLabel(pathname: string): string | null {
   const match = ALL_NAV.find(
     (item) => pathname === item.href || pathname.startsWith(`${item.href}/`),
@@ -57,13 +52,9 @@ export function isActive(pathname: string, href: string): boolean {
 }
 
 /**
- * Every route a signed-in user may be sent back to after authenticating.
- *
- * Two jobs at once. It keeps `?next=` from becoming an open redirect — only a
- * path in this list is ever followed — and it keeps the value a *typed* route,
- * so a destination that no longer exists is a compile error rather than a 404
- * after sign-in. Query strings are deliberately dropped: the parameter exists
- * to return someone to a page, not to carry state through a login.
+ * Every route a signed-in user may be sent back to after authenticating. Keeps
+ * `?next=` from becoming an open redirect: only a path in this list is ever
+ * followed, and query strings are dropped.
  */
 const RETURNABLE_ROUTES: readonly Route[] = [
   ...PRIMARY_NAV.map((item) => item.href),

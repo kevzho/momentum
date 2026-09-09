@@ -4,12 +4,6 @@ import { durationMinutes, startOfDay } from "../time";
 import { allPeriods, analyticsPeriod, periodContains, RANGE_DAYS } from "./period";
 import { d, FALL_BACK, KOLKATA, NEW_YORK, SPRING_FORWARD } from "./test-fixtures";
 
-/**
- * The period is where "the last 30 days" stops being a phrase and becomes a
- * query, so it is where the timezone has to be right. Two things are checked
- * here and nowhere else: that the range is counted in the user's *dates*, and
- * that the instant window derived from them is the real length of those dates.
- */
 describe("analyticsPeriod", () => {
   it("covers today and the days before it, inclusive", () => {
     const period = analyticsPeriod("7", d("2026-06-17"), NEW_YORK);
@@ -35,12 +29,6 @@ describe("analyticsPeriod", () => {
     expect(period.window.end).toBe(startOfDay(d("2026-06-18"), NEW_YORK));
   });
 
-  /**
-   * The heart of it. Seven local days are 168 hours only when none of them
-   * changes length; a period built by subtracting `7 * 24 * 60` minutes from an
-   * instant would silently include an extra hour of the eighth day in March and
-   * lose an hour of the first in November.
-   */
   it("is 167 hours across a spring-forward day and 169 across a fall-back day", () => {
     const spring = analyticsPeriod("7", SPRING_FORWARD, NEW_YORK);
     const fall = analyticsPeriod("7", FALL_BACK, NEW_YORK);
@@ -70,11 +58,6 @@ describe("analyticsPeriod", () => {
 });
 
 describe("allPeriods", () => {
-  /**
-   * The page computes all three from one read, so the narrow ranges must be
-   * exactly the tail of the wide one. If they ever stop agreeing, the same day
-   * would carry two different totals depending on which control was pressed.
-   */
   it("makes each range the tail of the widest", () => {
     const periods = allPeriods(SPRING_FORWARD, NEW_YORK);
 

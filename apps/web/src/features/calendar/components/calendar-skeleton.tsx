@@ -3,18 +3,8 @@ import { Skeleton } from "@momentum/ui/components/skeleton";
 
 import { PageHeaderSkeleton } from "@/components/skeletons";
 
-/**
- * Built from the same layout primitives and the same tokens as the real
- * calendar, so the space it occupies is the space the content occupies and
- * nothing moves on arrival.
- *
- * Two things it deliberately does not model. The all-day strip only exists on a
- * week that has an all-day item, so reserving a band for it would introduce the
- * shift it is meant to prevent. And the grid's window grows past the default
- * 05:00–24:00 to fit an early or late block (`resolveGridSpec`), which the
- * server cannot know before the read — the nineteen rows below are the default
- * window, and a taller week simply has more of them below the fold.
- */
+// Deliberately models neither the all-day strip (only present on weeks that
+// have one) nor a grown grid window; both are unknown before the read.
 const DEFAULT_WINDOW_HOURS = 19;
 
 export function CalendarSkeleton() {

@@ -17,7 +17,6 @@ import {
   type GridSpec,
 } from "./grid";
 
-/** Shapes the grid is expected to survive: every snap increment, a late start, a short day. */
 const SPECS: readonly GridSpec[] = [
   DEFAULT_GRID_SPEC,
   { dayStartMinutes: 0, dayEndMinutes: 1440, hourHeightPx: 40, snapMinutes: 5 },
@@ -64,9 +63,7 @@ describe("minutesFromY / yFromMinutes", () => {
     });
 
     it(`reads a pointer position stably (${spec.hourHeightPx}px/h, ${spec.snapMinutes}m snap)`, () => {
-      // Re-reading the same pointer during a drag must not drift: projecting a
-      // fractional pixel to a minute and back has to be idempotent, or a block
-      // would creep by a minute per animation frame.
+      // Projecting a fractional pixel to a minute and back must be idempotent, or a block would creep per frame.
       for (let y = -20; y <= gridHeightPx(spec) + 20; y += 0.5) {
         const minutes = minutesFromY(y, spec);
         expect(minutesFromY(yFromMinutes(minutes, spec), spec)).toBe(minutes);
@@ -82,7 +79,6 @@ describe("minutesFromY / yFromMinutes", () => {
   });
 
   it("rounds a fractional pixel to a whole minute", () => {
-    // 05:00 plus a third of a minute.
     expect(minutesFromY(pixelsPerMinute(DEFAULT_GRID_SPEC) / 3, DEFAULT_GRID_SPEC)).toBe(300);
     expect(minutesFromY(pixelsPerMinute(DEFAULT_GRID_SPEC) * 1.5, DEFAULT_GRID_SPEC)).toBe(302);
   });
@@ -351,8 +347,7 @@ describe("resolveResize", () => {
   });
 
   it("pulls an anchor that sits outside the grid back into it", () => {
-    // The anchor (02:00) is above the grid, so it comes back to 05:00; the pointer
-    // snaps down to 08:15.
+    // The anchor (02:00) comes back to 05:00; the pointer snaps to 08:15.
     const resized = resolveResize({
       edge: "end",
       pointerY: yFromMinutes(500, spec),

@@ -36,18 +36,8 @@ import type { ProjectSummaryWithCount, TaskSummary } from "@/features/tasks/type
 import { failure, type ActionResult } from "@/lib/actions/result";
 import { reportError } from "@/lib/report-error";
 
-/**
- * The command palette, mounted once in the shell.
- *
- * It owns four things and delegates everything else: whether it is open, what
- * has been typed, which picker the user is in, and which commands they reach
- * for most. The list it shows is computed by `features/palette/search`; what
- * each entry does is declared by the feature that owns it
- * (`features/<feature>/commands.ts`).
- *
- * ⌘K on macOS, Ctrl+K everywhere else. Both are bound to the same handler and
- * neither is bound to a route, so the palette opens from all of them.
- */
+// Mounted once in the shell; owns open/query/mode/usage state and delegates
+// ranking to `features/palette/search`.
 
 export interface PaletteContextValue {
   open: () => void;
@@ -55,7 +45,7 @@ export interface PaletteContextValue {
 
 const PaletteContext = React.createContext<PaletteContextValue | null>(null);
 
-/** `openPalette()` — a no-op outside the shell, never a thrown error. */
+/** A no-op outside the shell, never a thrown error. */
 export function usePalette(): PaletteContextValue {
   return React.useContext(PaletteContext) ?? { open: noop };
 }
@@ -70,7 +60,7 @@ export function PaletteProvider({
 }: {
   tasks: readonly TaskSummary[];
   projects: readonly ProjectSummaryWithCount[];
-  /** Today in the profile timezone, resolved once per request (Domain Rule 4). */
+  /** Today in the profile timezone, resolved once per request. */
   today: LocalDate;
   children: React.ReactNode;
 }) {
@@ -83,23 +73,14 @@ export function PaletteProvider({
   const [mode, setMode] = React.useState<PaletteMode>(ROOT_MODE);
   const [query, setQuery] = React.useState("");
   const [usage, setUsage] = React.useState<CommandUsageMap>(NO_USAGE);
-  /*
-   * Frozen when the palette opens rather than read on every render: the
-   * recency bonus must not re-rank the list between two keystrokes, and a
-   * timestamp read during render would differ between the server and the
-   * client (docs/ARCHITECTURE.md §10).
-   */
+  // Frozen when the palette opens: the recency bonus must not re-rank the list
+  // between keystrokes, and a render-time timestamp would break hydration.
   const [openedAt, setOpenedAt] = React.useState(0);
 
   const close = React.useCallback(() => setOpen(false), []);
 
-  /*
-   * The stored ordering is read here, when the palette opens, rather than in an
-   * effect on mount: it is per-browser state, so reading it during render would
-   * make the server and client markup disagree — and an opening is the one
-   * moment the ordering matters, which also means a command run in another tab
-   * is reflected the next time this one opens.
-   */
+  // Usage is read on open, not on mount: per-browser state read during render
+  // would break hydration, and this also picks up runs from other tabs.
   const openPalette = React.useCallback(() => {
     setUsage(readUsage(globalThis.localStorage));
     setMode(ROOT_MODE);
@@ -108,17 +89,11 @@ export function PaletteProvider({
     setOpen(true);
   }, []);
 
-  /*
-   * A rejected call is not the same event as a returned `{ ok: false }`, but
-   * the user has to experience it as one — and React re-throws a rejection out
-   * of a transition, which would hand the route the user was on to an error
-   * boundary over a command they ran from a menu. `unstable_rethrow` first,
-   * because `redirect()` and `notFound()` travel as thrown values and are
-   * control flow, not failure (Domain Rule 11, the rule Quick Add restates).
-   */
+  // A rejection inside a transition would reach the route's error boundary, so
+  // it is converted to a failed result. `unstable_rethrow` first: `redirect()`
+  // and `notFound()` travel as thrown values.
   const perform = React.useCallback((work: PaletteWork) => {
-    // Named, so Retry re-runs the same attempt without the callback having to
-    // refer to itself through its own dependency list.
+    // Named so Retry can re-run the same attempt.
     function attempt(): void {
       startTransition(async () => {
         let result: ActionResult<unknown>;
@@ -154,8 +129,7 @@ export function PaletteProvider({
         router.push(href);
       },
       quickAdd: (defaults) => {
-        // Closed first, then opened: two modal surfaces must not overlap, and
-        // Quick Add's own opener-focus records where the user came from.
+        // Closed first: two modal surfaces must not overlap.
         setOpen(false);
         quickAdd.open(defaults);
       },
@@ -206,8 +180,7 @@ export function PaletteProvider({
         return;
       }
 
-      // A task or a project matched in the root list: open it. Nothing is
-      // mutated by finding something.
+      // A task or project matched in the root list: open it.
       context.navigate(
         item.kind === "task"
           ? taskHref({ taskId: item.task.id })
@@ -217,15 +190,8 @@ export function PaletteProvider({
     [context, mode],
   );
 
-  /*
-   * ⌘K / Ctrl+K, from every route.
-   *
-   * It fires while the user is typing — unlike Quick Add's bare `Q`, a modifier
-   * chord is never part of what someone is writing — but not on top of another
-   * modal: Radix marks the rest of the page `aria-hidden` while a dialog or a
-   * sheet is open, and a palette stacked on that is a trap, not a shortcut.
-   * When the palette is itself the open dialog, the chord closes it.
-   */
+  // ⌘K / Ctrl+K: fires while typing (a modifier chord is never text) but not
+  // on top of another Radix dialog or sheet, which would be a focus trap.
   React.useEffect(() => {
     function onKeyDown(event: KeyboardEvent): void {
       if (event.key !== "k" && event.key !== "K") return;

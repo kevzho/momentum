@@ -2,15 +2,7 @@ import * as React from "react";
 
 import { cn } from "@momentum/ui/lib/utils";
 
-/**
- * One section of the Today page: a label, an optional count, and its rows.
- *
- * The page is five sections that have to read as one surface, so the heading
- * shape is declared once rather than repeated with small differences. The
- * heading is a real `h2` under the page's single `h1` (docs/DESIGN_SYSTEM.md —
- * one title per page); the count sits on the baseline beside it so a section
- * states its own size before it is read.
- */
+/** One section of the Today page: an `h2` under the page's single `h1`, an optional count, and its rows. */
 export function TodaySection({
   title,
   count,

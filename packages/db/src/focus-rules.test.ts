@@ -6,22 +6,8 @@ import { describe, expect, it } from "vitest";
 import { FOCUS_XP } from "@momentum/core/focus";
 
 /**
- * The XP rule has two homes, and this test is the reason that is allowed.
- *
- * `finish_focus_session()` computes every award, in SQL, from rows the database
- * stamped itself — Domain Rule 6 does not leave room for a second opinion.
- * `FOCUS_XP` in `@momentum/core/focus` is the same rule written where it can be
- * tested exhaustively without Docker, and where the interface can read a
- * tunable it legitimately needs to state ("sessions under five minutes do not
- * earn"). Two copies of a rule is exactly the duplication `CLAUDE.md` forbids,
- * so they are pinned together here: the migration is read as text, the numbers
- * `xp_rule()` returns are extracted from it, and each is compared with its
- * constant.
- *
- * Changing a tunable is therefore a migration *and* a one-line change in
- * `xp.ts`. Doing one without the other fails this file, which is the whole
- * point — a silent divergence between the awarded amount and the amount the
- * product claims it awards is the kind of defect nobody notices for a month.
+ * Pins `FOCUS_XP` in `@momentum/core/focus` to the numbers `xp_rule()` returns
+ * in SQL. Changing a tunable is a migration *and* a change in `xp.ts`.
  */
 
 const MIGRATIONS = join(import.meta.dirname, "../../../supabase/migrations");
@@ -31,13 +17,7 @@ function migrationSql(): string {
   return readFileSync(MIGRATION, "utf8");
 }
 
-/**
- * The migration that currently *defines* `xp_rule()`, which is not always this
- * phase's. Phase 8 extended the function with `create or replace`, so reading
- * only the file below would pin `FOCUS_XP` to a body Postgres no longer runs —
- * and a focus tunable changed in a later migration would slip through
- * unnoticed. Newest wins, exactly as the migrations do.
- */
+/** The newest migration defining `xp_rule()` — later ones `create or replace` it. */
 function xpRuleSql(): string {
   const files = readdirSync(MIGRATIONS)
     .filter((name) => name.endsWith(".sql"))
@@ -96,17 +76,12 @@ describe("the focus functions keep their invariants", () => {
   const sql = statements();
 
   it("stamps every focus timestamp with the database clock, never an argument", () => {
-    // No focus function takes a timestamp: the client cannot assert when it
-    // started, paused, resumed or finished (Domain Rule 15).
     const signatures =
       /create function public\.(start_focus_session|pause_focus_session|resume_focus_session|mark_interruption|finish_focus_session|abandon_focus_session|end_focus_session)\s*\(([^)]*)\)/g;
 
     const offenders: string[] = [];
     for (const match of sql.matchAll(signatures)) {
       const [, name = "", args = ""] = match;
-      // `end_focus_session` takes the horizon-free status only; the private
-      // elapsed helper is the one function that legitimately takes an instant,
-      // and it is not in this list.
       if (/timestamptz|timestamp\b/.test(args)) offenders.push(name);
     }
 

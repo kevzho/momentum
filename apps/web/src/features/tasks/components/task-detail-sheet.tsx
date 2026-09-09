@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ArchiveIcon, TimerIcon, TrashIcon } from "lucide-react";
+import { ArchiveIcon, ArchiveRestoreIcon, TimerIcon, TrashIcon } from "lucide-react";
 
 import { coverageOf, formatCoverage } from "@momentum/core/tasks";
 import { formatDuration } from "@momentum/core/time";
@@ -38,27 +38,14 @@ import type { ProjectSummary, TaskWorkBlock } from "@/features/tasks/types";
 import type { ActionError } from "@/lib/actions/result";
 import { useOpenerFocus } from "@/lib/use-opener-focus";
 
-/** What a new work block is worth when nothing else says: an hour is a session. */
+/** The length of a new work block when nothing else says. */
 const FALLBACK_BLOCK_MINUTES: Minutes = 60;
 
 const NO_PROJECT = "__none__";
 
-/**
- * The detail surface: a side sheet, not a page and not a modal, so the list
- * behind it stays visible and in place.
- *
- * **Every field saves on its own, as it is committed** — on blur for the text
- * fields, on change for the pickers. There is no Save button, because a sheet
- * with one has two states the user has to keep track of, and closing it with
- * unsaved edits is a way to lose work. Each commit is one optimistic mutation
- * that rolls back on failure (Domain Rule 11).
- *
- * The layout says the two things this phase exists to say. **Due date and
- * scheduled time are in different sections with different labels** — "Due" is a
- * deadline in the fields grid, "Work blocks" is a list of reserved spans
- * (Domain Rule 1). And **coverage sits between them**, because the gap between
- * the estimate and what is booked is the number that makes the planner useful.
- */
+// Every field saves on its own as it is committed (blur for text, change for
+// pickers); there is no Save button. Due date and work blocks are deliberately
+// separate sections with different labels.
 export function TaskDetailSheet({
   task,
   subtasks,
@@ -75,6 +62,7 @@ export function TaskDetailSheet({
   onToggleComplete,
   onDelete,
   onArchive,
+  onUnarchive,
   onAddBlock,
   onUpdateBlock,
   onRemoveBlock,
@@ -89,7 +77,7 @@ export function TaskDetailSheet({
   weekStart: Weekday;
   pending: boolean;
   pendingIds: ReadonlySet<Uuid>;
-  /** The last refused write about this task, rendered next to the fields it rolled back. */
+  /** The last refused write about this task, rendered next to the fields. */
   failure?: ActionError | null;
   /** What deleting this task takes with it; `undefined` reads as nothing. */
   cascade?: DeleteCascade;
@@ -98,6 +86,7 @@ export function TaskDetailSheet({
   onToggleComplete: (id: Uuid, completed: boolean) => void;
   onDelete: (id: Uuid) => void;
   onArchive: (id: Uuid) => void;
+  onUnarchive: (id: Uuid) => void;
   onAddBlock: (taskId: Uuid, span: BlockSpan) => void;
   onUpdateBlock: (taskId: Uuid, blockId: Uuid, span: BlockSpan) => void;
   onRemoveBlock: (taskId: Uuid, blockId: Uuid) => void;
@@ -110,43 +99,24 @@ export function TaskDetailSheet({
   const scheduled = workBlocks.reduce((total, block) => total + block.minutes, 0);
   const coverage = coverageOf(task?.estimatedMinutes ?? null, scheduled);
   const completed = task?.status === "completed";
+  const archived = task?.status === "archived";
 
-  /*
-   * The sheet opens from the URL — a row click, or Enter on the roving cursor —
-   * so there is no `Dialog.Trigger` for Radix to return focus to, and its modal
-   * content cancels the restore FocusScope would otherwise do. Without this the
-   * user is dropped on `<body>` and the list's arrow keys stop working
-   * (Domain Rule 10). Same helper the calendar's surfaces use; given `open`
-   * so focus is restored in the commit that closes the sheet rather than
-   * after its exit animation, and — when the row that opened it was deleted
-   * or archived out of the list — lands on that row's tab-order neighbour.
-   */
+  // Opened from the URL, so there is no `Dialog.Trigger` for Radix to return
+  // focus to. Given `open` so focus is restored in the closing commit rather
+  // than after the exit animation.
   const openerFocus = useOpenerFocus(open);
 
-  /*
-   * Whether a text field is mid-edit. Radix closes the sheet on Escape from
-   * anywhere inside it, listening at the document in the capture phase — before
-   * the field's own handler runs. The first Escape in a field means "abandon
-   * this edit", not "close the sheet", so while a field is editing the sheet's
-   * own Escape is declined and the field's handler takes it.
-   */
+  // Radix handles Escape at the document in the capture phase, before the
+  // field's own handler; while a field is editing the sheet declines it.
   const editing = React.useRef(false);
 
-  /*
-   * Which delete is waiting for a yes: the task itself, or one of its subtasks.
-   * Either cascades to work blocks, and there is no undo, so the button opens
-   * a confirmation rather than writing (docs/DESIGN_SYSTEM.md).
-   */
+  // Which delete is waiting for a yes: the task itself, or one of its subtasks.
   const [confirming, setConfirming] = React.useState<Task | null>(null);
 
-  /**
-   * Where focus goes after a subtask is deleted from the confirmation: the
-   * row's own Delete button went with the row, and the "Add a subtask" field
-   * is the control that follows it.
-   */
+  // Where focus goes after a subtask is deleted: its own Delete button went with it.
   const subtaskInput = React.useRef<HTMLInputElement>(null);
 
-  /** Inert while a write is in flight, without the native attribute's blur (Domain Rule 10). */
+  /** Inert while a write is in flight, without the native attribute's blur. */
   function guarded(run: () => void): () => void {
     return () => {
       if (pending) return;
@@ -167,13 +137,8 @@ export function TaskDetailSheet({
       description={project ? project.name : "No project"}
       footer={
         task === null ? null : (
-          /*
-           * Every button here is `aria-disabled` with a guard rather than
-           * natively disabled while a write is in flight: each one raises the
-           * flag by being pressed, and the browser blurs a natively disabled
-           * element — dropping the keyboard user on `<body>` (Domain Rule 10).
-           * The row wraps so the primary action stays on screen at 375px.
-           */
+          // `aria-disabled` plus a guard, never native `disabled`: each button
+          // raises the flag by being pressed, and the browser blurs a disabled element.
           <div className="flex w-full flex-wrap items-center justify-between gap-x-2 gap-y-1.5">
             <div className="flex gap-1.5">
               <Button
@@ -182,10 +147,14 @@ export function TaskDetailSheet({
                 size="sm"
                 aria-disabled={pending || undefined}
                 className="aria-disabled:opacity-50"
-                onClick={guarded(() => onArchive(task.id))}
+                onClick={guarded(() => (archived ? onUnarchive(task.id) : onArchive(task.id)))}
               >
-                <ArchiveIcon aria-hidden="true" />
-                Archive
+                {archived ? (
+                  <ArchiveRestoreIcon aria-hidden="true" />
+                ) : (
+                  <ArchiveIcon aria-hidden="true" />
+                )}
+                {archived ? "Unarchive" : "Archive"}
               </Button>
               <Button
                 type="button"
@@ -201,14 +170,8 @@ export function TaskDetailSheet({
             </div>
 
             <div className="flex gap-1.5">
-              {/*
-                One of the three routes into a focus session (Phase 7): from the
-                task, from its calendar block, and — later — from the palette.
-                It is a link, not a button, because it navigates: the session
-                itself is started on `/focus`, by a press, so following this
-                twice does not start two sessions.
-              */}
-              {completed ? null : (
+              {/* A link, not a button: the session is started on `/focus` by a press. */}
+              {completed || archived ? null : (
                 <Button asChild type="button" size="sm" variant="outline">
                   <Link href={`/focus?task=${task.id}`}>
                     <TimerIcon aria-hidden="true" />
@@ -217,37 +180,28 @@ export function TaskDetailSheet({
                 </Button>
               )}
 
-              <Button
-                type="button"
-                size="sm"
-                variant={completed ? "outline" : "default"}
-                aria-disabled={pending || undefined}
-                className="aria-disabled:opacity-50"
-                onClick={guarded(() => onToggleComplete(task.id, !completed))}
-              >
-                {completed ? "Reopen task" : "Complete task"}
-              </Button>
+              {archived ? null : (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={completed ? "outline" : "default"}
+                  aria-disabled={pending || undefined}
+                  className="aria-disabled:opacity-50"
+                  onClick={guarded(() => onToggleComplete(task.id, !completed))}
+                >
+                  {completed ? "Reopen task" : "Complete task"}
+                </Button>
+              )}
             </div>
           </div>
         )
       }
     >
       {task === null ? null : (
-        /*
-         * No field is disabled while a write is in flight. Each commit is its
-         * own optimistic mutation over one overlay, so editing a second field
-         * while the first is saving is safe — and a field disabled the moment
-         * it was committed is one the browser blurs, which is how Enter in
-         * the title used to land a keyboard user on `<body>` (Domain Rule 10).
-         */
+        // No field is disabled in flight: each commit is its own mutation, and
+        // the browser would blur a field disabled the moment it was committed.
         <div className="flex flex-col gap-4">
-          {/*
-            What the last write about this task was refused for, next to the
-            fields it rolled back. The toast says it too, but this sheet is
-            modal and a toast behind it is neither readable nor reachable
-            from inside; the message here is what the server said about the
-            field — "An estimate is at most one week." — not a paraphrase.
-          */}
+          {/* Shown here because a toast behind a modal sheet is unreachable. */}
           {failure === null ? null : (
             <p
               role="alert"
@@ -322,8 +276,7 @@ export function TaskDetailSheet({
               />
             </div>
 
-            {/* Due is a deadline. It sits with the other properties of the task,
-                and deliberately not next to the work blocks (Domain Rule 1). */}
+            {/* Due is a deadline: deliberately not next to the work blocks. */}
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="task-due">Due date</Label>
               <DatePicker
@@ -350,8 +303,6 @@ export function TaskDetailSheet({
 
           <Separator />
 
-          {/* Scheduled versus estimated. The sentence and the bar say the same
-              thing; the remaining figure is the one worth acting on. */}
           <section className="flex flex-col gap-1.5">
             <div className="flex items-baseline justify-between gap-2">
               <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
@@ -424,15 +375,7 @@ export function TaskDetailSheet({
   );
 }
 
-/**
- * A text field that reports its value when the user is done with it, not on
- * every keystroke.
- *
- * Committing per keystroke would be one server action per character. Committing
- * on blur and on Enter is what a person means by "I have finished this field",
- * and it keeps the user's own text on screen while they type — the same rule
- * `DurationInput` follows.
- */
+// Commits on blur and Enter, not per keystroke (one server action per character).
 function CommittedInput({
   id,
   value,
@@ -448,12 +391,8 @@ function CommittedInput({
 }) {
   const [draft, setDraft] = React.useState(value);
   const [editing, setEditing] = React.useState(false);
-  /*
-   * What has already been committed from this edit. Enter commits and keeps
-   * the field focused — leaving it was never what Enter meant, and a blur
-   * dropped a keyboard user on `<body>` — so the blur that eventually follows
-   * commits only what changed after the Enter.
-   */
+  // Enter commits and keeps focus, so the blur that follows commits only what
+  // changed after the Enter.
   const committed = React.useRef(value);
 
   function begin(): void {
@@ -485,12 +424,8 @@ function CommittedInput({
           commit(draft);
         }
         if (event.key === "Escape") {
-          // Abandon the edit and stay in the field. A `blur()` here would drop
-          // a keyboard user on `<body>` (Domain Rule 10); the draft goes back
-          // to what was last committed, so the blur that eventually follows
-          // has nothing to write. The sheet declined this Escape because the
-          // field was editing when Radix asked; with nothing left to abandon
-          // the next one closes the sheet, and Radix returns focus itself.
+          // Abandon the edit and stay in the field (a `blur()` would land on
+          // `<body>`); the next Escape closes the sheet.
           setDraft(committed.current);
           onEditingChange(false);
         }
@@ -538,8 +473,7 @@ function CommittedTextarea({
       }}
       onKeyDown={(event) => {
         if (event.key !== "Escape") return;
-        // Escape abandons the notes, and only the notes — the sheet stays and
-        // so does focus (a blur would land on `<body>`, Domain Rule 10).
+        // Escape abandons the notes only; the sheet stays and so does focus.
         setDraft(value);
         onEditingChange(false);
       }}

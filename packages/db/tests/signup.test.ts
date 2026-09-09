@@ -6,13 +6,8 @@ import type { Database } from "../src/database.types";
 import { DB_TESTS_ENABLED, adminClient, localKeys } from "./support/harness";
 
 /**
- * What happens the moment an account is created.
- *
- * The profile is not written by the application: a trigger on `auth.users`
- * creates it, so there is no path — signup form, OAuth, an admin invite — that
- * can produce a user without one. The timezone arrives as a *suggestion* in the
- * signup metadata and is only kept if Postgres recognises it, because every
- * date boundary in the product later resolves in that string (Domain Rule 4).
+ * A trigger on `auth.users` creates the profile; the signup metadata's timezone
+ * is kept only if Postgres recognises it.
  */
 
 const describeDb = DB_TESTS_ENABLED ? describe : describe.skip;
@@ -57,7 +52,6 @@ describeDb("signup", () => {
     expect(error).toBeNull();
     expect(data?.timezone).toBe("Asia/Kolkata");
     expect(data?.display_name).toBe("Priya Raman");
-    // Defaults the rest of the product relies on.
     expect(data?.week_start).toBe(1);
     expect(data?.snap_minutes).toBe(15);
     expect(data?.level).toBe(1);
@@ -69,8 +63,7 @@ describeDb("signup", () => {
 
     const { data } = await client.from("profiles").select("timezone").eq("id", userId!).single();
 
-    // A bad timezone must never fail the signup — the account is created and
-    // the app can offer to correct it.
+    // A bad timezone must never fail the signup.
     expect(data?.timezone).toBe("UTC");
   });
 

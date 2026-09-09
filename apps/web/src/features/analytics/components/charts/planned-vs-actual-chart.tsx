@@ -39,21 +39,10 @@ interface Row {
 }
 
 /**
- * Chart 3 — planned time beside actual time.
- *
- * Two grouped bars per project, never one bar and a delta. The aggregation
- * guarantees both bars are summed over the *same* completed tasks — the ones
- * carrying an estimate and recorded time — and this component keeps them in two
- * separate `dataKey`s so no rendering step can add, subtract or substitute one
- * for the other (Domain Rule 3).
- *
- * The tasks the comparison cannot cover are stated underneath rather than
- * quietly dropped, so the pair is never read as the whole period.
- *
- * Planned is drawn as a hatched bar and actual as a solid one. That is not
- * decoration: the two series have to be distinguishable without relying on hue
- * (WCAG 1.4.1), and the hatch survives greyscale, colour-blindness and a
- * monochrome print.
+ * Planned beside actual: two grouped bars per project in separate `dataKey`s,
+ * never one bar and a delta. Planned is hatched so the series are
+ * distinguishable without hue (WCAG 1.4.1). Tasks the comparison cannot cover
+ * are stated underneath.
  */
 export function PlannedVsActualChart({
   data,

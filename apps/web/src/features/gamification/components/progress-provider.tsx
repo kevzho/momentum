@@ -9,39 +9,12 @@ import { PROGRESS_COPY } from "@/features/gamification/copy";
 import type { ProgressBadge } from "@/features/gamification/types";
 
 /**
- * Celebration, and the restraint around it.
- *
- * The shell re-renders with a fresh `ProgressBadge` after every mutation, so
- * this component can see what changed by comparing the new props with the last
- * ones it saw. That is the whole mechanism — no event stream, no client cache,
- * and nothing the client asserts: the numbers it compares were both computed by
- * the server from the ledger (Domain Rule 6).
- *
- * **What is celebrated, and what is not.** A level up, an achievement unlock
- * and a weekly goal reached get the loud toast. Everything else that earns XP
- * gets a small "+N XP" and the bar in the top bar moving, which is the "subtle
- * XP animation and progress movement" specs/08-gamification.md asks for. There
- * is no confetti anywhere in this product.
- *
- * **At most one per update.** An achievement wins over a level, and a level over
- * a goal, and a celebration suppresses the XP toast that would otherwise have
- * accompanied it — "occasional achievement toast, never a queue of them". Two
- * achievements unlocked at once show one toast; the second is on the progress
- * page, which is where a list of them belongs.
- *
- * **Reduced motion** is handled inside `AchievementToast`, which renders no
- * flourish at all when the viewer has asked for less motion. The message still
- * arrives: suppressing an animation must never suppress information.
- *
- * The first render establishes the baseline and celebrates nothing, so a page
- * reload is not a party.
- *
- * **This is where an XP or celebration toast is announced, and the only
- * place.** `toast.xp` and `toast.celebrate` speak nothing themselves and
- * sonner's own live region is switched off in the toast primitive, so the
- * `Announcer` hears each of these exactly once — the message toasts
- * (`toast.error` and friends) announce through the same region from inside the
- * primitive, and this component never calls those.
+ * Celebrates by comparing each new `ProgressBadge` with the last one seen;
+ * both were computed by the server, nothing is asserted by the client. At most
+ * one celebration per update (achievement over level over goal), and a
+ * celebration suppresses the XP toast. This is the only place an XP or
+ * celebration toast is announced: `toast.xp` and `toast.celebrate` speak
+ * nothing themselves and sonner's live region is off in the toast primitive.
  */
 export function ProgressProvider({
   badge,
@@ -57,7 +30,7 @@ export function ProgressProvider({
     const before = previous.current;
     previous.current = badge;
 
-    // First render: learn where we are, say nothing.
+    // First render establishes the baseline and celebrates nothing.
     if (before === null) return;
 
     const newlyUnlocked = badge.unlocked.filter(

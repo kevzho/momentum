@@ -8,10 +8,7 @@ import type { ProjectColor, TaskPriority } from "@momentum/core/types";
 import { Checkbox } from "@momentum/ui/components/checkbox";
 import { ProjectDot } from "@momentum/ui/components/project-dot";
 
-/**
- * Priority is never signalled by colour alone: P1–P3 carry a flag glyph and an
- * accessible name; P4 means "no priority set" and shows nothing at all.
- */
+// P4 means "no priority set" and shows nothing at all.
 const PRIORITY_LABEL: Record<TaskPriority, string> = {
   1: "Priority 1",
   2: "Priority 2",
@@ -34,13 +31,7 @@ const DUE_TONE: Record<DueTone, string> = {
   overdue: "text-destructive",
 };
 
-/**
- * The dense task row: check · title · project · due · estimate · priority.
- *
- * Every date and duration arrives pre-formatted. This component performs no
- * date math and holds no state — the timezone lives on the profile and the
- * formatting utilities live in `@momentum/core/time` (Domain Rule 4/5).
- */
+/** Every date and duration arrives pre-formatted; no date math here. */
 function TaskRow({
   title,
   completed = false,
@@ -73,9 +64,7 @@ function TaskRow({
       data-slot="task-row"
       data-completed={completed || undefined}
       className={cn(
-        // A container, not a viewport, query: the same row appears full-width on
-        // Tasks and in a 384px column on Today, and it should drop columns
-        // according to the space it actually has.
+        // Container query: the same row appears full-width and in a 384px column.
         "group @container flex items-center gap-2 rounded-md px-2 py-1.5 transition-colors duration-fast ease-standard hover:bg-muted/60 has-focus-visible:bg-muted/60 pointer-coarse:min-h-10",
         className,
       )}
@@ -96,8 +85,7 @@ function TaskRow({
         {selectLabel ? <span className="sr-only"> — {selectLabel}</span> : null}
       </button>
 
-      {/* Fixed-width meta columns: durations, dates and flags line up down the
-          list instead of ragging against each title's length. */}
+      {/* Fixed-width meta columns so values line up down the list. */}
       <span className="hidden w-28 shrink-0 items-center gap-1.5 text-xs text-muted-foreground @md:flex">
         {project ? (
           <>

@@ -7,9 +7,14 @@ vi.mock("next/navigation", async (importOriginal) => ({
   usePathname: () => "/today",
 }));
 
-// The navigation reaches Quick Add's context, whose module imports the task
-// actions — a `'use server'` module that reaches `server-only`.
+// Quick Add's context imports the task actions, a `'use server'` module that reaches `server-only`.
 vi.mock("@/features/tasks/actions", () => ({ createTask: vi.fn() }));
+// The project list's own mutations, for the same reason.
+vi.mock("@/features/projects/actions", () => ({
+  createProject: vi.fn(),
+  updateProject: vi.fn(),
+  archiveProject: vi.fn(),
+}));
 
 import { MobileNav } from "@/components/mobile-nav";
 import { SidebarProvider, useSidebar } from "@/components/sidebar-context";

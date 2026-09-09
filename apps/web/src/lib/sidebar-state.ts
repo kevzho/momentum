@@ -1,9 +1,5 @@
-/**
- * Sidebar collapse state lives in a cookie so the server renders the correct
- * width on the first paint. Reading it from `localStorage` after hydration
- * would flash the wrong layout, which is exactly what this phase's acceptance
- * criteria forbid for the theme and would look no better here.
- */
+// A cookie, so the server renders the correct width on the first paint;
+// `localStorage` after hydration would flash the wrong layout.
 export const SIDEBAR_COOKIE = "momentum.sidebar";
 const ONE_YEAR_SECONDS = 60 * 60 * 24 * 365;
 

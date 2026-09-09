@@ -5,26 +5,8 @@ import type { IanaTimeZone, Instant, LocalDate, Minutes, Task, Uuid } from "@mom
 
 import type { TaskWorkBlock, TasksPageData } from "@/features/tasks/types";
 
-/**
- * The optimistic overlay for the task manager, as a pure reducer.
- *
- * One overlay over the whole page state, patched per mutation — the shape Phase
- * 3 settled on for the calendar and for the same reason: several mutations act
- * on one list, and one `useOptimistic` per action would each hold a different
- * view of it.
- *
- * Everything here is pure and total. On success `refresh()` re-renders with
- * server truth and the overlay is discarded; **on failure the transition
- * settles against unchanged props and React discards the optimistic value on
- * its own** — there is no revert written here, and therefore none to get wrong
- * (Domain Rule 11).
- *
- * Completion is the one to read closely. A completed task leaves TODAY and
- * appears in COMPLETED because the views are recomputed from the patched list,
- * not because anything moves it: the patch sets two fields, and the six pure
- * predicates do the rest. Its work blocks are deliberately untouched
- * (Domain Rule 13).
- */
+// One pure overlay over the whole page state. There is no revert: on failure
+// the transition settles against unchanged props and React discards the overlay.
 
 export type TaskPatch =
   | { kind: "create"; task: Task }
@@ -49,11 +31,7 @@ export function applyTaskPatch(
   timezone: IanaTimeZone,
 ): TasksPageData {
   switch (patch.kind) {
-    /*
-     * Client-generated ids (Domain Rule 17) mean the optimistic row and the
-     * persisted row share a key, so a retry cannot produce a duplicate and the
-     * server's version replaces this one in place.
-     */
+    // Client-generated ids: a retry replaces the row in place rather than duplicating it.
     case "create":
       return {
         ...state,
@@ -70,15 +48,8 @@ export function applyTaskPatch(
         ),
       };
 
-    /*
-     * The completion patch, and the reason the whole page is one overlay.
-     *
-     * `completedAt` is set from the client's clock for display only — the
-     * database stamps the real one with `now()` inside `complete_task`, and
-     * that value replaces this one on reconcile (Domain Rule 15). Blocks are
-     * untouched: completing a task from a list completes the task and nothing
-     * else (Domain Rule 13).
-     */
+    // `completedAt` is display-only; `complete_task` stamps the real one.
+    // Blocks are deliberately untouched.
     case "completion": {
       const ids = new Set(patch.ids);
       const at: Instant | null = patch.completed ? nowInstant() : null;
@@ -93,12 +64,7 @@ export function applyTaskPatch(
       };
     }
 
-    /*
-     * Deleting a task takes its subtasks and its work blocks with it, because
-     * that is what the database's cascade will do a moment later. An overlay
-     * that removed only the row would show orphaned subtasks until the refresh
-     * landed, which is the divergence Domain Rule 11 is about.
-     */
+    // Subtasks and work blocks go too, matching the database's cascade.
     case "delete": {
       const ids = new Set(patch.ids);
       const removed = state.tasks.filter(
@@ -113,12 +79,8 @@ export function applyTaskPatch(
       };
     }
 
-    /*
-     * Moving to a project moves the subtasks too: `enforce_subtask_depth()`
-     * rewrites a subtask's `project_id` to its parent's on every write, so a
-     * subtask can never be in a different project from its parent. The overlay
-     * shows what the database will hold.
-     */
+    // Subtasks move too: `enforce_subtask_depth()` rewrites their `project_id`
+    // to the parent's on every write.
     case "move-project": {
       const ids = new Set(patch.ids);
       return {
@@ -131,12 +93,7 @@ export function applyTaskPatch(
       };
     }
 
-    /*
-     * A reorder applies the very numbers the action persists — computed once,
-     * by `sortOrdersForMove`, and handed to both — so the optimistic order and
-     * the reconciled order cannot differ. One row in the ordinary case; the
-     * whole tied run when the row's two new neighbours share a number.
-     */
+    // Applies the very numbers the action persists (`sortOrdersForMove`).
     case "reorder": {
       const orders = new Map(patch.orders.map((order) => [order.id, order.sortOrder]));
       if (orders.size === 0) return state;
@@ -150,7 +107,6 @@ export function applyTaskPatch(
       };
     }
 
-    /* A task gains one more block. Adding a second does not replace the first. */
     case "add-block":
       return {
         ...state,
@@ -176,7 +132,7 @@ export function applyTaskPatch(
         },
       };
 
-    /* Removing a block never touches the task (Domain Rule 13). */
+    // Removing a block never touches the task.
     case "remove-block":
       return {
         ...state,
@@ -191,23 +147,10 @@ export function applyTaskPatch(
 }
 
 /**
- * The block a wall-clock span will become.
- *
- * The instants are built from the client's clock and the profile timezone, and
- * are display-only: the server recomputes them from the same `(date, minutes)`
- * pair and its answer replaces this one on reconcile. What keeps the optimistic
- * block the same length as the persisted one, including across a DST boundary,
- * is `intervalOfSlot` — the single implementation of that rule, the one the
- * server's `spanInstants` follows (Domain Rule 5).
- *
- * Two bare `fromLocal` calls are only its first half, and the half they omit is
- * the one that bites: a span straddling the far edge of a spring-forward gap
- * resolves out of order, so a block moved onto 02:30–03:00 on a spring-forward
- * morning took a *negative* `minutes` into the task's live coverage and drew as
- * an inverted, invisible row, while the row the server wrote was an ordinary
- * thirty minutes. `minutes` is therefore read off the resolved pair, never off
- * the two raw conversions, and this file holds no copy of the rule to keep in
- * step.
+ * The display-only block a wall-clock span will become. Must go through
+ * `intervalOfSlot` (the rule the server's `spanInstants` follows), not two bare
+ * `fromLocal` calls: a span on the far edge of a spring-forward gap would
+ * otherwise resolve out of order and yield negative `minutes`.
  */
 export function blockFrom(
   span: BlockSpan,
@@ -245,11 +188,7 @@ function withoutTasks(
   return next;
 }
 
-/**
- * The list as the user would see it after a keyboard or drag reorder, used to
- * announce the move and to compute the target index. Kept next to the patch so
- * the two cannot disagree about what "index 3" means.
- */
+/** The list after a reorder, for announcing the move and computing the target index. */
 export function reorderedPreview(ordered: readonly Task[], id: Uuid, toIndex: number): Task[] {
   return moveInList(ordered, id, toIndex);
 }

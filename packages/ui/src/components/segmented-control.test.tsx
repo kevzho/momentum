@@ -40,9 +40,7 @@ describe("SegmentedControl", () => {
     expect(onValueChange).not.toHaveBeenCalled();
     fireEvent.keyDown(thirty, { key: "ArrowRight" });
 
-    // Focus moved (Radix's roving tabstop, a tick later) *and* the selection
-    // followed it — what the radio role promises, without a second Space or
-    // Enter.
+    // Radix moves the roving tabstop a tick later; the selection must follow it.
     await waitFor(() => expect(document.activeElement).toBe(ninety));
     expect(onValueChange).toHaveBeenCalledWith("90");
     expect(ninety.getAttribute("aria-checked")).toBe("true");

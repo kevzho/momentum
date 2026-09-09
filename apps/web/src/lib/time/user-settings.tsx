@@ -5,15 +5,10 @@ import { createContext, use } from "react";
 import type { IanaTimeZone, SnapMinutes, Weekday } from "@momentum/core/types";
 
 /**
- * The three profile values client components need to render dates correctly:
- * the timezone every boundary resolves in, the week start, and the calendar's
- * snapping increment (Domain Rule 4, docs/ARCHITECTURE.md §10).
- *
- * They are seeded by the server from `requireSession()`, never read from the
- * browser. A client component that reached for
+ * The profile values client components need to render dates: seeded by the
+ * server, never read from the browser. Reading
  * `Intl.DateTimeFormat().resolvedOptions().timeZone` instead would render a
- * different "today" from the server on any device whose clock disagrees with
- * the profile.
+ * different "today" from the server on any device whose clock disagrees.
  */
 export interface UserSettings {
   timezone: IanaTimeZone;

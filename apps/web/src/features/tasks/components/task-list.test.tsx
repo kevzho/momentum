@@ -10,15 +10,6 @@ import type { Task, Uuid } from "@momentum/core/types";
 import { TaskList } from "@/features/tasks/components/task-list";
 import type { TaskRowData } from "@/features/tasks/components/task-list-row";
 
-/**
- * The keyboard model.
- *
- * "Keyboard navigation covers move, open, complete, and select" is an
- * acceptance criterion, and `Alt+↑/↓` is Domain Rule 10 — reordering is
- * achievable by dragging, so it must be achievable by keyboard alone. Each of
- * those is a test here, driven through the same handlers the pointer path uses.
- */
-
 const TODAY = localDate("2026-09-07");
 
 function task(id: string, title: string, overrides: Partial<Task> = {}): Task {
@@ -62,11 +53,12 @@ const ROWS: TaskRowData[] = [
 
 interface Handlers {
   onToggleComplete?: (id: Uuid, completed: boolean) => void;
+  onUnarchive?: (id: Uuid) => void;
   onOpen?: (id: Uuid) => void;
   onMove?: (id: Uuid, toIndex: number) => void;
 }
 
-/** Holds focus and selection the way `TasksView` does, so the list behaves as shipped. */
+// Holds focus and selection the way `TasksView` does.
 function Harness({ rows = ROWS, handlers = {} }: { rows?: TaskRowData[]; handlers?: Handlers }) {
   const [focusedId, setFocusedId] = React.useState<Uuid | null>(rows[0]?.task.id ?? null);
   const [selectedIds, setSelectedIds] = React.useState<ReadonlySet<Uuid>>(new Set());
@@ -85,6 +77,7 @@ function Harness({ rows = ROWS, handlers = {} }: { rows?: TaskRowData[]; handler
         focusedId={focusedId}
         onFocusedIdChange={setFocusedId}
         onToggleComplete={handlers.onToggleComplete ?? (() => {})}
+        onUnarchive={handlers.onUnarchive ?? (() => {})}
         onOpen={handlers.onOpen ?? (() => {})}
         onSelectionChange={setSelectedIds}
         onMove={handlers.onMove ?? (() => {})}
@@ -107,12 +100,8 @@ describe("the list is one tab stop", () => {
     expect(rows[2]).toHaveProperty("tabIndex", -1);
   });
 
-  /**
-   * `role="option"` and `role="button"` are children-presentational in ARIA:
-   * either one would flatten both checkboxes out of every row. Phase 3's review
-   * found exactly that defect on calendar blocks, so the rows keep their
-   * controls reachable and this test says so.
-   */
+  // `role="option"` and `role="button"` are children-presentational in ARIA
+  // and would flatten both checkboxes out of every row.
   it("keeps both of a row's checkboxes in the accessibility tree", () => {
     render(<Harness />);
 
@@ -189,6 +178,21 @@ describe("open and complete", () => {
   });
 });
 
+describe("archived rows", () => {
+  it("unarchives with Space instead of completing", () => {
+    const onToggleComplete = vi.fn();
+    const onUnarchive = vi.fn();
+    const rows = [row("a", "Old idea", { status: "archived" }), ...ROWS.slice(1)];
+    render(<Harness rows={rows} handlers={{ onToggleComplete, onUnarchive }} />);
+
+    fireEvent.keyDown(list(), { key: " " });
+
+    expect(onUnarchive).toHaveBeenCalledWith("a");
+    expect(onToggleComplete).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: 'Unarchive "Old idea"' })).toBeDefined();
+  });
+});
+
 describe("select", () => {
   it("adds and removes the focused task with X", () => {
     render(<Harness />);
@@ -213,8 +217,7 @@ describe("select", () => {
     fireEvent.keyDown(list(), { key: "ArrowDown", shiftKey: true });
     expect(selected()).toBe("a,b,c");
 
-    // Reversing shrinks the range from the anchor rather than growing it the
-    // other way.
+    // Reversing shrinks the range from the anchor.
     fireEvent.keyDown(list(), { key: "ArrowUp", shiftKey: true });
     expect(selected()).toBe("a,b");
   });
@@ -289,6 +292,7 @@ describe("empty states", () => {
           focusedId={null}
           onFocusedIdChange={() => {}}
           onToggleComplete={() => {}}
+          onUnarchive={() => {}}
           onOpen={() => {}}
           onSelectionChange={() => {}}
           onMove={() => {}}
@@ -300,11 +304,6 @@ describe("empty states", () => {
   });
 });
 
-/**
- * The row under the cursor can leave the view because of what the cursor did
- * to it — Space completes it and it leaves "all". The tab stop already moved
- * to the next row; focus has to move with it, or ArrowDown does nothing.
- */
 describe("when the focused row leaves the view", () => {
   it("hands focus to the row that took its place", () => {
     const view = render(<Harness />);
@@ -312,7 +311,7 @@ describe("when the focused row leaves the view", () => {
     first.focus();
     expect(document.activeElement).toBe(first);
 
-    // The completed row is gone from the view — as `selectTasks` would drop it.
+    // The completed row is gone from the view, as `selectTasks` would drop it.
     view.rerender(<Harness rows={ROWS.slice(1)} />);
 
     expect(focused()).toBe("b");
@@ -330,8 +329,7 @@ describe("when the focused row leaves the view", () => {
     const elsewhere = screen.getByRole("button", { name: "Elsewhere" });
     elsewhere.focus();
 
-    // Mounted with a cursor that is not in the rows: the effect moves the tab
-    // stop, and leaves the user's focus where it is.
+    // The effect moves the tab stop but leaves the user's focus where it is.
     expect(document.activeElement).toBe(elsewhere);
   });
 });

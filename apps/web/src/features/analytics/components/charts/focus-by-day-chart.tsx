@@ -19,13 +19,7 @@ import {
 } from "@/features/analytics/components/charts/chart-theme";
 import { ANALYTICS_COPY, dayLabel, duration } from "@/features/analytics/copy";
 
-/**
- * Chart 1 — focus time by day.
- *
- * Bars rather than a line: a day with no recorded session is a real zero, and a
- * line drawn through it implies a continuous quantity that was sampled. Ninety
- * bars stay readable because the axis labels thin out rather than the bars.
- */
+/** Bars rather than a line: a day with no session is a real zero, not a sample. */
 export function FocusByDayChart({ data }: { data: readonly DayValue[] }) {
   const columns: ChartTableColumn<DayValue>[] = [
     { header: ANALYTICS_COPY.columns.date, cell: (row) => dayLabel(row.date) },

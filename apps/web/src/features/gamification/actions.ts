@@ -20,21 +20,8 @@ import {
 } from "@/lib/actions/result";
 import { requireSession } from "@/lib/auth/session";
 
-/**
- * The five things a user can do to their own progression.
- *
- * **Look at what each of them sends: an id.** Not an amount, not a level, not a
- * coin balance, not a progress figure. Claiming a quest names the assignment
- * and the database recomputes the work from `tasks`, `focus_sessions`,
- * `habit_completions` and `calendar_blocks` before it writes anything; buying a
- * cosmetic names the cosmetic and the database reads the price from a row only
- * a migration can write. There is no path from this file to an XP amount, and
- * that is Domain Rule 6 made structural rather than promised.
- *
- * Every one is idempotent, so the retry a failure toast offers is safe: a
- * claimed quest returns unchanged, a purchase already made returns the row it
- * made, and a weekly goal carries a client-generated id (Domain Rule 17).
- */
+// Every action sends an id, never an amount: XP, coins and prices are computed
+// in the database. All are idempotent, so the failure toast's Retry is safe.
 
 export async function claimQuest(input: unknown): Promise<ActionResult<QuestAssignment>> {
   const parsed = idInput.safeParse(input);
@@ -61,14 +48,7 @@ export async function purchaseCosmetic(input: unknown): Promise<ActionResult<Use
   return attempt(() => gamification.purchaseCosmetic(supabase, parsed.data.id));
 }
 
-/**
- * Wearing something already owned.
- *
- * The one ordinary write on this surface, and it stays ordinary on purpose:
- * which of your own cosmetics you are wearing is not a fact the server has any
- * reason to arbitrate, and `enforce_one_equipped_per_kind()` keeps the
- * invariant that matters.
- */
+/** `enforce_one_equipped_per_kind()` keeps the one-per-kind invariant. */
 export async function equipCosmetic(input: unknown): Promise<ActionResult<UserCosmetic>> {
   const parsed = equipCosmeticInput.safeParse(input);
   if (!parsed.success) return validationError(parsed.error.issues);
@@ -79,15 +59,7 @@ export async function equipCosmetic(input: unknown): Promise<ActionResult<UserCo
   );
 }
 
-/**
- * A weekly goal the user sets themselves.
- *
- * The target is capped at the same number a *quest* on that metric is capped
- * at, in the schema as well as here: a goal that pushed someone into an
- * unhealthy week would be no better for having been self-set (Domain Rule 7).
- * The reward for reaching it is flat and decided by the server, so a bigger
- * number in this field buys nothing.
- */
+/** The target is capped at the same number a quest on that metric is; the reward is flat and server-decided. */
 export async function createWeeklyGoal(input: unknown): Promise<ActionResult<WeeklyGoal>> {
   const parsed = createWeeklyGoalInput.safeParse(input);
   if (!parsed.success) return validationError(parsed.error.issues);
@@ -99,8 +71,8 @@ export async function createWeeklyGoal(input: unknown): Promise<ActionResult<Wee
     gamification.insertWeeklyGoal(supabase, {
       id: parsed.data.id,
       userId,
-      // The week is resolved from the profile, never sent: a goal filed under a
-      // week the user is not in would be claimable against the wrong rows.
+      // Resolved from the profile, never sent: a goal filed under another week
+      // would be claimable against the wrong rows.
       weekStart: week.start,
       metric: parsed.data.metric,
       target: parsed.data.target,
@@ -120,18 +92,8 @@ export async function deleteWeeklyGoal(input: unknown): Promise<ActionResult<{ i
   });
 }
 
-/* -------------------------------------------------------------------------- */
-/* Plumbing                                                                   */
-/* -------------------------------------------------------------------------- */
-
-/**
- * The reads a progression mutation invalidates.
- *
- * The top bar's level and coin count are rendered by the authenticated layout,
- * so every route shows them — which means a claim made on /progress has to
- * refresh more than /progress. The calendar's planning drawer shows weekly
- * goals for the same reason.
- */
+// The top bar's level and coins render on every route, and the calendar's
+// planning drawer shows weekly goals.
 function revalidateProgressSurfaces(): void {
   refresh();
   revalidatePath("/calendar");
@@ -165,14 +127,7 @@ function isDatabaseError(value: unknown): value is DatabaseError {
   );
 }
 
-/**
- * Messages for the refusals a progression interaction can actually cause.
- *
- * Each says what happened and what to do next. None of them characterises the
- * user: a quest that is not finished is not finished, and the copy says so
- * without saying anything about the person who has not finished it
- * (Domain Rule 7).
- */
+// None of these messages characterises the user.
 function describe(error: unknown): { code: ActionErrorCode; message: string } {
   if (!isDatabaseError(error)) {
     return {
@@ -192,8 +147,7 @@ function describe(error: unknown): { code: ActionErrorCode; message: string } {
     case "23514":
       return { code: "validation", message: "A weekly goal has to ask for a reachable amount." };
     case "22023":
-      // Written for a person to read: "that quest is not finished yet",
-      // "that costs 120 coins and you have 40".
+      // Raised by the database in user-facing wording.
       return { code: "validation", message: error.message };
     default:
       return {

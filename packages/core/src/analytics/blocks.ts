@@ -5,15 +5,8 @@ import type { WorkBlockFact } from "./facts";
 import { periodContains, type AnalyticsPeriod } from "./period";
 
 /**
- * Scheduled work against executed work.
- *
- * A block is counted on the local date it *starts*, the same column the
- * calendar draws it in (Domain Rule 4). Its minutes are elapsed minutes, from
- * `durationMinutes` — so a block drawn across a fall-back hour contributes the
- * 120 minutes it really consumed rather than the 60 the clock face suggests.
- *
- * "Completed" means the span was executed, which is what `completed_at` on the
- * block records; it does not mean the task finished (Domain Rule 13).
+ * A block is counted on the local date it starts; its minutes are elapsed
+ * minutes, so a block across a fall-back hour contributes 120, not 60.
  */
 
 export interface BlockTotals {
@@ -66,13 +59,7 @@ export function blockTotals(
   return totals;
 }
 
-/**
- * The period's blocks split by the hour they were scheduled to start.
- *
- * The cutoff is a parameter rather than a constant here because the insight
- * that uses it owns the choice, and because a split whose boundary is buried in
- * an aggregation cannot be tested against a different one.
- */
+/** The period's blocks split by the local hour they were scheduled to start. */
 export function blocksByStartHour(
   blocks: readonly WorkBlockFact[],
   period: AnalyticsPeriod,

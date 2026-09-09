@@ -39,22 +39,11 @@ import type {
 import { requireSession } from "@/lib/auth/session";
 
 /**
- * The calendar's one read.
- *
- * A page hands it the days it wants to render; it returns everything the client
- * island needs, already resolved: blocks and expanded occurrences as
- * `CalendarItem`s, the planning drawer's sections with the settings its maths
- * runs on, and "today" in the profile timezone. The client never fetches,
- * never expands a series, and never sees a database row
- * (docs/ARCHITECTURE.md §5, §6).
- *
- * Every boundary here resolves in `profile.timezone`, never the server's
- * (Domain Rule 4). Nothing in this file reads a clock except `today`, and that
- * one reads it once per request — it decides which tasks are overdue as well
- * as which column is today's, so the two can never disagree.
+ * The calendar's one read: items, the planning drawer's sections, and "today",
+ * all resolved in `profile.timezone`. The clock is read once per request so
+ * overdue tasks and today's column cannot disagree.
  */
 
-/** Belongs to no project and has no estimate: an unscheduled task still has to render. */
 const NO_MINUTES: Minutes = 0;
 
 export interface CalendarWeekParams {
@@ -75,26 +64,12 @@ export async function getCalendarWeek(params: CalendarWeekParams): Promise<Calen
 
   const today = todayIn(timezone, nowInstant());
 
-  /*
-   * The half-open UTC window `[start, end)` the range covers.
-   *
-   * Derived from the displayed days rather than from `weekRange`, because day
-   * view shows one day and week view shows seven; for a full week the two are
-   * the same instants by construction, since `weekRange` is itself
-   * `startOfDay(start)` to `startOfDay(start + 7)`. Half-open throughout, so a
-   * block ending exactly at midnight belongs to the earlier day and paging the
-   * calendar never shows it twice. DST is not adjusted for here and must not be:
-   * the local days either side of a transition are 23 or 25 hours long and
-   * `startOfDay` already knows it.
-   */
+  // Half-open `[start, end)`, so a block ending at midnight belongs to the
+  // earlier day. No DST adjustment: `startOfDay` already handles 23/25-hour days.
   const start = startOfDay(first, timezone);
   const end = startOfDay(rangeEndExclusive(days), timezone);
 
-  /*
-   * Weekly goals belong to a week, not to a displayed range: day view shows one
-   * day and still lists the week's goals, so the week is the one containing the
-   * range's first day in the profile's own week shape (Domain Rule 4).
-   */
+  // Weekly goals belong to the week containing the range's first day, even in day view.
   const weekStart = weekOf(first, profile.weekStart).start;
 
   const rows = await blocks.listWindow(supabase, {
@@ -104,9 +79,7 @@ export async function getCalendarWeek(params: CalendarWeekParams): Promise<Calen
     endDate: last,
   });
 
-  // Occurrences are expanded here and never materialised (Domain Rule 16).
-  // `expandAll` filters overrides by series itself, so the window's whole
-  // override list goes in unpartitioned.
+  // Occurrences are expanded, never materialised. `expandAll` filters overrides by series itself.
   const occurrences = expandAll(rows.series, { start, end }, rows.overrides);
 
   const workBlocks = rows.blocks.filter(isWorkBlock);
@@ -133,9 +106,6 @@ export async function getCalendarWeek(params: CalendarWeekParams): Promise<Calen
     tasks.listDueBetween(supabase, userId, first, last),
     tasks.listOverdue(supabase, userId, today),
     weeklyGoals.listForWeek(supabase, userId, weekStart),
-    // The drawer's HABITS section (specs/05-week-planning.md, unblocked by
-    // Phase 6). Archived habits are dropped here rather than in the query,
-    // because the same read serves nothing else.
     habitsRepo.listFor(supabase, userId),
     habitsRepo.listCompletionsBetween(supabase, userId, first, last),
   ]);
@@ -144,9 +114,7 @@ export async function getCalendarWeek(params: CalendarWeekParams): Promise<Calen
   const projectsById = byId(projectRows);
   const sections = sectionTasks(overdueRows, dueRows, unscheduledRows);
 
-  // Coverage for the OVERDUE and DUE THIS WEEK rows only: an UNSCHEDULED task
-  // owns no work block, so its reserved minutes are zero by definition and
-  // asking the database would be a round trip to be told so.
+  // An UNSCHEDULED task owns no work block, so only the other two sections are asked.
   const scheduledMinutes = await tasks.scheduledMinutesByTask(supabase, [
     ...sections.overdue.map((task) => task.id),
     ...sections.dueInRange.map((task) => task.id),
@@ -183,10 +151,6 @@ export async function getCalendarWeek(params: CalendarWeekParams): Promise<Calen
   };
 }
 
-/* -------------------------------------------------------------------------- */
-/* The planning drawer                                                        */
-/* -------------------------------------------------------------------------- */
-
 /** The three task sections, already made disjoint. */
 interface SectionTasks {
   overdue: readonly Task[];
@@ -195,23 +159,10 @@ interface SectionTasks {
 }
 
 /**
- * One task, one section (specs/05-week-planning.md).
- *
- * OVERDUE, DUE THIS WEEK and UNSCHEDULED are three questions, not three
- * partitions: a task due last Monday with no blocks answers all of them, and
- * a task due Thursday with no blocks answers two. The drawer shows each task
- * once, under the first section that claims it in the order above, so the
- * subtraction happens here rather than in every consumer. A duplicate row
- * would also register the same draggable id twice inside one `DndContext`,
- * which dnd-kit does not allow — so the overlap is not merely untidy, it
- * breaks dragging.
- *
- * Subtasks are dropped from every section. The drawer lists work a person
- * schedules, and a subtask is scheduled through its parent in this product
- * (`@momentum/core/tasks` `matchesView` applies the same rule to the task
- * manager's views). `listOverdue` already excludes them at the database; the
- * two older reads predate the rule and are filtered here so that all three
- * sections answer the same way.
+ * One task, one section: the first of OVERDUE, DUE THIS WEEK, UNSCHEDULED that
+ * claims it. A duplicate would register the same draggable id twice in one
+ * `DndContext`, which breaks dragging. Subtasks are dropped from every
+ * section, matching `matchesView` in `@momentum/core/tasks`.
  */
 function sectionTasks(
   overdue: readonly Task[],
@@ -230,19 +181,9 @@ function sectionTasks(
 }
 
 /**
- * The drawer's sections and the settings its maths runs on.
- *
- * Nothing here is a total. Planned, available and unscheduled minutes, the
- * per-day bars and the warnings are all computed on the client by
- * `@momentum/core/scheduling` over the items as the user currently sees them —
- * the optimistic week — so that a drop moves every number in the same frame
- * and rolls every number back with it (docs/ARCHITECTURE.md §8). A total
- * computed here would be right until the first drag and stale after it.
- *
- * What the server does contribute is the part the client cannot see:
- * `scheduledOutsideMinutes`, the coverage a task has on other weeks. The
- * client sums the range's own work blocks live and adds this number; the
- * subtraction below is what stops a block from being counted twice.
+ * Totals are computed on the client over the optimistic week; the server
+ * contributes only `scheduledOutsideMinutes`, the coverage on other weeks. The
+ * subtraction below stops a block in the range from being counted twice.
  */
 function buildPlan(
   sections: SectionTasks,
@@ -256,10 +197,7 @@ function buildPlan(
   const inRange = minutesInRangeByTask(workBlocks);
 
   const outside = (task: Task): Minutes =>
-    // A block inside the window is by definition part of the task's total, so
-    // this cannot go below zero — unless the two reads raced a write between
-    // them, in which case the honest answer is "nothing else that we know of"
-    // rather than a negative coverage.
+    // Only goes negative if the two reads raced a write; clamp rather than report it.
     Math.max(
       NO_MINUTES,
       (scheduledMinutes.get(task.id) ?? NO_MINUTES) - (inRange.get(task.id) ?? NO_MINUTES),
@@ -268,8 +206,6 @@ function buildPlan(
   return {
     overdue: sections.overdue.map((task) => planTask(task, projectsById, outside(task))),
     dueInRange: sections.dueInRange.map((task) => planTask(task, projectsById, outside(task))),
-    // An unscheduled task owns no block anywhere, so its outside coverage is
-    // zero without asking.
     unscheduled: sections.unscheduled.map((task) => planTask(task, projectsById, NO_MINUTES)),
     habits: habitRows,
     weeklyGoals: goals.map(planningGoal),
@@ -279,16 +215,8 @@ function buildPlan(
 }
 
 /**
- * The drawer's HABITS rows: the active habits, their progress over the
- * displayed range, and the days that already have time reserved.
- *
- * Progress is `weekProgress` from `@momentum/core/habits` — the same function
- * the habits page uses, over the same completions — so the two surfaces cannot
- * report a different number for the same week. In day view the range is one
- * day, and the progress it reports is honestly that one day's.
- *
- * Archived habits are excluded: they are not competing for the week, which is
- * the only thing this drawer lists.
+ * The drawer's HABITS rows: active habits, progress over the displayed range
+ * (via `weekProgress`, as the habits page), and the days already reserved.
  */
 function planningHabits(
   habitRows: readonly Habit[],
@@ -322,13 +250,7 @@ function planningHabits(
     }));
 }
 
-/**
- * Elapsed minutes of the window's work blocks, per task — the same rows the
- * client receives as items, summed the same way the client sums them. Whole
- * blocks, not the part inside the window: a block that runs past midnight on
- * the range's last day is one item on the client, and it is subtracted here
- * as one block.
- */
+// Whole blocks, not the part inside the window: the client sums them the same way.
 function minutesInRangeByTask(workBlocks: readonly WorkBlock[]): Map<Uuid, Minutes> {
   const minutes = new Map<Uuid, Minutes>();
   for (const block of workBlocks) {
@@ -357,7 +279,6 @@ function planTask(
   };
 }
 
-/** Read-only until Phase 8 owns progress and claiming; the drawer lists the promise, not the score. */
 function planningGoal(goal: WeeklyGoal): PlanningGoal {
   return {
     id: goal.id,
@@ -368,11 +289,6 @@ function planningGoal(goal: WeeklyGoal): PlanningGoal {
   };
 }
 
-/* -------------------------------------------------------------------------- */
-/* Small helpers                                                              */
-/* -------------------------------------------------------------------------- */
-
-/** Narrows to the kind whose `taskId` the compiler then knows is non-null. */
 function isWorkBlock(block: CalendarBlock): block is WorkBlock {
   return block.kind === "work";
 }

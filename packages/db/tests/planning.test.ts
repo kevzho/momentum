@@ -14,23 +14,10 @@ import {
 } from "./support/harness";
 
 /**
- * The two reads Phase 5 added for the planning drawer, proved against a real
- * database.
- *
- * What is under test is the filter each read applies and the policy that
- * scopes it — "open, unarchived, top-level, due before the date" is a set of
- * `where` clauses, and "none of the neighbour's" is row-level security — so
- * mocking the client would prove nothing (docs/ARCHITECTURE.md §13). The
- * suite skips itself cleanly without `MOMENTUM_DB_TESTS=1`, so `pnpm test`
- * stays green with no Docker.
- *
- * Run with: `MOMENTUM_DB_TESTS=1 pnpm test` against a freshly reset stack.
- *
- * Fixtures are created and torn down per test, far enough in the future that
- * nothing the seed positions relative to `now()` shares a date with them. The
- * seed's own overdue tasks still satisfy `due_date < 2030-03-04`, which is why
- * every assertion is about the fixtures' presence, absence and relative
- * order rather than about the whole result.
+ * The planning drawer's reads, proved against a real database. Run with
+ * `MOMENTUM_DB_TESTS=1 pnpm test`. The seed's own overdue tasks also satisfy
+ * `due_date < 2030-03-04`, so assertions are about the fixtures' presence,
+ * absence and relative order, never the whole result.
  */
 
 const describeDb = DB_TESTS_ENABLED ? describe : describe.skip;
@@ -58,8 +45,7 @@ describeDb("planning reads", () => {
   });
 
   afterEach(async () => {
-    // Subtasks cascade with their parent, so deleting in reverse creation
-    // order removes children first and never trips over a row that is gone.
+    // Reverse creation order removes children before their cascading parent.
     for (const row of [...created].reverse()) {
       await row.client().from(row.table).delete().eq("id", row.id);
     }
@@ -99,11 +85,8 @@ describeDb("planning reads", () => {
     userId: string,
     goal: { weekStart: string; metric: "tasks_completed" | "focus_minutes" | "blocks_completed" },
   ): Promise<string> {
-    // Seeded through the service role, not the signed-in client: guard_weekly_goals
-    // (20260909120200) only lets the `authenticated` client create goals for its
-    // current week, and these read-isolation fixtures deliberately live in a far,
-    // fixed week. Reads below still go through `client` under its own RLS, which is
-    // what the test is actually asserting; the row still belongs to `userId`.
+    // Service role, because guard_weekly_goals only lets a client create goals
+    // for its current week and these fixtures live in a far, fixed week.
     const admin = adminClient();
     const { data, error } = await admin
       .from("weekly_goals")
@@ -150,11 +133,9 @@ describeDb("planning reads", () => {
       const ids = (await tasks.listOverdue(owner, ownerId, TODAY)).map((task) => task.id);
 
       expect(ids).toContain(overdue);
-      // Strict: a task due today is today's, not overdue (Domain Rule 4 makes
-      // this a date comparison, and the date has not passed).
+      // Strict: a task due today is today's, not overdue.
       expect(ids).not.toContain(dueToday);
       expect(ids).not.toContain(undated);
-      // A subtask is scheduled through its parent; the drawer never lists it.
       expect(ids).not.toContain(subtask);
       expect(ids).not.toContain(archived);
       expect(ids).not.toContain(completed);
@@ -190,8 +171,7 @@ describeDb("planning reads", () => {
         .map((task) => task.id)
         .filter((id) => fixtures.has(id));
 
-      // The most past-due first, even though it is the lowest priority; then
-      // priority breaks the tie, then sort order.
+      // Most past-due first even at the lowest priority; then priority, then sort order.
       expect(ids).toEqual([earlierP2, earlierP4First, earlierP4, later]);
     });
 
@@ -206,9 +186,6 @@ describeDb("planning reads", () => {
       expect(rows.map((task) => task.id)).not.toContain(theirs);
       for (const task of rows) expect(task.userId).toBe(ownerId);
 
-      // Asking for the neighbour's rows by id is not a way round the policy
-      // either: the filter matches rows the caller cannot see, and the answer
-      // is empty rather than someone else's list (Domain Rule 9).
       expect(await tasks.listOverdue(owner, neighbourId, TODAY)).toEqual([]);
     });
   });

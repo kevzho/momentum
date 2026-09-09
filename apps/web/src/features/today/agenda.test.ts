@@ -29,14 +29,6 @@ import {
 } from "@/features/today/fixtures";
 import type { OverlapWarning, InsufficientTimeWarning } from "@/features/today/types";
 
-/**
- * The Today page's domain logic.
- *
- * Every function here takes `now` as a parameter, so the whole suite pins the
- * clock rather than mocking one — which is also the property that makes the
- * server render and the hydrated client render provably identical.
- */
-
 describe("dayPartOf", () => {
   it("changes at noon and at six", () => {
     expect(dayPartOf(0)).toBe("morning");
@@ -105,11 +97,8 @@ describe("buildTimeline", () => {
     expect(timeline[0]).toMatchObject({ startMinutes: 0, endMinutes: 1440 });
   });
 
-  /**
-   * The defect Phases 3 and 4 each found once, from the other direction: on a
-   * fall-back day 01:00–03:00 is *three* elapsed hours but still ends at 03:00
-   * on the clock. The row's placement is wall clock; its duration is elapsed.
-   */
+  // On a fall-back day 01:00–03:00 is three elapsed hours but still ends at
+  // 03:00 on the clock: placement is wall clock, duration is elapsed.
   it("keeps wall clock and elapsed time apart across a fall-back transition", () => {
     const tz = ianaTimeZone("America/New_York");
     const day = localDate("2026-11-01");
@@ -152,8 +141,7 @@ describe("timelineStateOf", () => {
     expect(entry && timelineStateOf(entry, at("2026-09-08", 8, 59))).toBe("future");
     expect(entry && timelineStateOf(entry, at("2026-09-08", 9))).toBe("current");
     expect(entry && timelineStateOf(entry, at("2026-09-08", 9, 59))).toBe("current");
-    // Half-open, like every window in this codebase: a block ending at 10:00 is
-    // past at 10:00, not still running.
+    // Half-open: a block ending at 10:00 is past at 10:00.
     expect(entry && timelineStateOf(entry, at("2026-09-08", 10))).toBe("past");
   });
 });
@@ -401,12 +389,8 @@ describe("habitsForToday", () => {
     expect(rows.map((row) => row.habit.id)).toEqual(["h2"]);
   });
 
-  /**
-   * "Three times a week, any days" names no day, so it asks something of today
-   * in the only sense that matters: today is a day it could be done on.
-   * `isScheduledOn` answers no for it, and using that answer here would hide
-   * the habit for the whole week.
-   */
+  // A per-week habit names no day; `isScheduledOn` answers no for it, and using
+  // that answer would hide the habit for the whole week.
   it("shows a per-week habit every day until its week is met, then stops", () => {
     const thrice = habit({ id: "h3", frequencyType: "times_per_week", target: 3 });
 
@@ -441,11 +425,8 @@ describe("habitsForToday", () => {
   });
 });
 
-/**
- * Domain Rule 1: a due date is a deadline and a work block is intent, and Next
- * Up must not confuse them. A task due today that has time reserved for
- * *another* day is still what is due soonest when today holds nothing left.
- */
+// A due date is a deadline and a work block is intent: a task due today with
+// time reserved on another day is still what is due soonest.
 describe("selectNextUp and Domain Rule 1", () => {
   it("offers a task due today even though it is scheduled on another day", () => {
     const page = todayPage({

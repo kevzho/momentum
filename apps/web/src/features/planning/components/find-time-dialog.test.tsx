@@ -17,13 +17,6 @@ import {
   type FindTimeDialogProps,
 } from "@/features/planning/components/find-time-dialog";
 
-/**
- * The dialog's contract: it asks the engine once per open with the live
- * inputs, lists what came back with the engine's own words, schedules a
- * candidate's span verbatim, and always leaves the user a way to pick a time
- * by hand. The engine is stubbed; its ranking has its own tests in core.
- */
-
 const { findTimeMock } = vi.hoisted(() => ({ findTimeMock: vi.fn() }));
 
 vi.mock("@momentum/core/scheduling", async (importOriginal) => {
@@ -242,13 +235,12 @@ describe("FindTimeDialog", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Pick a time instead" }));
 
-    // One dialog throughout: the focus scope and the opener survive the switch.
+    // One dialog throughout, so the opener survives the switch.
     expect(screen.getAllByRole("dialog")).toHaveLength(1);
     expect(screen.getByRole("dialog", { name: "Schedule task" })).toBeDefined();
     expect(screen.getByText("Finish statistics homework")).toBeDefined();
     await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText("Date")));
 
-    // The manual form commits a span as long as the estimate, like a drop would.
     fireEvent.click(screen.getByRole("button", { name: "Schedule" }));
     expect(onScheduleTask).toHaveBeenCalledWith("task-homework", {
       date: "2026-09-08",

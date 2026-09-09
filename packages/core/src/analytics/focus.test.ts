@@ -28,11 +28,6 @@ describe("focusMinutesByDay", () => {
     expect(series.find((point) => point.date === "2026-06-16")?.value).toBe(25);
   });
 
-  /**
-   * The convention `@momentum/core/focus` set: a session begun at 23:40 belongs
-   * to the day the user sat down, so "3 sessions today" agrees with the list
-   * underneath it.
-   */
   it("counts a session begun at 23:40 on the day it began", () => {
     const series = focusMinutesByDay(
       [session({ date: "2026-06-16", hour: 23, minute: 40, minutes: 40 })],

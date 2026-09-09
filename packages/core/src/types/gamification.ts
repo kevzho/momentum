@@ -95,7 +95,7 @@ export interface WeeklyGoal {
 export const COSMETIC_KINDS = ["profile_frame", "theme", "block_style", "avatar"] as const;
 export type CosmeticKind = (typeof COSMETIC_KINDS)[number];
 
-/** Coins buy cosmetics only — never functionality (specs/08-gamification.md). */
+/** Coins buy cosmetics only, never functionality. */
 export interface CosmeticDefinition {
   id: Uuid;
   key: string;

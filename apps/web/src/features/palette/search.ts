@@ -4,14 +4,7 @@ import { fuzzyScore, fuzzyScoreAny } from "@/features/palette/fuzzy";
 import { recentIds, usageBonus, type CommandUsageMap } from "@/features/palette/recents";
 import { COMMAND_GROUPS, GROUP_HEADINGS, type PaletteCommand } from "@/features/palette/types";
 
-/**
- * What the palette shows, computed as data.
- *
- * The dialog renders whatever `rootSections` (or a picker's sections) returns
- * and holds no ranking logic of its own, so "does typing 'phys' find the
- * physics task" is a unit test over a pure function rather than a question
- * about a React tree.
- */
+// What the palette shows, computed as data; the dialog holds no ranking logic.
 
 export interface CommandItem {
   kind: "command";
@@ -43,10 +36,8 @@ export interface PaletteSection {
   items: readonly PaletteItem[];
 }
 
-/** How many of the user's own rows the root list will show at once. */
 export const ROOT_TASK_LIMIT = 6;
 export const ROOT_PROJECT_LIMIT = 4;
-/** A picker is the whole list, but a list this long is a scroll, not a search. */
 export const PICKER_LIMIT = 50;
 /** Recent commands shown above everything else when nothing has been typed. */
 export const RECENT_LIMIT = 4;
@@ -57,21 +48,14 @@ export interface RootSearchInput {
   tasks: readonly TaskSummary[];
   projects: readonly ProjectSummaryWithCount[];
   usage: CommandUsageMap;
-  /** Epoch milliseconds; passed in so the ranking is testable (Domain Rule 5). */
+  /** Epoch milliseconds; passed in so the ranking is testable. */
   now: number;
 }
 
 /**
- * The root list.
- *
- * **Nothing typed:** the commands the user reaches for most, then every command
- * under its own heading. Their own tasks and projects are not listed, because
- * an unfiltered dump of a task list is not a menu — they appear the moment
- * there is something to match them against.
- *
- * **Something typed:** commands, tasks and projects all compete, and the
- * section holding the best match is listed first, so the first result is
- * selected and Enter does the obvious thing.
+ * The root list. Nothing typed: recent commands, then every command under its
+ * heading (no user data). Something typed: commands, tasks and projects all
+ * compete, and the section holding the best match comes first.
  */
 export function rootSections(input: RootSearchInput): PaletteSection[] {
   const { query, commands, tasks, projects, usage, now } = input;
@@ -128,8 +112,6 @@ export function firstItem(sections: readonly PaletteSection[]): PaletteItem | nu
   }
   return null;
 }
-
-/* -------------------------------------------------------------------------- */
 
 function restingSections(
   commands: readonly PaletteCommand[],
@@ -214,11 +196,7 @@ function rankProjects(query: string, projects: readonly ProjectSummaryWithCount[
   return sortByScore(items);
 }
 
-/**
- * Best first, and — where two things score the same — in the order they were
- * declared or read. A palette whose list reshuffles between identical keystrokes
- * is one nobody can build muscle memory against.
- */
+// Best first; ties keep declaration order (the sort is stable).
 function sortByScore<T extends PaletteItem>(items: T[]): T[] {
   return [...items].sort((left, right) => right.score - left.score);
 }

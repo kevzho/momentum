@@ -8,13 +8,7 @@ import {
   StatTileSkeleton,
 } from "@/components/skeletons";
 
-/**
- * Built from the same layout as the focus page, in its resting shape: the
- * setup panel, not the running timer. That is the state a load almost always
- * arrives in, and a skeleton drawn as a 216px ring would shift the whole column
- * when a session turned out not to be running (the defect the Phase 5 audit
- * found on `/tasks`).
- */
+/** Mirrors the page's resting shape (setup panel, not the timer ring) so the column does not shift on load. */
 export function FocusSkeleton() {
   return (
     <PageContainer>

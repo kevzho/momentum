@@ -16,8 +16,7 @@ export function RequestResetForm() {
   const fieldErrors = state && !state.ok ? state.error.fieldErrors : undefined;
   const message = useResultFocus(state);
 
-  // The confirmation is deliberately the same whether or not the address has
-  // an account, so this screen cannot be used to discover who has one.
+  // Same confirmation whether or not the address has an account (no enumeration).
   if (state?.ok && state.data.message) {
     return (
       <FormMessage ref={message} tone="info">

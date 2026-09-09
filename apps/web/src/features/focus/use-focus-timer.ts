@@ -7,36 +7,11 @@ import { clockOffsetMs, nowInstant, offsetClock } from "@momentum/core/time";
 import type { Instant } from "@momentum/core/types";
 
 /**
- * The timer's *rendering* loop.
- *
- * Read `packages/core/src/focus/timer.ts` first: that is where a session's
- * elapsed and remaining time are decided, from `started_at`, the pause records
- * and an instant. This hook does one job — decide how often to ask — and it is
- * written so that being asked late, or not at all for an hour, changes nothing
- * about the answer.
- *
- * That is the whole of the design `specs/07-focus-mode.md` insists on. There is
- * no counter here to decrement and no accumulated total to fall behind:
- *
- * - **A backgrounded tab** is throttled to about one timer a minute, and in
- *   some browsers to none. The next tick, whenever it comes, recomputes from
- *   the timestamps and is correct.
- * - **A reloaded page** starts this hook from nothing, and the first render is
- *   already right, because the server sent the same timestamps it had before.
- * - **A slept machine** fires no intervals at all. `visibilitychange`,
- *   `focus` and `pageshow` each force an immediate recomputation on the way
- *   back, so the screen is right before the next second would have arrived —
- *   and even without them the next tick would fix it.
- *
- * The clock the hook reads is the device's, corrected once against the
- * instant the server rendered at. A device whose clock is minutes out would
- * otherwise render a session minutes out — the persisted timestamps are the
- * database's, and subtracting them from an uncorrected local reading mixes two
- * clocks. The correction survives sleep, because wall-clock time keeps running
- * across it.
+ * The timer's rendering loop. The maths lives in `packages/core/src/focus/timer.ts`
+ * and is recomputed from timestamps on every tick, so there is no counter to
+ * fall behind: a throttled tab, a reload or a slept machine is right on its
+ * next reading. The device clock is corrected once against `serverNow`.
  */
-
-/** One second while running. Fast enough for a countdown, cheap enough to ignore. */
 const TICK_MS = 1_000;
 
 export interface UseFocusTimerInput {
@@ -44,6 +19,12 @@ export interface UseFocusTimerInput {
   session: FocusTimerInput | null;
   /** The instant the server rendered at, from the page's payload. */
   serverNow: Instant;
+  /**
+   * Called once per session, the first time a running countdown is seen at
+   * zero after having been seen above it. A page mounted on a session already
+   * past its length is not a crossing, and does not call it.
+   */
+  onPlannedTimeElapsed?: () => void;
 }
 
 export interface UseFocusTimer {
@@ -53,24 +34,20 @@ export interface UseFocusTimer {
   now: Instant;
 }
 
-export function useFocusTimer({ session, serverNow }: UseFocusTimerInput): UseFocusTimer {
-  /*
-   * Measured once, on the first client render for this payload, and then held.
-   * Re-measuring on every render would fold the render's own elapsed time into
-   * the correction; measuring in an effect would leave the first paint
-   * uncorrected. `useState`'s initialiser runs exactly once per mount, before
-   * paint, which is the moment the two readings are closest together.
-   */
+export function useFocusTimer({
+  session,
+  serverNow,
+  onPlannedTimeElapsed,
+}: UseFocusTimerInput): UseFocusTimer {
+  // Measured once, before first paint: re-measuring per render would fold render
+  // time into the correction, and an effect would leave the first paint uncorrected.
   const [offsetMs] = React.useState(() => clockOffsetMs(serverNow, nowInstant()));
   const clock = React.useMemo(() => offsetClock(offsetMs), [offsetMs]);
 
   const [now, setNow] = React.useState<Instant>(() => nowInstant(clock));
 
-  /*
-   * The session's identity, not its object identity: the payload is rebuilt on
-   * every server render, so depending on `session` itself would restart the
-   * interval on every revalidation.
-   */
+  // Derived flags, not `session` itself: the payload is rebuilt on every server
+  // render, and depending on the object would restart the interval each revalidation.
   const live = session !== null && session.endedAt === null;
   const paused = session?.status === "paused";
 
@@ -79,23 +56,14 @@ export function useFocusTimer({ session, serverNow }: UseFocusTimerInput): UseFo
 
     const read = () => setNow(nowInstant(clock));
 
-    // Immediately, so a resume or a return from sleep does not wait a second.
+    // Immediately, so a return from sleep does not wait a second.
     read();
 
-    /*
-     * A paused session's numbers cannot change — its elapsed time is frozen by
-     * the open pause record — so there is nothing to tick. Only the visibility
-     * listeners stay, because the *resume* that unfreezes it may happen in
-     * another tab.
-     */
+    // A paused session has nothing to tick; only the visibility listeners stay,
+    // because the resume may happen in another tab.
     const interval = paused ? null : window.setInterval(read, TICK_MS);
 
-    /*
-     * Three events, because no single one covers every route back:
-     * `visibilitychange` fires for a tab switch, `focus` for a window that was
-     * behind another, and `pageshow` for a page restored from the back/forward
-     * cache — which fires neither of the others.
-     */
+    // All three are needed: `pageshow` (back/forward cache) fires neither of the others.
     window.addEventListener("visibilitychange", read);
     window.addEventListener("focus", read);
     window.addEventListener("pageshow", read);
@@ -109,6 +77,35 @@ export function useFocusTimer({ session, serverNow }: UseFocusTimerInput): UseFo
   }, [clock, live, paused]);
 
   const state = session === null ? null : focusTimerState(session, now);
+
+  // A throttled tab may go from "ten minutes left" to "past" in one reading and
+  // must still count as a crossing. The callback is read through a ref so an
+  // inline function at the call site does not re-run the effect.
+  const elapsedCallback = React.useRef(onPlannedTimeElapsed);
+  React.useEffect(() => {
+    elapsedCallback.current = onPlannedTimeElapsed;
+  }, [onPlannedTimeElapsed]);
+
+  const startedAt = session?.startedAt;
+  const remainingSeconds = state?.remainingSeconds;
+  const lastSeen = React.useRef<{ startedAt: Instant | undefined; remaining: number | undefined }>({
+    startedAt: undefined,
+    remaining: undefined,
+  });
+
+  React.useEffect(() => {
+    const previous = lastSeen.current;
+    lastSeen.current = { startedAt, remaining: remainingSeconds };
+
+    const sameSession = previous.startedAt === startedAt;
+    const crossed =
+      sameSession &&
+      previous.remaining !== undefined &&
+      previous.remaining > 0 &&
+      remainingSeconds === 0;
+
+    if (live && !paused && crossed) elapsedCallback.current?.();
+  }, [live, paused, startedAt, remainingSeconds]);
 
   return { state, now };
 }

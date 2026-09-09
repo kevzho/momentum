@@ -5,17 +5,9 @@ import { localDate } from "@momentum/core/time";
 import type { Instant } from "@momentum/core/types";
 
 /**
- * The Today page, end to end from the island down.
- *
- * The clock is the thing under test as much as the markup: `useNow` is replaced
- * by a value this file sets, so "what is next at 10:30" and "what is next at
- * 18:00" are two renders of the same page rather than two fixtures. The `null`
- * case is the server render and React's hydration pass, where the page falls
- * back to the instant the server rendered at.
- *
- * Every server action is mocked at the module boundary, so what is asserted is
- * the contract the page has with the server — an id, a boolean, and at most a
- * wall-clock span. Never an XP amount, never a timestamp (Domain Rules 6, 15).
+ * `useNow` is replaced by a value this file sets; `null` is the server render
+ * and hydration pass. Actions are mocked at the module boundary, so what is
+ * asserted is the contract with the server: an id, a boolean, at most a span.
  */
 
 const clock = vi.hoisted(() => ({ now: null as Instant | null }));
@@ -219,9 +211,7 @@ describe("the timeline", () => {
     fireEvent.click(control);
 
     await waitFor(() => expect(toast.error).toHaveBeenCalled());
-    // The transition settled against unchanged props, so React discarded the
-    // overlay: the row is outstanding again and the control still reads as the
-    // action it will perform.
+    // React discarded the overlay: the row is outstanding again.
     await waitFor(() =>
       expect(screen.getByRole("checkbox", { name: "Complete task" }).dataset.state).not.toBe(
         "checked",
@@ -255,9 +245,7 @@ describe("next up", () => {
   });
 
   it("falls back to the instant the server rendered at before the clock ticks", () => {
-    // `useNow` is null on the server and through hydration; the page still has
-    // to name the right item, or the markup React hydrates is not the markup it
-    // renders.
+    // `useNow` is null on the server and through hydration; the page must still name the right item.
     clock.now = null;
     renderPage(fullDay());
     expect(nextUpPanel().textContent).toContain("Chemistry lecture");
@@ -407,7 +395,7 @@ describe("habits", () => {
   });
 
   it("tops a per-week amount habit up to its week target from one press", async () => {
-    // Phase 13 (PROG-15): a tick used to record 1 unit and call the day done.
+    // A tick must top the amount up to the target, not record 1 unit.
     const language = habit({
       id: "habit-2",
       name: "Language practice",
@@ -482,20 +470,15 @@ describe("at risk", () => {
     // The overlay cleared the row in the same frame as the press...
     expect(screen.queryByText(sentence)).toBeNull();
 
-    // ...and the failed write put it back, because the transition settled
-    // against unchanged props (Domain Rule 11).
+    // ...and the failed write put it back.
     await waitFor(() => expect(toast.error).toHaveBeenCalled());
     expect(await screen.findByText(sentence)).toBeDefined();
   });
 });
 
 describe("quests", () => {
-  /**
-   * The shape the database mints: `quest_assignment_id()` is `md5(...)::uuid`,
-   * so the version nibble is whatever the hash produced — here `d`, which is
-   * not a UUID version. This is what a Claim button actually sends, and the
-   * real schema has to accept it (`features/gamification/schemas.test.ts`).
-   */
+  // `quest_assignment_id()` is `md5(...)::uuid`, so the version nibble (here `d`)
+  // is not a UUID version; the real schema has to accept it.
   const ASSIGNMENT_ID = "ad72fcea-d19a-d1b0-3a5e-0f7f5a1b2c3d";
 
   function claimable() {
@@ -548,12 +531,7 @@ describe("quests", () => {
     );
   });
 
-  /*
-   * The other half of "on failure" (Domain Rules §19): the call itself rejects
-   * when the device is offline or the server answers 5xx, and React re-throws
-   * a rejection out of the transition at the next render — which, uncaught,
-   * hands the route's error boundary a blanked page over one press.
-   */
+  // A rejected call, uncaught, would hand the route's error boundary a blanked page.
   it("keeps the page and offers Retry when the claim rejects instead of returning", async () => {
     actions.claimQuest.mockRejectedValueOnce(new TypeError("Failed to fetch"));
     render(
@@ -574,8 +552,7 @@ describe("quests", () => {
         expect.objectContaining({ action: expect.objectContaining({ label: "Retry" }) }),
       ),
     );
-    // The page is still there; the boundary never saw it, and the control is
-    // live again rather than stuck reading as busy.
+    // The page is still there and the control is live again.
     expect(screen.queryByRole("alert")).toBeNull();
     const button = screen.getByRole("button", { name: TODAY_COPY.quests.claim });
     expect(button.hasAttribute("data-pending")).toBe(false);
@@ -589,12 +566,8 @@ describe("quests", () => {
   });
 });
 
-/**
- * Domain Rule 10 and the accessibility floor: every action on this page is
- * reachable and operable by keyboard, and no control disables itself while a
- * write is in flight — the browser blurs an element the moment it is disabled,
- * so a control that did would drop a keyboard user on `<body>` by working.
- */
+// No control disables itself while a write is in flight: the browser blurs a
+// disabled element, dropping a keyboard user on `<body>`.
 describe("keyboard", () => {
   it("puts every action in the tab order, and none of them behind a pointer", () => {
     clock.now = at("2026-09-08", 8);
@@ -615,22 +588,15 @@ describe("keyboard", () => {
     for (const control of controls) {
       expect(control.getAttribute("tabindex"), control.textContent ?? "").not.toBe("-1");
       expect(control.hasAttribute("disabled"), control.textContent ?? "").toBe(false);
-      // Every one of them is named, or a screen reader reaches an unlabelled
-      // control it cannot describe.
+      // Every one of them is named.
       expect(
         (control.textContent ?? "").trim() !== "" || control.getAttribute("aria-label") !== null,
       ).toBe(true);
     }
   });
 
-  /**
-   * The completion control is a native `button` carrying the checkbox role, so
-   * Space and Enter activate it through the platform rather than through a
-   * handler this page would have to write and could get wrong. jsdom does not
-   * synthesise that activation, so what is asserted is the structure the
-   * browser acts on — the element, its role, its name — and the effect is
-   * asserted through the activation event a browser would dispatch.
-   */
+  // jsdom does not synthesise keyboard activation of a native button, so the
+  // structure (element, role, name) and the click a browser would dispatch are asserted.
   it("completes a block through a focusable native control", async () => {
     renderPage(fullDay());
     const control = screen.getByRole("checkbox", { name: "Complete task" });
@@ -660,13 +626,6 @@ describe("keyboard", () => {
   });
 });
 
-/**
- * The habit row's number.
- *
- * Three shapes, because the habits have three: a boolean habit shows its
- * state as a word, a per-day amount habit shows today against today's target,
- * and a per-week habit shows the week — which is the only target it names.
- */
 describe("habit rows", () => {
   it("shows a boolean habit's state as a word, never as a bare number", () => {
     const reading = habit({ id: "h1", name: "Reading", frequencyType: "daily" });

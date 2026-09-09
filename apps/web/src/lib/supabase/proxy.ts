@@ -6,13 +6,9 @@ import type { Database } from "@momentum/db";
 import { env } from "@/lib/env";
 
 /**
- * Refreshes the Supabase session for one request and returns the response the
- * rotated cookies were written to, together with the authenticated user.
- *
- * The response object is rebuilt whenever cookies are set so the refreshed
- * tokens reach both the incoming request (for the render that follows) and the
- * outgoing response (for the browser). Skipping either half is the classic
- * cause of random sign-outs.
+ * Refreshes the Supabase session for one request. The response is rebuilt
+ * whenever cookies are set so the refreshed tokens reach both the incoming
+ * request and the outgoing response; skipping either half causes random sign-outs.
  */
 export async function refreshSession(request: NextRequest): Promise<{
   response: NextResponse;
@@ -24,9 +20,7 @@ export async function refreshSession(request: NextRequest): Promise<{
     env().NEXT_PUBLIC_SUPABASE_URL,
     env().NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
     {
-      // See lib/supabase/server.ts: the session cookie is never read in the
-      // browser, so HttpOnly (always) and Secure (production) cost nothing and
-      // close the refresh-token-theft path a future XSS would otherwise open.
+      // See lib/supabase/server.ts: never read in the browser, so HttpOnly and Secure in production.
       cookieOptions: {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
@@ -51,8 +45,7 @@ export async function refreshSession(request: NextRequest): Promise<{
     },
   );
 
-  // getUser() (not getSession()) so the token is verified by the auth server
-  // rather than trusted from the cookie.
+  // getUser() (not getSession()) so the token is verified by the auth server.
   const { data } = await supabase.auth.getUser();
 
   return { response, userId: data.user?.id ?? null };

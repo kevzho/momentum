@@ -17,19 +17,10 @@ import type { HabitView } from "@/features/habits/types";
 import { useOpenerFocus } from "@/lib/use-opener-focus";
 
 /**
- * The one question before a habit is deleted.
- *
- * Deleting cascades: the habit, every day recorded for it and every block it
- * put on the calendar go together (Domain Rule 13), and there is no undo. A
- * menu item that did all of that on one press was the only destructive action
- * in the product without a second step. Archiving keeps everything, which is
- * why the dialog names it.
- *
- * Cancel is the default focus, so Enter does nothing irreversible, and Escape
- * cancels. On confirm the row the menu lived in is about to leave the list, so
- * the caller says where focus goes instead of the opener — the hand-off runs in
- * the close hook, the one moment after the dialog's own focus trap has let go
- * and before the browser has settled on `<body>` (Domain Rule 10).
+ * Confirmation before a cascading, non-undoable delete. Cancel takes default
+ * focus so Enter does nothing irreversible. On confirm the opener row is about
+ * to unmount, so the caller's hand-off runs in `onCloseAutoFocus` — after the
+ * focus trap lets go and before the browser settles on `<body>`.
  */
 export interface DeleteHabitDialogProps {
   /** The habit to delete; `null` closes the dialog. */

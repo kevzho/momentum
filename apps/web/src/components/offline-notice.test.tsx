@@ -3,16 +3,8 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { OfflineNotice } from "@/components/offline-notice";
 
-/**
- * The standing offline line.
- *
- * What is actually being pinned down is the *claim*: Momentum has no offline
- * store and no replay queue, so the notice has to say that the screen may be
- * stale and that changes will not save — and must never promise a later sync.
- * "No claim of offline capability the app lacks" is an acceptance criterion of
- * specs/12-pwa.md, and it is the kind of thing a well-meaning copy edit
- * quietly breaks.
- */
+// Pins the claim: no offline store and no replay queue, so the notice must
+// never promise a later sync.
 
 function setOnline(value: boolean): void {
   Object.defineProperty(window.navigator, "onLine", { value, configurable: true });
@@ -39,8 +31,7 @@ describe("OfflineNotice", () => {
     setOnline(true);
     render(<OfflineNotice />);
 
-    // The live region is in the DOM before it has anything to say: a polite
-    // region inserted *together with* its message is frequently not announced.
+    // A polite region inserted together with its message is frequently not announced.
     const region = screen.getByRole("status");
     goOffline();
 
@@ -80,10 +71,7 @@ describe("OfflineNotice", () => {
     render(<OfflineNotice />);
     goOffline();
 
-    // The first version floated over the top of the viewport, and at 393px it
-    // covered the top bar: the level indicator and the navigation trigger were
-    // behind it. A frame that is exactly `h-dvh` with one scrolling child has
-    // no room to lend an overlay, so the notice takes a row of its own.
+    // An overlay covered the top bar at 393px; the notice takes a row of its own.
     const region = screen.getByRole("status");
     expect(region.className).not.toContain("fixed");
     expect(region.className).not.toContain("absolute");
@@ -94,8 +82,7 @@ describe("OfflineNotice", () => {
     setOnline(true);
     render(<OfflineNotice />);
 
-    // The live region has to be in the DOM before it has a message, but an
-    // empty row in a flex column must not push the frame down by a hair.
+    // An empty row in a flex column must not push the frame down by a hair.
     const region = screen.getByRole("status");
     expect(region.textContent).toBe("");
     expect(region.className).toContain("empty:hidden");

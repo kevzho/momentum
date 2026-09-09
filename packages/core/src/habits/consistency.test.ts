@@ -29,16 +29,11 @@ function stats(input: {
   return habitStats({ weekStart: MONDAY, ...input });
 }
 
-/* -------------------------------------------------------------------------- */
-/* Domain Rule 7 — a missed day lowers a rate and removes nothing              */
-/* -------------------------------------------------------------------------- */
-
 describe("a missed day", () => {
   const habit = habitOf({ frequencyType: "daily" });
   const trackedFrom = d("2026-08-15");
   const today = d("2026-09-09");
 
-  /** Every day from 2026-08-15 up to but not including `today`. */
   const everyDay = Array.from({ length: 25 }, (_, i) => addDays(trackedFrom, i));
 
   it("lowers consistency", () => {
@@ -63,16 +58,12 @@ describe("a missed day", () => {
       trackedFrom,
     });
 
-    // 2026-08-15 .. 2026-08-31 is seventeen days, and the gap does not erase it.
+    // 2026-08-15 .. 2026-08-31 is seventeen days.
     expect(withGap.bestStreak).toBe(17);
     expect(withGap.currentStreak).toBe(7);
     expect(withGap.currentStreak).toBeLessThan(withGap.bestStreak);
   });
 });
-
-/* -------------------------------------------------------------------------- */
-/* The unfinished period                                                      */
-/* -------------------------------------------------------------------------- */
 
 describe("the period in progress", () => {
   const habit = habitOf({ frequencyType: "daily" });
@@ -108,7 +99,6 @@ describe("the period in progress", () => {
 
   it("never breaks a streak on an unfinished week", () => {
     const runs = habitOf({ frequencyType: "times_per_week", target: 3 });
-    // Two complete weeks met; the current week has one run so far.
     const completions = done([
       d("2026-08-24"),
       d("2026-08-26"),
@@ -130,17 +120,11 @@ describe("the period in progress", () => {
   });
 });
 
-/* -------------------------------------------------------------------------- */
-/* Week boundaries                                                            */
-/* -------------------------------------------------------------------------- */
-
 describe("week boundaries", () => {
   const runs = habitOf({ frequencyType: "times_per_week", target: 3 });
 
   it("counts a week in the user's own week shape, not a fixed one", () => {
-    // Sun 2026-09-06, Mon 07, Tue 08. On a Monday week that is 1 + 2; on a
-    // Sunday week it is all three, so the same rows meet the target or do not
-    // depending only on the preference (Domain Rule 4).
+    // Sun 2026-09-06, Mon 07, Tue 08: 1 + 2 on a Monday week, all three on a Sunday week.
     const completions = done([d("2026-09-06"), d("2026-09-07"), d("2026-09-08")]);
     const today = d("2026-09-14"); // the Monday after, so 07–13 is a finished week
 
@@ -166,7 +150,6 @@ describe("week boundaries", () => {
   });
 
   it("does not let a good week pay for a bad one", () => {
-    // Six runs in one week and none in the next is 3/6, not 6/6.
     const completions = done([
       ...everyNthDay(d("2026-08-31"), 6, 1), // Mon–Sat of one week
     ]);
@@ -190,15 +173,10 @@ describe("week boundaries", () => {
       today: d("2026-09-09"),
       trackedFrom: d("2026-09-08"),
     }).consistency;
-    // "No data yet" is not "0%" (Domain Rule 7, and Domain Rule 8's sample-size
-    // caution): the habit has not had a week to be measured over.
+    // "No data yet" is not "0%".
     expect(rate).toMatchObject({ met: 0, expected: 0, value: null });
   });
 });
-
-/* -------------------------------------------------------------------------- */
-/* The habit's own history                                                    */
-/* -------------------------------------------------------------------------- */
 
 describe("trackedFrom", () => {
   it("expects nothing of the days before the habit existed", () => {
@@ -228,21 +206,8 @@ describe("trackedFrom", () => {
   });
 });
 
-/* -------------------------------------------------------------------------- */
-/* Across a DST transition                                                    */
-/* -------------------------------------------------------------------------- */
-
 describe("across a DST transition", () => {
-  /*
-   * Completion dates are calendar dates, not instants (Domain Rule 4), so the
-   * 23-hour day of a spring-forward and the 25-hour day of a fall-back are one
-   * day each — exactly like every other day. These assert that, because the
-   * failure mode of doing this maths in milliseconds is a window that is one
-   * day short or one day long twice a year, and a habit that reads 96% for a
-   * week it was perfect on.
-   *
-   * 2026-03-08 (US spring forward) and 2026-11-01 (US fall back).
-   */
+  // 2026-03-08 (US spring forward) and 2026-11-01 (US fall back).
   const habit = habitOf({ frequencyType: "daily" });
 
   it("counts a spring-forward day as one day", () => {
@@ -298,10 +263,6 @@ describe("across a DST transition", () => {
   });
 });
 
-/* -------------------------------------------------------------------------- */
-/* Amount habits                                                              */
-/* -------------------------------------------------------------------------- */
-
 describe("amount habits", () => {
   it("measures an amount_per_day habit against its daily amount", () => {
     const meditate = habitOf({ frequencyType: "amount_per_day", target: 15, unit: "minutes" });
@@ -320,7 +281,6 @@ describe("amount habits", () => {
       trackedFrom,
     }).consistency;
 
-    // Four finished days; the 10-minute one did not reach the target.
     expect(rate).toMatchObject({ met: 3, expected: 4 });
   });
 
@@ -340,14 +300,10 @@ describe("amount habits", () => {
       { from: d("2026-08-31"), to: d("2026-09-13") },
     );
 
-    // 300 minutes in one week pays for that week only: 120 + 60 of 240.
+    // 300 minutes in one week pays for that week only.
     expect(rate).toMatchObject({ met: 180, expected: 240, value: 0.75 });
   });
 });
-
-/* -------------------------------------------------------------------------- */
-/* The three windows                                                          */
-/* -------------------------------------------------------------------------- */
 
 describe("the reported windows", () => {
   it("reports this week and this month separately from the rolling 30 days", () => {
@@ -355,15 +311,11 @@ describe("the reported windows", () => {
     const trackedFrom = d("2026-08-01");
     const today = d("2026-09-09"); // a Wednesday
 
-    // Everything in September, nothing in August.
     const september = Array.from({ length: 9 }, (_, i) => addDays(d("2026-09-01"), i));
     const result = stats({ habit, completions: done(september), today, trackedFrom });
 
-    // This week: Mon 07, Tue 08 finished and met; Wed 09 met, so it counts too.
     expect(result.weekly).toMatchObject({ met: 3, expected: 3 });
-    // This month: 01–09, all met.
     expect(result.monthly).toMatchObject({ met: 9, expected: 9 });
-    // Rolling 30 days reaches back into August, where nothing was recorded.
     expect(result.consistency.expected).toBe(30);
     expect(result.consistency.met).toBe(9);
   });

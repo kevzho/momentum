@@ -40,11 +40,7 @@ function CommandDialog({
   description?: string;
   className?: string;
   showCloseButton?: boolean;
-  /**
-   * Passed through to the dialog content — the focus handlers a palette opened
-   * from a keyboard shortcut needs, since there is no trigger for Radix to
-   * restore focus to (Domain Rule 10).
-   */
+  /** Passed through to the dialog content: the focus handlers a palette opened from a shortcut needs. */
   content?: Partial<React.ComponentProps<typeof DialogContent>>;
 }) {
   return (
@@ -54,9 +50,7 @@ function CommandDialog({
         showCloseButton={showCloseButton}
         {...content}
       >
-        {/* Inside the content, not beside it: a title that renders whether or
-            not the dialog is open would sit in the accessibility tree of every
-            page, and Radix labels the dialog by this element. */}
+        {/* Inside the content: Radix labels the dialog by this element. */}
         <DialogHeader className="sr-only">
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>

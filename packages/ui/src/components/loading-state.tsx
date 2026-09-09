@@ -2,11 +2,7 @@ import * as React from "react";
 import { cn } from "cn";
 import { LoaderIcon } from "lucide-react";
 
-/**
- * Inline pending indicator for panels and buttons. Occupies the space it will
- * always occupy, so nothing shifts when the work finishes. Never a full-page
- * spinner after first paint (docs/ARCHITECTURE.md §15).
- */
+/** Inline pending indicator. Never a full-page spinner after first paint. */
 function LoadingState({
   label = "Loading",
   className,

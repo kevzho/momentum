@@ -1,11 +1,7 @@
 import * as React from "react";
 import { cn } from "cn";
 
-/**
- * SVG ring for the focus timer and completion ratios. Pure geometry: it owns
- * no timing and no state. The ring is an accessible progressbar; `children`
- * render inside it (the remaining time, a percentage).
- */
+/** Pure geometry, no timing or state. An accessible progressbar; `children` render inside it. */
 function ProgressRing({
   value,
   max = 100,

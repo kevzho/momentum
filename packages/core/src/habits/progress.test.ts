@@ -28,7 +28,6 @@ describe("habitDay", () => {
   });
 
   it("does not hold today against the user until the day is over", () => {
-    // Domain Rule 7: nothing punitive. An unfinished day is ahead, not missed.
     expect(habitDay(daily, wednesday, 0, wednesday).state).toBe("ahead");
   });
 
@@ -133,9 +132,6 @@ describe("amountToRecord", () => {
   });
 
   it("tops a per-week amount habit up to the week's target, never to a single unit", () => {
-    // A per-week habit names no per-day target, so the week is the only
-    // target a press can be measured against. One minute toward two hours is
-    // not what a tap means.
     const language = habitOf({ frequencyType: "amount_per_week", target: 120, unit: "minutes" });
     expect(
       amountToRecord(language, { amount: 0, target: null }, { achieved: 40, target: 120 }),

@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import {
+  ArchiveIcon,
   CheckCheckIcon,
   CircleCheckIcon,
   InboxIcon,
@@ -20,28 +21,10 @@ import { Kbd } from "@momentum/ui/components/kbd";
 
 import { TaskListRow, type TaskRowData } from "@/features/tasks/components/task-list-row";
 
-/**
- * The list, and the keyboard model that drives it.
- *
- * One tab stop for the whole list and a roving `tabIndex` inside it: arrow keys
- * move the cursor, Tab leaves. Sixty tasks are not sixty tab stops.
- *
- * Every action the pointer can reach has a key, and every one of them is a key
- * a person would guess:
- *
- * | `↑` `↓`        | move the cursor                                   |
- * | `Enter`        | open the detail sheet                             |
- * | `Space`        | complete / reopen                                 |
- * | `X`            | add to or remove from the selection                |
- * | `Shift+↑/↓`    | extend the selection                              |
- * | `Alt+↑/↓`      | move the task up or down — the drag's keyboard path |
- * | `Escape`       | clear the selection                               |
- * | `Home` `End`   | first / last task                                 |
- *
- * `Alt+↑/↓` is Domain Rule 10: reordering is achievable by dragging, so it must
- * be achievable by keyboard alone, and it must be announced. It commits the
- * same mutation the drop does, through the same `sortOrdersForMove`.
- */
+// One roving tab stop for the whole list. Keys: ↑/↓ move, Enter opens, Space
+// completes (unarchives on an archived row), X selects, Shift+↑/↓ extends the
+// selection, Alt+↑/↓ reorders (the drag's keyboard path), Escape clears,
+// Home/End jump.
 export interface TaskListProps {
   rows: readonly TaskRowData[];
   today: LocalDate;
@@ -52,9 +35,10 @@ export interface TaskListProps {
   focusedId: Uuid | null;
   onFocusedIdChange: (id: Uuid | null) => void;
   onToggleComplete: (taskId: Uuid, completed: boolean) => void;
+  onUnarchive: (taskId: Uuid) => void;
   onOpen: (taskId: Uuid) => void;
   onSelectionChange: (ids: ReadonlySet<Uuid>) => void;
-  /** Move the task at `fromIndex` to `toIndex` — the drag's keyboard equivalent. */
+  /** Move the task to `toIndex`; the drag's keyboard equivalent. */
   onMove: (taskId: Uuid, toIndex: number) => void;
 }
 
@@ -68,21 +52,16 @@ export function TaskList({
   focusedId,
   onFocusedIdChange,
   onToggleComplete,
+  onUnarchive,
   onOpen,
   onSelectionChange,
   onMove,
 }: TaskListProps) {
   const refs = React.useRef(new Map<Uuid, HTMLLIElement>());
-  // The anchor a Shift+arrow range extends from, so extending and then
-  // reversing shrinks the range rather than growing it the other way.
+  // The anchor a Shift+arrow range extends from.
   const anchor = React.useRef<Uuid | null>(null);
-  /*
-   * Whether the keyboard user is *in* the list. Set by focus arriving on a row
-   * and cleared by focus leaving for somewhere else — but not by a row being
-   * removed from under the cursor, which fires no `blur` and leaves
-   * `document.activeElement` on `<body>`. That combination is the signal the
-   * effect below acts on.
-   */
+  // Set by focus arriving on a row, cleared by focus leaving for elsewhere; a
+  // row removed from under the cursor fires no `blur`, which the effect below uses.
   const focusInside = React.useRef(false);
 
   const index = React.useMemo(
@@ -90,18 +69,9 @@ export function TaskList({
     [rows, focusedId],
   );
 
-  /*
-   * The cursor follows the list. When the focused task leaves the view — it was
-   * completed, deleted, or filtered out — the tab stop moves to the row that
-   * took its place rather than being lost, which is the defect Phase 3 found in
-   * the calendar's grid and fixed the same way.
-   *
-   * Moving the tab stop is not enough on its own: the row that held focus has
-   * unmounted, and the browser has already dropped focus on `<body>`. So when
-   * focus was inside the list and is now nowhere, the replacement row is
-   * focused too — the same hand-off the calendar grid makes — and Space then
-   * ArrowDown keeps working (Domain Rule 10).
-   */
+  // When the focused task leaves the view the tab stop moves to its
+  // replacement, and — since the browser has dropped focus on `<body>` — so
+  // does focus if it was inside the list.
   React.useEffect(() => {
     if (rows.length === 0) {
       if (focusedId !== null) onFocusedIdChange(null);
@@ -138,7 +108,6 @@ export function TaskList({
   }
 
   function onKeyDown(event: React.KeyboardEvent<HTMLUListElement>): void {
-    // A keystroke typed into an input inside the list belongs to the input.
     const target = event.target as HTMLElement;
     if (target.closest("input, textarea, [contenteditable='true']")) return;
 
@@ -150,7 +119,6 @@ export function TaskList({
         const delta = event.key === "ArrowDown" ? 1 : -1;
         event.preventDefault();
 
-        // Alt reorders instead of navigating: the drag's keyboard equivalent.
         if (event.altKey) {
           if (row === undefined) return;
           const to = index + delta;
@@ -193,7 +161,8 @@ export function TaskList({
       case " ":
         if (row === undefined) return;
         event.preventDefault();
-        onToggleComplete(row.task.id, row.task.status !== "completed");
+        if (row.task.status === "archived") onUnarchive(row.task.id);
+        else onToggleComplete(row.task.id, row.task.status !== "completed");
         return;
 
       case "x":
@@ -227,9 +196,8 @@ export function TaskList({
 
   return (
     <ul
-      // A plain list. `listbox` would make every row an `option`, which is
-      // children-presentational in ARIA and would hide both checkboxes in every
-      // row from assistive technology — see the note in `task-list-row.tsx`.
+      // Not a `listbox`: `option` is children-presentational in ARIA and would
+      // hide every row's checkboxes.
       aria-label="Tasks"
       aria-describedby="task-list-keys"
       className="flex flex-col gap-0.5"
@@ -238,8 +206,7 @@ export function TaskList({
         focusInside.current = true;
       }}
       onBlur={(event) => {
-        // Focus moving to another row is not leaving; focus lost to a removed
-        // row has no `relatedTarget` and is not leaving either.
+        // Focus lost to a removed row has no `relatedTarget` and is not leaving.
         const to = event.relatedTarget;
         if (to instanceof Node && event.currentTarget.contains(to)) return;
         if (to === null) return;
@@ -257,6 +224,7 @@ export function TaskList({
           selectionActive={selectedIds.size > 0}
           pending={pendingIds.has(row.task.id)}
           onToggleComplete={(completed) => onToggleComplete(row.task.id, completed)}
+          onUnarchive={() => onUnarchive(row.task.id)}
           onOpen={() => onOpen(row.task.id)}
           onToggleSelected={() => toggleSelected(row.task.id)}
           onFocusRow={() => onFocusedIdChange(row.task.id)}
@@ -271,17 +239,9 @@ export function TaskList({
 }
 
 /**
- * The one hint, once, for the keys the rows cannot show on their own.
- *
- * It also doubles as the list's focus anchor, which is why it takes a `ref` and
- * is programmatically focusable. It is the list's own `aria-describedby`, it
- * sits immediately above the list, and — unlike the `<ul>`, which a bulk delete
- * can replace with an empty state — it is rendered whatever the list holds. A
- * control that unmounts itself hands focus here rather than to `<body>`, and
- * one Tab onwards is the list's roving cursor (Domain Rule 10).
- *
- * `tabIndex={-1}` keeps it out of the tab order: it can be focused, never
- * tabbed to.
+ * The key hint, which also serves as the list's focus anchor: unlike the `<ul>`
+ * it is rendered whatever the list holds, so a control that unmounts itself
+ * can hand focus here. Focusable by script, never by Tab.
  */
 export function TaskListKeyHint({ ref }: { ref?: React.Ref<HTMLParagraphElement> }) {
   return (
@@ -289,8 +249,7 @@ export function TaskListKeyHint({ ref }: { ref?: React.Ref<HTMLParagraphElement>
       ref={ref}
       id="task-list-keys"
       tabIndex={-1}
-      // Visually hidden below `md`, where there is no keyboard to hint at: it
-      // stays in the DOM as the list's description and its focus anchor.
+      // Visually hidden below `md`; stays in the DOM as description and focus anchor.
       className="rounded-md px-2 text-2xs text-muted-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/50 max-md:sr-only"
     >
       <Kbd>↑</Kbd> <Kbd>↓</Kbd> to move · <Kbd>Enter</Kbd> to open · <Kbd>Space</Kbd> to complete ·{" "}
@@ -299,13 +258,7 @@ export function TaskListKeyHint({ ref }: { ref?: React.Ref<HTMLParagraphElement>
   );
 }
 
-/**
- * A designed empty state per view.
- *
- * Each says what this particular list being empty means and what to do next.
- * None of them moralises — an empty Today is "nothing due today", never "you
- * have not planned your day" (Domain Rule 7).
- */
+// None of these moralise: an empty Today is "nothing due today".
 const EMPTY: Record<TaskView, { icon: LucideIcon; title: string; description: string }> = {
   inbox: {
     icon: InboxIcon,
@@ -337,6 +290,11 @@ const EMPTY: Record<TaskView, { icon: LucideIcon; title: string; description: st
     icon: FolderIcon,
     title: "Nothing in this project",
     description: "Press Q to add the first task, or move an existing one here from its details.",
+  },
+  archived: {
+    icon: ArchiveIcon,
+    title: "Nothing archived",
+    description: "Tasks you put away from their details collect here, and can be brought back.",
   },
 };
 

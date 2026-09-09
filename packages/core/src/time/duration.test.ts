@@ -25,10 +25,7 @@ describe("durationMinutes", () => {
   });
 
   it("reports elapsed time, not wall-clock time, across a spring forward", () => {
-    // A block placed at 02:00–03:00 local on 2026-03-08 in New York looks like
-    // an hour on the grid, but 02:00 does not exist: both ends resolve to the
-    // same instant and the block consumes none of the user's week. Capacity and
-    // estimate-versus-actual maths need this number, not the 60 on the label.
+    // 02:00 does not exist on 2026-03-08 in New York: both ends resolve to the same instant.
     const start = fromLocal(d("2026-03-08"), 120, NEW_YORK);
     const end = fromLocal(d("2026-03-08"), 180, NEW_YORK);
     expect(minutesFromMidnight(start, NEW_YORK)).toBe(180);
@@ -37,8 +34,7 @@ describe("durationMinutes", () => {
   });
 
   it("reports elapsed time, not wall-clock time, across a fall back", () => {
-    // 01:00–02:00 local on 2026-11-01 spans the repeated hour: the label says
-    // one hour, the user really spends two.
+    // 01:00–02:00 local on 2026-11-01 spans the repeated hour.
     const start = fromLocal(d("2026-11-01"), 60, NEW_YORK);
     const end = fromLocal(d("2026-11-01"), 120, NEW_YORK);
     expect(durationMinutes(start, end)).toBe(120);
@@ -79,8 +75,7 @@ describe("addMinutes", () => {
   });
 
   it("adds elapsed minutes, so a wall-clock hour is not preserved across a transition", () => {
-    // Documented so nobody reaches for addMinutes(i, 1440) to mean "same time
-    // tomorrow" — on 2026-03-08 that lands an hour early.
+    // addMinutes(i, 1440) is not "same time tomorrow": on 2026-03-08 it lands an hour early.
     const before = fromLocal(d("2026-03-07"), 9 * 60, NEW_YORK);
     expect(minutesFromMidnight(addMinutes(before, 1440), NEW_YORK)).toBe(10 * 60);
     expect(minutesFromMidnight(fromLocal(d("2026-03-08"), 9 * 60, NEW_YORK), NEW_YORK)).toBe(

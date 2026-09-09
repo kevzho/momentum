@@ -6,18 +6,6 @@ import type { Uuid } from "@momentum/core/types";
 
 import type { ProjectSummaryWithCount, TaskSummary } from "@/features/tasks/types";
 
-/**
- * The palette, driven the way the spec says it has to be drivable: opened with
- * ⌘K from wherever the user was, moved with the arrow keys, run with Enter,
- * closed with Escape, and handed back to the control it was opened from
- * (Domain Rule 10).
- *
- * The pieces underneath it — the ranking, the registry, the recent ordering —
- * are covered by their own unit tests. What is only answerable here is whether
- * the keyboard, the focus and the wiring to Quick Add and to the server actions
- * are real.
- */
-
 const { pushMock, replaceMock, setTaskCompletionMock, createTaskMock, successToast, errorToast } =
   vi.hoisted(() => ({
     pushMock: vi.fn(),
@@ -73,7 +61,6 @@ const TASKS: readonly TaskSummary[] = [
   },
 ];
 
-/** The shell, minimally: somewhere to open the palette from, and to come back to. */
 function Shell() {
   const palette = usePalette();
   return (
@@ -228,9 +215,7 @@ describe("the commands themselves", () => {
     const field = await screen.findByLabelText("Task title");
     expect(pushMock).not.toHaveBeenCalled();
 
-    // And focus goes with it. The palette closes as Quick Add opens, so the
-    // restore has to lose to the new dialog rather than yanking the user back
-    // to the search button they never meant to return to.
+    // The palette's focus restore must lose to the newly opened Quick Add.
     await waitFor(() => expect(document.activeElement).toBe(field));
     expect(screen.queryByLabelText("Search commands, tasks and projects")).toBeNull();
   });
@@ -243,9 +228,7 @@ describe("the commands themselves", () => {
     await waitFor(() => expect(options()[0]).toContain("Complete task"));
     fireEvent.keyDown(paletteInput(), { key: "Enter" });
 
-    // The picker: the same palette, now listing the user's open tasks.
-    // The mode's own heading; the dialog is also *titled* with it, for a
-    // screen reader that has just been moved into a different question.
+    // The mode heading is also the dialog title, hence the selector.
     await waitFor(() =>
       expect(screen.getByText("Complete a task", { selector: "span" })).toBeTruthy(),
     );

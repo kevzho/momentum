@@ -29,11 +29,8 @@ export const metadata: Metadata = {
   },
   description: APP_DESCRIPTION,
   applicationName: APP_NAME,
-  /*
-   * `app/manifest.ts` already causes Next to emit `<link rel="manifest">`; the
-   * icons below are the ones no manifest covers. iOS reads `apple-touch-icon`
-   * and nothing else when the user taps "Add to Home Screen".
-   */
+  // `app/manifest.ts` emits `<link rel="manifest">`; these are the icons no
+  // manifest covers. iOS reads only `apple-touch-icon`.
   icons: {
     icon: [
       { url: "/favicon.ico", sizes: "any" },
@@ -43,54 +40,23 @@ export const metadata: Metadata = {
     apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
   },
   appleWebApp: {
-    /*
-     * The iOS half of installability. Safari has no manifest `display`
-     * handling: this is what makes a home-screen launch open without browser
-     * chrome, and it must agree with the manifest's `display: "standalone"`.
-     */
+    // Safari ignores the manifest's `display`; this must agree with its `standalone`.
     capable: true,
     title: APP_NAME,
-    /*
-     * `black-translucent` extends the page under the status bar, which is the
-     * only way `env(safe-area-inset-top)` reports a non-zero value. It is
-     * therefore paired with `viewportFit: "cover"` below and with the
-     * safe-area padding in the shell — all three, or the clock sits on top of
-     * the top bar.
-     */
+    // The only way `env(safe-area-inset-top)` is non-zero; paired with
+    // `viewportFit: "cover"` and the shell's safe-area padding, or the clock
+    // sits on the top bar.
     statusBarStyle: "black-translucent",
   },
-  /*
-   * `appleWebApp` above emits the standard `mobile-web-app-capable`, which
-   * current iOS honours. This is the older spelling of the same switch, and it
-   * is what versions before it read: without it, "Add to Home Screen" on an
-   * older iPhone launches Momentum inside Safari's chrome, which is the one
-   * thing this phase is for. Two tags, one meaning, and the deprecated one
-   * costs nothing.
-   */
+  // The older spelling of `mobile-web-app-capable`, still read by older iOS.
   other: { "apple-mobile-web-app-capable": "yes" },
-  /*
-   * Momentum is behind a login and has nothing to offer a crawler; the
-   * marketing surface, if there ever is one, will be its own deployment.
-   */
   robots: { index: false, follow: false },
 };
 
-/**
- * `themeColor` colours the browser and OS chrome around the page. It is a meta
- * tag, so it cannot reference a CSS variable: `THEME_COLOR` holds the sRGB
- * values of `--background` in each theme, and they are kept in step with
- * `packages/ui/src/styles/globals.css` by hand.
- *
- * These two media-scoped tags are the *first paint*, which is all a static tag
- * can be — they follow the operating system, which is right for the default
- * (`system`) theme and wrong for a user who has chosen the other one.
- * `<ThemeColor />` rewrites them once next-themes has resolved which theme is
- * actually on screen.
- *
- * `viewportFit: "cover"` lets the page paint into the display cutout and home
- * indicator areas on iOS. It is what makes `env(safe-area-inset-*)` meaningful,
- * and every edge of the shell pays it back as padding.
- */
+// `themeColor` cannot reference a CSS variable: `THEME_COLOR` holds the sRGB
+// values of `--background`, kept in step with `packages/ui/src/styles/globals.css`
+// by hand. These media-scoped tags are the first paint only; `<ThemeColor />`
+// rewrites them once next-themes has resolved the theme.
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
@@ -101,11 +67,8 @@ export const viewport: Viewport = {
   ],
 };
 
-/**
- * `suppressHydrationWarning` is here and nowhere else: `next-themes` writes the
- * theme class onto `<html>` from a blocking script before React hydrates, which
- * is what removes the flash of the wrong theme (docs/ARCHITECTURE.md §10).
- */
+// `suppressHydrationWarning`: next-themes writes the theme class onto `<html>`
+// from a blocking script before React hydrates.
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
@@ -119,12 +82,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             <AnnouncerProvider>
               {children}
               <Toaster />
-              {/* Two mount-once, render-nothing islands. They are in the root
-                  layout rather than the app shell because they are true of the
-                  sign-in screens too: an install can begin there, and a theme
-                  is chosen there. `<OfflineNotice />` is *not* here — it draws
-                  a strip, so it belongs inside each frame's column rather than
-                  floating over one. */}
+              {/* In the root layout, not the app shell: both apply to the sign-in screens too. */}
               <ThemeColor />
               <ServiceWorker />
             </AnnouncerProvider>

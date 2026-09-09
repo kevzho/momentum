@@ -24,21 +24,8 @@ import { countItems, type PaletteItem, type PaletteSection } from "@/features/pa
 import type { PaletteMode } from "@/features/palette/types";
 import { useOpenerFocus } from "@/lib/use-opener-focus";
 
-/**
- * The palette itself: an input, a list, and nothing that knows what any of the
- * entries mean.
- *
- * Everything it renders arrives as `sections`, and everything it does it does
- * through `onSelect`. That is what makes the registry a registry — a feature
- * adds a command by declaring it, and this file never learns the difference
- * (specs/11-command-palette.md).
- *
- * Accessibility is `cmdk`'s combobox plus Radix's modal dialog: the input owns
- * `aria-activedescendant`, the list is a `listbox` of `option`s, arrow keys and
- * Enter are handled for us, focus is trapped while open, and
- * `useOpenerFocus` puts the user back on the control they opened it from —
- * Radix cannot, because there is no trigger to return to (Domain Rule 10).
- */
+// Renders `sections` and calls `onSelect`; knows nothing about what entries mean.
+// `useOpenerFocus` restores focus because there is no Radix trigger to return to.
 
 /** Long enough that a fast typist is announced once, not once per keystroke. */
 const ANNOUNCE_DELAY_MS = 350;
@@ -90,12 +77,7 @@ export function CommandPalette({
         onCloseAutoFocus: openerFocus.onCloseAutoFocus,
       }}
     >
-      {/*
-        `shouldFilter={false}`: the ranking is ours (`features/palette/search`),
-        because commands, tasks, projects and how recently something was used
-        all compete in one list and a filter the palette cannot see inside
-        cannot be tuned or tested.
-      */}
+      {/* `shouldFilter={false}`: the ranking is `features/palette/search`. */}
       <Command shouldFilter={false} loop label={picking ? mode.heading : "Command palette"}>
         {picking ? (
           <div className="flex items-center gap-2 px-2 pt-2 text-xs text-muted-foreground">
@@ -118,8 +100,7 @@ export function CommandPalette({
           placeholder={picking ? mode.placeholder : "Search commands, tasks and projects…"}
           aria-label={picking ? mode.heading : "Search commands, tasks and projects"}
           onKeyDown={(event) => {
-            // Backspace on an empty picker query is "up one level"; Escape
-            // stays what it is everywhere else in the product, and closes.
+            // Backspace on an empty picker query is "up one level".
             if (event.key !== "Backspace" || query !== "" || !picking) return;
             event.preventDefault();
             onBack();
@@ -215,19 +196,12 @@ function ItemContent({ item, today }: { item: PaletteItem; today: LocalDate }) {
   );
 }
 
-/** "Today", or the date. Relative wording beyond today is the task list's job. */
 function dueLabel(dueDate: LocalDate, today: LocalDate): string {
   return dueDate === today ? "Today" : formatLocalDate(dueDate, "monthDay");
 }
 
-/**
- * How many results there are, said out loud.
- *
- * `cmdk` moves `aria-activedescendant` as the selection moves, which reads the
- * *current* option — it says nothing about the list changing size underneath a
- * query. Debounced, because a fast typist would otherwise queue an
- * announcement per keystroke and hear none of them finish.
- */
+// `cmdk`'s `aria-activedescendant` reads the current option but says nothing
+// about the list changing size; debounced so a fast typist hears one announcement.
 function ResultAnnouncer({
   sections,
   query,

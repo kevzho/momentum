@@ -40,19 +40,9 @@ import { useWeekPlan } from "@/features/planning/use-week-plan";
 import { useOpenerFocus } from "@/lib/use-opener-focus";
 
 /**
- * The Plan My Week drawer (specs/05-week-planning.md): everything competing
- * for the displayed range, beside the calendar rather than over it.
- *
- * Top to bottom — capacity, per-day workload, warnings, then OVERDUE, DUE
- * THIS WEEK, UNSCHEDULED, HABITS and WEEKLY GOALS. Every number is derived from the props
- * by `useWeekPlan`, so a drop, a resize or a rollback moves the totals, the
- * bars, the coverage labels and the warnings in the same frame as the board.
- *
- * The drawer holds no server data of its own and performs no mutation. It is a
- * client island because it is a drag source and owns the two dialogs' open
- * state (docs/ARCHITECTURE.md §5). Scheduling from any of its routes — a
- * drop, a Find Time candidate, the manual dialog — reports through the one
- * `onScheduleTask(taskId, span)` the grid's drop path uses.
+ * The Plan My Week drawer: capacity, workload, warnings, then the task,
+ * habit and goal sections. Holds no server data and performs no mutation;
+ * every scheduling route reports through `onScheduleTask`.
  */
 export function PlanningDrawer(props: PlanningDrawerProps) {
   const {
@@ -72,9 +62,7 @@ export function PlanningDrawer(props: PlanningDrawerProps) {
   } = props;
   const { commitments, context, sections, capacity, warnings } = useWeekPlan(props);
 
-  // The two keyboard routes (Domain Rule 10). Each holds the task its dialog
-  // is open for; at most one is non-null at a time, because each is opened
-  // from a row and a row can only be activated once.
+  // The task each keyboard dialog is open for; at most one is non-null at a time.
   const [finding, setFinding] = React.useState<PlanTask | null>(null);
   const [scheduling, setScheduling] = React.useState<PlanTask | null>(null);
 
@@ -85,12 +73,10 @@ export function PlanningDrawer(props: PlanningDrawerProps) {
     onSchedule: setScheduling,
   };
 
-  // The sheet is modal and has no trigger of its own, so Radix would leave
-  // focus on `<body>` when it closes; this sends it back to the board's toggle
-  // (Domain Rule 10). Unused by the panel, which hands focus over itself.
+  // The sheet has no trigger of its own, so Radix would leave focus on
+  // `<body>` on close. Unused by the panel, which hands focus over itself.
   const sheetFocus = useOpenerFocus(presentation === "sheet" && open);
 
-  // One hint, once, for the routes the rows cannot show on their own.
   const footer = (
     <p className="text-2xs text-muted-foreground">
       {KEYBOARD_HINT.before}
@@ -238,13 +224,10 @@ export function PlanningDrawer(props: PlanningDrawerProps) {
       open={open}
       onOpenChange={onOpenChange}
       closeLabel={HIDE_DRAWER_LABEL}
-      // Hiding the drawer unmounts the button that was pressed to hide it, so
-      // the panel hands focus back to the board's toggle on the way out
-      // (Domain Rule 10).
+      // Hiding the drawer unmounts the button that hid it.
       returnFocusTo={returnFocusTo}
-      // The panel is the `lg`-and-up form. The server renders it (its snapshot
-      // of the viewport is "wide"), so below `lg` this keeps it out of the
-      // first paint until the client swaps in the sheet.
+      // The server renders the panel (its viewport snapshot is "wide"); this
+      // keeps it out of a narrow first paint until the client swaps in the sheet.
       className="hidden lg:flex"
       footer={footer}
     >
@@ -277,8 +260,7 @@ function TaskSection({
           <PlanningTaskRow
             key={task.id}
             task={task}
-            // Live: the task's blocks on the board right now, so a row dragged
-            // in shows its coverage before the write has landed.
+            // Live coverage, so a row dragged in shows it before the write lands.
             scheduledMinutes={scheduledMinutesOf(planningTaskOf(task), commitments)}
             pending={pendingTaskIds.has(task.id)}
             onFindTime={onFindTime}

@@ -64,11 +64,6 @@ describe("tasksCompletedByHour", () => {
     expect(series[10]?.value).toBe(0);
   });
 
-  /**
-   * The distribution is a statement about the user's day, so the same rows read
-   * from another timezone must land in different hours. If this ever agreed, it
-   * would mean the hour was being read off the UTC clock.
-   */
   it("moves with the profile timezone", () => {
     const rows = [task({ date: "2026-06-15", hour: 9, tz: NEW_YORK })];
 

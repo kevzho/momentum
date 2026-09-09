@@ -9,13 +9,8 @@ import { QUEST_METRICS } from "@momentum/core/types";
 import type { PlanTask, PlanningGoal } from "@/features/calendar/types";
 import * as copy from "@/features/planning/copy";
 
-/**
- * Domain Rule 7, enforced: nothing the drawer says characterises the user or
- * their week. The guard scans two things — every string the copy module can
- * produce, and the source of every non-test file in the feature (comments
- * stripped, so a JSDoc explaining the rule cannot trip it) — for the words
- * that would cross the line.
- */
+// Domain Rule 7 guard: scans every string the copy module can produce and the
+// source of every non-test file in the feature (comments stripped).
 
 const FORBIDDEN = [
   "lazy",
@@ -45,7 +40,7 @@ function stripComments(source: string): string {
 function sourceFiles(dir: string): string[] {
   const files: string[] = [];
   for (const name of readdirSync(dir)) {
-    // macOS AppleDouble sidecars are binary metadata, not source.
+    // macOS AppleDouble sidecars.
     if (name.startsWith("._")) continue;
     const path = join(dir, name);
     if (statSync(path).isDirectory()) {
@@ -80,7 +75,6 @@ function goal(overrides: Partial<PlanningGoal>): PlanningGoal {
   };
 }
 
-/** Every string the module holds, plus what its functions say for representative inputs. */
 function everyString(): string[] {
   const strings: string[] = [];
   const walk = (value: unknown) => {
@@ -140,8 +134,7 @@ describe("copy guard (Domain Rule 7)", () => {
   });
 
   it("keeps every file in the feature clean of the same words", () => {
-    // The test file's own path, from the runner: `import.meta.url` is not a
-    // file URL under the jsdom environment.
+    // `import.meta.url` is not a file URL under jsdom.
     const testPath = expect.getState().testPath;
     expect(testPath).toBeTruthy();
     const files = sourceFiles(dirname(testPath ?? ""));

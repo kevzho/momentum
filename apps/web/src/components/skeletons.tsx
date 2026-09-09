@@ -2,21 +2,15 @@ import { cn } from "@momentum/ui/lib/utils";
 import { Skeleton } from "@momentum/ui/components/skeleton";
 
 /**
- * The pieces every route skeleton is built from.
- *
- * These mirror the real components' box model exactly, line height included, so
- * the skeleton occupies the space the content will occupy and nothing moves
- * when it arrives. The numbers are not decorative:
+ * Route skeleton pieces. These mirror the real components' box model exactly,
+ * line height included, so nothing moves when content arrives:
  *
  *   PageHeader   text-lg title (28px) + mt-0.5 + text-xs description (16px)
  *   section h2   text-xs (16px)
  *   TaskRow      py-1.5 around a 20px row (32px)
- *
- * Change a real component's type scale and the matching shape here changes with
- * it, or the page shifts on load.
  */
 
-/** Mirrors `PageHeader`, whose title is visually hidden below `md`, as here. */
+/** Mirrors `PageHeader`, whose title is visually hidden below `md`. */
 export function PageHeaderSkeleton({ hasActions = true }: { hasActions?: boolean }) {
   return (
     <div className="flex items-start justify-between gap-3 md:min-h-8">
@@ -56,7 +50,7 @@ export function StatTileSkeleton() {
   );
 }
 
-/** Mirrors `<Separator />`, which is a 1px rule. */
+/** Mirrors `<Separator />`, a 1px rule. */
 export function SeparatorSkeleton() {
   return <div className="h-px w-full bg-border" />;
 }

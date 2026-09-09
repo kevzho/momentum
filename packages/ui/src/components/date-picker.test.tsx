@@ -7,17 +7,9 @@ import type { LocalDate } from "@momentum/core/types";
 import { DatePicker } from "@momentum/ui/components/date-picker";
 
 /**
- * The whole job of this component is the seam with `react-day-picker`, and the
- * seam is where a clicked cell turns back into a `LocalDate`.
- *
- * The library builds every grid day at midnight in the *host's* zone, so a
- * conversion that reads UTC calendar fields off one of those objects answers
- * with the previous day for everyone east of UTC — most of the world. Neither
- * zone the repo runs its suites under exposes that (UTC here, plus
- * America/Los_Angeles for packages/core; both are non-positive offsets, where
- * local midnight and UTC midnight share a date). So these cases move the
- * process zone themselves: the same click has to yield the same date at +14,
- * at +05:30 and at -08.
+ * Neither suite zone (UTC, America/Los_Angeles) has a positive offset, which
+ * is where a UTC-field conversion returns the previous day — so these cases
+ * move the process zone themselves.
  */
 const ZONES = ["UTC", "Asia/Kolkata", "Pacific/Kiritimati", "America/Los_Angeles"];
 

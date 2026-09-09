@@ -15,23 +15,10 @@ import { KIND_DEFAULT_COLOR } from "@/features/calendar/projection";
 import type { CalendarItem, WorkBlockContext } from "@/features/calendar/types";
 
 /**
- * Rows and expanded occurrences → `CalendarItem`, the shape every surface in
- * the product renders a block as.
- *
- * This was inside `features/calendar/queries.ts` until Phase 9 needed the same
- * answers on `/today`. It is not a second implementation: it is the one
- * implementation, moved to where two reads can share it. Resolving a block's
- * title, its colour, whether completing it also completes its task, and whether
- * a habit block's date is one the database will record are all decisions with
- * exactly one correct answer (Domain Rule 13, docs/DOMAIN_RULES.md §19), and
- * two pages that computed them separately would eventually disagree — which is
- * a block whose control promises something the database refuses.
- *
- * Pure: it takes rows and lookups and returns view models. The reads stay in
- * `queries.ts`, which is also why the two lookup shapes below are declared
- * structurally rather than imported from `@momentum/db` — data access lives in
- * the designated modules and this is not one of them
- * (docs/ARCHITECTURE.md §6, and the lint rule that enforces it).
+ * Rows and expanded occurrences → `CalendarItem`, shared by the calendar and
+ * Today so both resolve titles, colours and completion semantics identically.
+ * Pure: lookup shapes are declared structurally because this is not a
+ * data-access module.
  */
 
 /** Work blocks a task owns, across all weeks, and how many are still outstanding. */
@@ -52,17 +39,13 @@ export interface ItemContext {
   blockCounts: ReadonlyMap<Uuid, TaskBlockCounts>;
   habitLabels: ReadonlyMap<Uuid, HabitLabel>;
   timezone: IanaTimeZone;
-  /** Today in the profile timezone, resolved once per request (Domain Rule 4). */
+  /** Today in the profile timezone, resolved once per request. */
   today: LocalDate;
 }
 
 /**
- * A stored block, resolved for rendering.
- *
- * Title comes from the parent for the two kinds that have one: a work block
- * displays its task's title and a habit block its habit's name, which is why
- * `blocks_event_title_chk` requires a title of events alone. `blockId` equals
- * `id` here — only a virtual occurrence has no row to mutate.
+ * A stored block, resolved for rendering. Work and habit blocks take their
+ * title from the parent (`blocks_event_title_chk` requires one of events only).
  */
 export function itemFromBlock(block: CalendarBlock, context: ItemContext): CalendarItem {
   const task = block.kind === "work" ? (context.tasksById.get(block.taskId) ?? null) : null;
@@ -90,14 +73,8 @@ export function itemFromBlock(block: CalendarBlock, context: ItemContext): Calen
 }
 
 /**
- * Whether a habit block's own local date is one the database will record a
- * completion for: yesterday, today or tomorrow in the profile timezone.
- *
- * The same window `record_habit_completion` enforces, resolved here so the
- * control is offered exactly where it works. Both sides compute it in the
- * user's timezone and from a `today` the request resolved once, so the button
- * the user sees and the row the function writes cannot disagree
- * (Domain Rule 4).
+ * Whether a habit block's local date is yesterday, today or tomorrow in the
+ * profile timezone — the window `record_habit_completion` enforces; must match it.
  */
 export function isRecordable(startAt: Instant, timezone: IanaTimeZone, today: LocalDate): boolean {
   const date = localDateOf(startAt, timezone);
@@ -105,24 +82,9 @@ export function isRecordable(startAt: Instant, timezone: IanaTimeZone, today: Lo
 }
 
 /**
- * Domain Rule 13's decision, made once on the server.
- *
- * The control on a work block is labelled by what it will do: the task's only
- * block, or its last incomplete one, reads "Complete task" and completes both;
- * anything else reads "Done with this block". The two phrasings collapse into
- * one condition — completing this block would leave the task with no
- * outstanding blocks — because "the only block" is the case where that count is
- * one to begin with.
- *
- * A block that is already complete, or whose task is, answers `false`: there is
- * nothing left for completing it to also do, and the control on it is an undo.
- * The counts are unbounded by any displayed range on purpose.
- *
- * The deadline and the estimate ride along for the planner and for Today's
- * risks: a block after its task's due date is a warning, and the estimate is
- * what coverage is measured against. Both are the task's, copied rather than
- * joined so no consumer needs a second lookup to answer a question about one
- * block.
+ * `completesTask` is true when completing this block would leave the task with
+ * no outstanding blocks (Domain Rule 13); an already-complete block or task
+ * answers false. Counts are deliberately unbounded by the displayed range.
  */
 export function workContext(
   block: CalendarBlock,
@@ -142,15 +104,9 @@ export function workContext(
 }
 
 /**
- * One expanded instance of a recurring event.
- *
- * `id` is the rule's identity `${seriesId}:${occurrenceDate}` and survives the
- * user dragging the occurrence somewhere else, so React keys and optimistic
- * state hold still. `blockId` is null until the occurrence has an override row
- * of its own — which is exactly the difference between `rescheduleBlock` and
- * `rescheduleOccurrence`, and why the type carries it.
- *
- * A series is never an item itself: only its occurrences are on the grid.
+ * One expanded instance of a recurring event. `id` is `${seriesId}:${occurrenceDate}`
+ * and survives a move, so React keys hold still; `blockId` is null until the
+ * occurrence has an override row.
  */
 export function itemFromOccurrence(occurrence: Occurrence): CalendarItem {
   const source = occurrence.override ?? occurrence.series;
@@ -165,8 +121,6 @@ export function itemFromOccurrence(occurrence: Occurrence): CalendarItem {
     endAt: occurrence.endAt,
     allDay: source.allDay,
     ownColor: source.color,
-    // An event belongs to no project, so there is nothing between its own
-    // colour and the kind default.
     color: source.color ?? KIND_DEFAULT_COLOR.event,
     completedAt: occurrence.override?.completedAt ?? null,
     occurrence: { seriesId: occurrence.seriesId, occurrenceDate: occurrence.occurrenceDate },

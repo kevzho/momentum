@@ -50,20 +50,9 @@ import { WEEKDAY_NAMES, weekdaysFrom } from "@/features/settings/weekday-names";
 import { useOpenerFocus } from "@/lib/use-opener-focus";
 
 /**
- * Creating and editing a habit — one form, two modes.
- *
- * The frequency select is the form's spine: choosing it decides which of the
- * other fields mean anything, and the form hides the ones that do not rather
- * than showing disabled inputs the user has to reason about. The four shapes
- * the spec asks for are all reachable here, and the fifth database value —
- * an amount per *week* — is offered beside an amount per day because they are
- * the same idea over two periods (specs/06-habits.md).
- *
- * The submitted values satisfy `habits`' own check constraints by construction:
- * `daily` and `weekdays` submit a target of 1, only the two amount types submit
- * a unit, and a `weekdays` habit cannot be submitted with no days. That is the
- * same set of rules `schemas.ts` re-states for the server — the form is the
- * first of three gates, not the only one.
+ * Create/edit habit form. The frequency select decides which other fields are
+ * shown, and the submitted values satisfy the `habits` check constraints by
+ * construction (the same rules `schemas.ts` re-states for the server).
  */
 
 export interface HabitFormValues {
@@ -140,12 +129,7 @@ function initialValues(habit: Habit | null): HabitFormValues {
 }
 
 export function HabitFormDialog({ open, habit, ...form }: HabitFormDialogProps) {
-  /*
-   * Opened from "New habit" or a row's menu, never from a `Dialog.Trigger`, so
-   * Radix has nothing to return focus to on close and its modal content cancels
-   * the restore anyway; without this a keyboard user lands on `<body>` after
-   * every save and every Escape (Domain Rule 10).
-   */
+  // Opened without a `Dialog.Trigger`, so Radix would otherwise drop focus on `<body>` after close.
   const openerFocus = useOpenerFocus(open);
 
   return (
@@ -159,9 +143,7 @@ export function HabitFormDialog({ open, habit, ...form }: HabitFormDialogProps) 
         className="sm:max-w-lg"
         onOpenAutoFocus={openerFocus.onOpenAutoFocus}
         onCloseAutoFocus={openerFocus.onCloseAutoFocus}
-        // A new habit needs no explaining; only the edit has a fact worth
-        // stating, and a dialog with no description says so rather than
-        // pointing `aria-describedby` at nothing.
+        // Create mode has no description, so `aria-describedby` must not point at nothing.
         {...(habit === null ? { "aria-describedby": undefined } : {})}
       >
         <DialogHeader>
@@ -190,13 +172,9 @@ function HabitForm({
   const [values, setValues] = React.useState<HabitFormValues>(() => initialValues(habit));
   const [error, setError] = React.useState<string | null>(null);
 
-  /*
-   * The two numeric fields hold what the user has typed, as text, and commit a
-   * clamped integer beside it. Coercing every keystroke (`Number(v) || 1`)
-   * snaps an emptied field back to 1, so typing "3" over a cleared "1" yields
-   * "13" — the `DurationInput` next to them already keeps its draft apart for
-   * the same reason. Blur and a frequency change resync the draft to the value.
-   */
+  // The numeric fields keep a text draft beside the committed integer: coercing
+  // every keystroke would snap an emptied field back to 1, so typing "3" over a
+  // cleared "1" would yield "13". Blur and a frequency change resync the draft.
   const [targetDraft, setTargetDraft] = React.useState(() => String(values.target));
   const [xpDraft, setXpDraft] = React.useState(() => String(values.xpReward));
 
@@ -212,11 +190,7 @@ function HabitForm({
   const needsDays = values.frequencyType === "weekdays";
   const needsTarget = amount || values.frequencyType === "times_per_week";
 
-  /**
-   * Switching frequency normalises the fields the new shape cannot carry, so
-   * the form can never submit a combination the database refuses: `daily` and
-   * `weekdays` are done once, and only an amount habit has a unit.
-   */
+  // Normalises the fields the new shape cannot carry, so the database never refuses the combination.
   function changeFrequency(next: HabitFrequencyType): void {
     const target = next === "daily" || next === "weekdays" ? 1 : clampTarget(values.target, next);
     setTargetDraft(String(target));
@@ -250,11 +224,7 @@ function HabitForm({
     <form onSubmit={submit} className="flex flex-col gap-4">
       <div className="flex flex-col gap-1.5">
         <Label htmlFor={`${ids}-name`}>Name</Label>
-        {/*
-          No `autoFocus`: Radix focuses the first field itself, and only after
-          it has read where focus came from. A field that grabbed focus on mount
-          would be recorded as the opener and the user dropped on <body> on close.
-        */}
+        {/* No `autoFocus`: a field that grabs focus on mount is recorded as the opener, dropping the user on <body> on close. */}
         <Input
           id={`${ids}-name`}
           value={values.name}

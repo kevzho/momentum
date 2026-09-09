@@ -11,17 +11,9 @@ import {
 } from "./support/harness";
 
 /**
- * Proof that the 2026-09-09 security audit's farm fixes hold — the attacks are
- * run and shown to fail, not merely asserted about.
- *
- * Companion to rls.test.ts / rls-cross-user.test.ts (cross-user isolation) and
- * gamification.test.ts (idempotency, reconciliation, the caps for a single-tz
- * burst). What is new here is the lever the audit found: `profiles.timezone` and
- * `profiles.week_start` are client-writable, and three subsystems trusted them —
- * the daily XP caps, the quest periods, and the weekly-goal week. Each test below
- * exercises that lever and proves it no longer moves the reward.
- *
- * Run with: `MOMENTUM_DB_TESTS=1 pnpm exec vitest run --project db`.
+ * `profiles.timezone` and `profiles.week_start` are client-writable; these
+ * prove that changing them cannot reopen the daily XP caps, spawn extra quest
+ * sets, or farm weekly-goal awards. Run with `MOMENTUM_DB_TESTS=1 pnpm exec vitest run --project db`.
  */
 
 const describeDb = DB_TESTS_ENABLED ? describe : describe.skip;
@@ -52,16 +44,13 @@ describeDb("security hardening: the timezone/week lever no longer moves rewards"
   });
 
   afterEach(async () => {
-    // Restore any timezone a test changed, so the seed profile is left as found.
     for (const [userId, timezone] of tzToRestore) {
       await admin.from("profiles").update({ timezone }).eq("id", userId);
     }
     tzToRestore.clear();
 
     if (createdTasks.length > 0) {
-      // The ledger has no FK to tasks (an award outlives its source), so the
-      // rows this suite minted are removed by their source id, then the profile
-      // total is reconciled back to the ledger it no longer contains them in.
+      // The ledger has no FK to tasks, so minted rows go by source id, then the total is reconciled.
       await admin
         .from("xp_events")
         .delete()
@@ -79,10 +68,8 @@ describeDb("security hardening: the timezone/week lever no longer moves rewards"
   });
 
   /**
-   * The user's current local week, computed to match guard_weekly_goals exactly:
-   * `(now() at time zone tz)::date` snapped to the week start. `en-CA` formats a
-   * date as YYYY-MM-DD, and formatting the current instant in the profile's zone
-   * is precisely what the SQL cast produces.
+   * The user's current local week, matching guard_weekly_goals exactly:
+   * `(now() at time zone tz)::date` snapped to the week start. `en-CA` formats as YYYY-MM-DD.
    */
   async function currentWeek(userId: string): Promise<string> {
     const { data, error } = await admin
@@ -122,24 +109,19 @@ describeDb("security hardening: the timezone/week lever no longer moves rewards"
     await tasks.complete(client, id);
   }
 
-  /* ---------------------------------------------------------------------- */
-
   it("the daily XP cap cannot be reopened by changing the profile timezone", async () => {
     tzToRestore.set(
       ownerId,
       (await owner.from("profiles").select("timezone").eq("id", ownerId).single()).data!.timezone,
     );
 
-    // Fill the task cap several times over in the current timezone.
     for (let i = 0; i < Math.ceil(TASK_DAILY_CAP / 10) + 6; i += 1) {
       await completeFreshTask(owner, ownerId);
     }
     const afterFill = await taskXpIn24h(ownerId);
     expect(afterFill).toBeLessThanOrEqual(TASK_DAILY_CAP);
 
-    // The attack: sweep timezones whose local midnight has just passed and
-    // complete more work in each. Before the fix, each switch made the earlier
-    // awards "yesterday" and reopened the full cap.
+    // Sweep timezones whose local midnight has just passed and complete more work in each.
     for (const timezone of ["Pacific/Kiritimati", "Pacific/Honolulu", "Asia/Kolkata"]) {
       await owner.from("profiles").update({ timezone }).eq("id", ownerId);
       for (let i = 0; i < 4; i += 1) await completeFreshTask(owner, ownerId);
@@ -153,8 +135,7 @@ describeDb("security hardening: the timezone/week lever no longer moves rewards"
     const week = await currentWeek(neighbourId);
     const pastWeek = addDays(week, -30);
 
-    // A past week is refused (22023): this is the farm — one claimable award per
-    // historical week per metric — and it is closed at creation.
+    // A past week is refused (22023) at creation: one claimable award per historical week per metric.
     const past = await neighbour.from("weekly_goals").insert({
       id: crypto.randomUUID(),
       user_id: neighbourId,
@@ -164,8 +145,7 @@ describeDb("security hardening: the timezone/week lever no longer moves rewards"
     });
     expect(past.error?.code).toBe("22023");
 
-    // The target upper bound is a database constraint now, not only zod. Inserted
-    // through the service role so the (client-only) week guard is out of the way
+    // Inserted through the service role so the week guard is out of the way
     // and the check constraint is the sole possible refusal.
     const overCap = await admin.from("weekly_goals").insert({
       id: crypto.randomUUID(),
@@ -176,7 +156,6 @@ describeDb("security hardening: the timezone/week lever no longer moves rewards"
     });
     expect(overCap.error?.code).toBe("23514");
 
-    // A current-week goal is allowed through the client...
     const id = crypto.randomUUID();
     createdGoals.push(id);
     const created = await neighbour.from("weekly_goals").insert({
@@ -186,11 +165,11 @@ describeDb("security hardening: the timezone/week lever no longer moves rewards"
       metric: "blocks_completed",
       target: 1,
     });
-    // Tolerate a pre-existing (week, metric) row from an interrupted run: then
-    // uniqueness, not the guard, is the refusal, and the guard is what this asserts.
+    // A pre-existing (week, metric) row from an interrupted run makes
+    // uniqueness, not the guard, the refusal.
     if (created.error) expect(created.error.code).toBe("23505");
     else {
-      // ...but its award key is frozen: it cannot be moved to another week.
+      // The award key is frozen: the goal cannot be moved to another week.
       const moved = await neighbour
         .from("weekly_goals")
         .update({ week_start: pastWeek })
@@ -200,13 +179,11 @@ describeDb("security hardening: the timezone/week lever no longer moves rewards"
   });
 
   it("quest assignments do not multiply when timezone and week start are swept", async () => {
-    // Snapshot BOTH settings the sweep changes, so the seed profile is restored
-    // exactly (its week_start is 0, not the schema default 1).
+    // Snapshot both settings: the seed's week_start is 0, not the schema default 1.
     const original = (
       await admin.from("profiles").select("timezone, week_start").eq("id", neighbourId).single()
     ).data!;
 
-    // Baseline: whatever the neighbour already holds for the current period.
     const before = await admin.from("quest_assignments").select("id").eq("user_id", neighbourId);
     const beforeIds = new Set((before.data ?? []).map((row) => row.id));
 
@@ -228,9 +205,8 @@ describeDb("security hardening: the timezone/week lever no longer moves rewards"
         .eq("id", neighbourId);
     }
 
-    // Count assignments whose window (in the timezone they were assigned in) still
-    // contains "now" — the only ones a claim could pay against. There must be at
-    // most one full set per kind, whatever the sweep tried to spawn.
+    // Only assignments whose window (in their own timezone) still contains
+    // "now" can be claimed; at most one full set per kind.
     const after = await admin
       .from("quest_assignments")
       .select("id, period, period_start, timezone")
@@ -251,7 +227,6 @@ describeDb("security hardening: the timezone/week lever no longer moves rewards"
     expect(dailyCurrent).toBeLessThanOrEqual(3);
     expect(weeklyCurrent).toBeLessThanOrEqual(2);
 
-    // Clean up only assignments this sweep created (leave the neighbour's own).
     const createdAssignments = (after.data ?? [])
       .map((row) => row.id)
       .filter((id) => !beforeIds.has(id));
@@ -263,8 +238,7 @@ describeDb("security hardening: the timezone/week lever no longer moves rewards"
 
 /** Midnight of a YYYY-MM-DD date in an IANA zone, as epoch ms. */
 function zonedMidnight(date: string, timeZone: string): number {
-  // `date 00:00` interpreted in `timeZone`. Formatting the UTC midnight in the
-  // zone tells us the zone's offset, which we subtract to get the true instant.
+  // Formatting the UTC midnight in the zone gives the zone's offset, which is subtracted.
   const utcMidnight = new Date(`${date}T00:00:00Z`).getTime();
   const asUtc = new Date(utcMidnight);
   const local = new Date(asUtc.toLocaleString("en-US", { timeZone }));

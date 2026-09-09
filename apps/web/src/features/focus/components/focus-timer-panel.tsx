@@ -14,33 +14,15 @@ import { FOCUS_COPY, describeElapsed, describeTimer } from "@/features/focus/cop
 import type { LiveFocusSession } from "@/features/focus/types";
 
 /**
- * The screen a session is watched on — or, as the spec puts it, looked at while
- * not being looked at.
- *
- * Deliberately four things: what is being worked on, how long is left, and the
- * three controls. No stat tiles, no progress commentary, nothing that changes
- * while it is not being read.
- *
- * **Everything here is rendered from `state`, which was derived from
- * timestamps.** This component owns no timer and no counter; it is handed a
- * `FocusTimerState` recomputed by `useFocusTimer` and draws it. That separation
- * is what makes the countdown survive a throttled tab: there is nothing in the
- * render path that could have fallen behind.
+ * Draws a `FocusTimerState` recomputed by `useFocusTimer`; it owns no timer and
+ * no counter, which is what lets the countdown survive a throttled tab.
  */
 
 export interface FocusTimerPanelProps {
   live: LiveFocusSession;
   state: FocusTimerState;
   pending: boolean;
-  /**
-   * Focus lands here when a session starts.
-   *
-   * The setup panel is replaced by this one, so the button the user pressed no
-   * longer exists and the browser would drop them on `<body>` (Domain Rule 10).
-   * The view moves focus to the primary control on the transition into a live
-   * session, and nowhere else — a page loaded with a session already running
-   * must not steal focus from wherever the user put it.
-   */
+  /** Receives focus on the transition into a live session (the Start button has unmounted), and only then. */
   primaryControlRef?: React.RefObject<HTMLButtonElement | null>;
   onPause: () => void;
   onResume: () => void;
@@ -62,12 +44,8 @@ export function FocusTimerPanel({
 }: FocusTimerPanelProps) {
   const { session, task } = live;
 
-  /*
-   * Every control is `aria-disabled` rather than natively disabled, and every
-   * handler refuses while a write is in flight. A control that disables itself
-   * while focused blurs to `<body>` (Domain Rule 10); a control that says it is
-   * disabled and still acts is a lie. This is both halves.
-   */
+  // `aria-disabled` rather than native `disabled`, which would blur a focused
+  // control to `<body>`; the handler refuses instead.
   const guard = (handler: () => void) => () => {
     if (pending) return;
     handler();
@@ -103,12 +81,7 @@ export function FocusTimerPanel({
         strokeWidth={10}
         label={label}
       >
-        {/*
-          The digits change every second, so they are not a live region: a
-          screen reader announcing "twenty-four fifty-nine, twenty-four
-          fifty-eight" would be unusable. The ring's own accessible name carries
-          the meaning, and it is a sentence rather than a clock.
-        */}
+        {/* The digits are hidden from assistive technology; the ring's accessible name carries the meaning. */}
         <span
           data-slot="numeric"
           aria-hidden="true"
@@ -167,11 +140,6 @@ export function FocusTimerPanel({
         </Button>
       </div>
 
-      {/*
-        Interruptions are marked, never detected. The application cannot see the
-        user's other windows or the person who walked in, and a count it inferred
-        would look measured while being invented.
-      */}
       <div className="flex flex-col items-center gap-1">
         <Button
           type="button"

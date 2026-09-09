@@ -9,17 +9,8 @@ import { PROGRESS_COPY } from "@/features/gamification/copy";
 import type { ProgressPageData, QuestRow } from "@/features/gamification/types";
 import type { ActionResult } from "@/lib/actions/result";
 
-/**
- * The progress page, from the island down.
- *
- * What is worth asserting here — and cannot be asserted anywhere else — is the
- * **contract with the server**: what the client sends when a user presses each
- * control. Domain Rule 6 says the client may name a row and nothing more, and
- * this is the only place that claim is checked against the code that runs.
- *
- * The award arithmetic is `packages/core/src/gamification`; the fact that the
- * database refuses an early claim is `packages/db/tests/gamification.test.ts`.
- */
+// What is asserted here is the contract with the server: the client names a
+// row and nothing more. Award arithmetic is `packages/core/src/gamification`.
 
 type Action = (input: unknown) => Promise<ActionResult<null>>;
 
@@ -77,8 +68,7 @@ function questOf(value: number, overrides: Partial<QuestRow> = {}): QuestRow {
     definition.target,
   );
   return {
-    // The shape the database mints: `md5(...)::uuid`, version nibble `d`. What
-    // a Claim actually sends, and what the real schema has to accept.
+    // The shape the database mints: `md5(...)::uuid`, version nibble `d`.
     assignmentId: ASSIGNMENT_ID,
     definition,
     progress,
@@ -239,11 +229,8 @@ describe("the claim control", () => {
     expect(actions.claimQuest).toHaveBeenLastCalledWith({ id: ASSIGNMENT_ID });
   });
 
-  /*
-   * The other half of "on failure" (Domain Rules §19): a call that rejects —
-   * offline, a 5xx — takes the same path as a returned refusal rather than
-   * reaching the route's error boundary.
-   */
+  // A rejected call takes the same path as a returned refusal rather than
+  // reaching the route's error boundary.
   it("keeps the page and offers Retry when the claim rejects instead of returning", async () => {
     actions.claimQuest.mockRejectedValueOnce(new TypeError("Failed to fetch"));
 
@@ -256,7 +243,7 @@ describe("the claim control", () => {
         expect.objectContaining({ action: expect.objectContaining({ label: "Retry" }) }),
       ),
     );
-    // The control is live again rather than stuck reading as busy.
+    // The control is live again.
     const button = screen.getByRole("button", { name: PROGRESS_COPY.quests.claim });
     expect(button.hasAttribute("data-pending")).toBe(false);
   });
@@ -285,12 +272,8 @@ describe("the claim control", () => {
   });
 });
 
-/**
- * Domain Rule 10: the dialog is opened from a button rather than a
- * `DialogTrigger`, so nothing returns focus on its own. Escape, Cancel and
- * "Set goal" all have to put the keyboard user back on that button, never on
- * `<body>`.
- */
+// Opened from a button rather than a `DialogTrigger`, so nothing returns
+// focus on its own.
 describe("the weekly goal dialog", () => {
   beforeEach(() => {
     vi.clearAllMocks();

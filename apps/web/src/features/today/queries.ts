@@ -53,35 +53,15 @@ import type {
 import { requireSession } from "@/lib/auth/session";
 
 /**
- * The Today page's one read.
- *
- * Everything the page shows is resolved here, in the profile timezone, from a
- * single request's clock reading (Domain Rule 4). The client island fetches
- * nothing, expands no series, does no date arithmetic and never sees a database
- * row (docs/ARCHITECTURE.md §5, §6); the only thing it recomputes as time
- * passes is which item is past, current and next, which is the one answer that
- * changes without a write.
- *
- * The blocks are read over **today and tomorrow**, not today alone. The
- * timeline uses today's slice and drops the rest (`buildTimeline`); the extra
- * day exists so the conflict engine can judge a deadline the day after this one
- * — `@momentum/core/scheduling` deliberately refuses to judge a deadline
- * outside the range it was given, because it cannot see the free time in
- * between. Reading one more day is what makes "due soon" mean more than "due
- * before midnight".
+ * The Today page's one read, resolved in the profile timezone from one clock
+ * reading. Blocks are read over today and tomorrow: the timeline keeps today's
+ * slice, and the extra day lets the conflict engine judge a deadline tomorrow,
+ * which it refuses to do outside the range it was given.
  */
 
-/**
- * How far ahead Next Up looks for something to offer when the day holds nothing
- * scheduled.
- *
- * Two weeks. Far enough that the answer is never "nothing" for a user with any
- * dated work at all; short enough that the fallback is still something worth
- * starting now rather than a deadline in another month.
- */
+/** How far ahead Next Up looks for a candidate when nothing is scheduled. */
 export const CANDIDATE_HORIZON_DAYS = 14;
 
-/** Zero, named, for the coverage arithmetic below. */
 const NO_MINUTES: Minutes = 0;
 
 export async function getTodayPage(): Promise<TodayPageData> {
@@ -93,12 +73,8 @@ export async function getTodayPage(): Promise<TodayPageData> {
   const tomorrow = addDays(today, 1);
   const week = weekOf(today, profile.weekStart);
 
-  /*
-   * Two half-open windows. `todayWindow` is what "today" means to every count
-   * on this page; `rangeWindow` is the two days the conflict engine sees.
-   * `startOfDay` knows that the local days either side of a DST transition are
-   * 23 or 25 hours long, so neither is a hardcoded span (Domain Rule 4).
-   */
+  // `todayWindow` is what "today" means to every count; `rangeWindow` is the two
+  // days the conflict engine sees. `startOfDay` handles 23/25-hour DST days.
   const todayWindow = { start: startOfDay(today, timezone), end: startOfDay(tomorrow, timezone) };
   const rangeWindow = {
     start: todayWindow.start,
@@ -130,10 +106,7 @@ export async function getTodayPage(): Promise<TodayPageData> {
     projectsRepo.listFor(supabase, userId),
     habitsRepo.listFor(supabase, userId),
     habitsRepo.listCompletionsBetween(supabase, userId, week.start, addDays(week.start, 6)),
-    // Assigning is idempotent and resolves the period from the profile itself,
-    // so the page can simply ask for "the current quests" (Domain Rule 17).
-    // Today is the surface a user opens first, so it is the surface that has to
-    // be able to show a quest before /progress has ever been visited.
+    // Idempotent, so Today can show a quest before /progress has ever been visited.
     gamification.ensureQuests(supabase),
     gamification.listQuestDefinitions(supabase),
     tasks.listCompletedBetween(supabase, userId, todayWindow),
@@ -142,7 +115,6 @@ export async function getTodayPage(): Promise<TodayPageData> {
     gamification.xpAwardedBetween(supabase, userId, todayWindow),
   ]);
 
-  // Occurrences are expanded here and never materialised (Domain Rule 16).
   const occurrences = expandAll(rows.series, rangeWindow, rows.overrides);
 
   const workBlocks = rows.blocks.filter(isWorkBlock);
@@ -156,9 +128,7 @@ export async function getTodayPage(): Promise<TodayPageData> {
     tasks.listByIds(supabase, scheduledTaskIds),
     blocks.blockCountsByTask(supabase, scheduledTaskIds),
     blocks.habitLabels(supabase, habitIds),
-    // Coverage for the rows Today can show or judge. "Has time reserved" is a
-    // question about the task and not about the day, so it is summed over all
-    // of a task's blocks (Domain Rule 2).
+    // "Has time reserved" is about the task, not the day: summed over all its blocks.
     tasks.scheduledMinutesByTask(supabase, [
       ...overdueTasks.map((task) => task.id),
       ...dueTasks.map((task) => task.id),
@@ -194,8 +164,7 @@ export async function getTodayPage(): Promise<TodayPageData> {
     estimatedMinutes: task.estimatedMinutes,
     scheduledMinutes: scheduledMinutes.get(task.id) ?? NO_MINUTES,
     project: projectOf(task.projectId, projectsById),
-    // The three lists are open tasks by construction; a completion only ever
-    // arrives here through the optimistic overlay.
+    // Open by construction; a completion only arrives through the optimistic overlay.
     completedAt: null,
   });
 
@@ -223,20 +192,11 @@ export async function getTodayPage(): Promise<TodayPageData> {
     level: levelProgress(profile.xp),
     xpToday: awardedToday.reduce((total, row) => total + row.amount, 0),
     timeline,
-    // Due today and with no time reserved anywhere. A task that is scheduled
-    // is on the timeline instead, and listing it twice would be the page
-    // asking the same question in two places.
+    // Due today with no time reserved anywhere; a scheduled task is on the timeline instead.
     tasks: dueToday.filter((task) => task.scheduledMinutes === NO_MINUTES),
     overdue,
-    /*
-     * What Next Up offers when the day holds nothing scheduled, in the order it
-     * offers them: overdue first, then everything with a deadline in the next
-     * two weeks. `listDueBetween` already returns them by deadline and then by
-     * priority, so the first open row is the answer and the ordering is the
-     * database's rather than a second opinion about it. A task that is
-     * scheduled for another day belongs here too — it is still what is due
-     * soonest, and today simply holds no time for it.
-     */
+    // Overdue first, then by deadline (`listDueBetween`'s order). A task scheduled
+    // for another day belongs here too: it is still what is due soonest.
     candidates: [...overdue, ...dueTasks.map(todayTask)],
     habits: habitsForToday(habitRows, habitCompletions, week.days, today),
     quests: questRows(assignments, questDefinitions, questFacts),
@@ -256,18 +216,7 @@ export async function getTodayPage(): Promise<TodayPageData> {
   };
 }
 
-/* -------------------------------------------------------------------------- */
-/* Quests                                                                     */
-/* -------------------------------------------------------------------------- */
-
-/**
- * Today's quests, with progress computed from the same rows a claim is checked
- * against in SQL — so the Claim control is never offered for something the
- * database would then refuse (Domain Rule 6).
- *
- * Weekly quests are absent: they are not today's, and /progress is where a week
- * is looked at.
- */
+/** Daily quests only, with progress from the same rows SQL checks a claim against. */
 function questRows(
   assignments: readonly QuestAssignment[],
   definitions: readonly QuestDefinition[],
@@ -296,10 +245,6 @@ function questRows(
     });
 }
 
-/* -------------------------------------------------------------------------- */
-/* At risk                                                                    */
-/* -------------------------------------------------------------------------- */
-
 interface WarningInput {
   items: readonly CalendarItem[];
   timeline: readonly TodayItem[];
@@ -314,17 +259,9 @@ interface WarningInput {
 }
 
 /**
- * The two engine warnings At Risk shows, and only those.
- *
- * `detectConflicts` produces four kinds. Over-capacity and past-deadline are
- * planning questions — "this week is shaped wrong" — and belong to the calendar
- * drawer that can do something about them; specs/09-today.md names exactly
- * three things this section shows, and the third one (an overdue task) is
- * derived on the client so that completing it clears the row in the same frame.
- *
- * Overlaps are narrowed to today. Tomorrow's double booking is real and is
- * still tomorrow's; the day after this one is in the range so that a *deadline*
- * there can be judged, not so that the page starts reporting it.
+ * Only insufficient-time and today's overlaps: over-capacity and past-deadline
+ * belong to the calendar drawer, and tomorrow is in the range so a deadline
+ * there can be judged, not so its overlaps are reported.
  */
 function todayWarnings(input: WarningInput): (InsufficientTimeWarning | OverlapWarning)[] {
   const inRange = minutesInRangeByTask(input.workBlocks);
@@ -343,9 +280,7 @@ function todayWarnings(input: WarningInput): (InsufficientTimeWarning | OverlapW
       title: task.title,
       estimatedMinutes: task.estimatedMinutes,
       dueDate: task.dueDate,
-      // The range's own blocks are among the commitments, so only the coverage
-      // the range cannot see is added — subtracting first is what stops a block
-      // from being counted twice.
+      // The range's own blocks are already commitments; subtracting them stops double counting.
       scheduledOutsideMinutes: Math.max(
         NO_MINUTES,
         (input.scheduledMinutes.get(task.id) ?? NO_MINUTES) - (inRange.get(task.id) ?? NO_MINUTES),
@@ -362,17 +297,7 @@ function todayWarnings(input: WarningInput): (InsufficientTimeWarning | OverlapW
   return shown;
 }
 
-/* -------------------------------------------------------------------------- */
-/* Small helpers                                                              */
-/* -------------------------------------------------------------------------- */
-
-/**
- * A work block's project, for the line under its title.
- *
- * Only work blocks have one: an event belongs to no project and a habit block
- * belongs to its habit. The colour on the item is already resolved (it may be
- * the block's own override); this is the project's name and hue as such.
- */
+/** A work block's project; events and habit blocks have none. */
 function projectOfItem(
   item: CalendarItem,
   context: ItemContext,
@@ -392,10 +317,7 @@ function projectOf(
   return project === undefined ? null : { name: project.name, color: project.color };
 }
 
-/**
- * Ended sessions only. A live one has no measured minutes yet and contributes
- * nothing, so it is filtered rather than counted as zero.
- */
+/** Ended sessions only; a live one has no measured minutes yet. */
 function endedSessions(sessions: readonly FocusSession[]): FocusSession[] {
   return sessions.filter(
     (session) => session.status === "completed" || session.status === "abandoned",
@@ -412,7 +334,6 @@ function minutesInRangeByTask(workBlocks: readonly WorkBlock[]): Map<Uuid, Minut
   return minutes;
 }
 
-/** Narrows to the kind whose `taskId` the compiler then knows is non-null. */
 function isWorkBlock(block: CalendarBlock): block is WorkBlock {
   return block.kind === "work";
 }

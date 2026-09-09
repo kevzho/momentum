@@ -5,12 +5,7 @@ import { PageHeaderSkeleton, RowsSkeleton } from "@/components/skeletons";
 import { PageHeader } from "@momentum/ui/components/page-header";
 import { TaskRow } from "@momentum/ui/components/task-row";
 
-/**
- * A skeleton exists to hold the space the content will take. If the two drift
- * apart the page shifts when data arrives, which is the failure this phase's
- * acceptance criteria call out by name. These assert the shared box model
- * rather than pixel heights, which jsdom does not lay out.
- */
+// Asserts the shared box model rather than pixel heights, which jsdom does not lay out.
 describe("route skeletons", () => {
   it("gives the header skeleton the same minimum height as PageHeader", () => {
     const { container: real } = render(<PageHeader title="Tasks" />);

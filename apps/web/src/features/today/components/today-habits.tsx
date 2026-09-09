@@ -12,20 +12,9 @@ import { TodaySection } from "@/features/today/components/today-section";
 import type { TodayHabit } from "@/features/today/types";
 
 /**
- * The habits today asks something of, completable in one press.
- *
- * A compact row rather than the habits page's card: this answers "how am I
- * progressing today", and a week strip, a consistency percentage and a heatmap
- * answer a different question that /habits already answers well. What is here
- * is the name, what the habit asks for, and a control.
- *
- * The state carries a word as well as a checkbox — `DAY_STATE_LABELS`, the
- * habits feature's own vocabulary, in which there is no "missed" and a
- * scheduled day that has passed is **open** (Domain Rule 7). An amount habit's
- * press tops it up to its target — today's for a per-day habit, the week's for
- * a per-week one, which names no per-day target (`amountToRecord` in
- * `@momentum/core/habits`) — which is exactly what `record_habit_completion`
- * will do with the amount sent.
+ * The habits today asks something of, completable in one press. An amount
+ * habit's press tops it up to its target via `amountToRecord`, which is what
+ * `record_habit_completion` does with the amount sent.
  */
 export function TodayHabits({
   habits,
@@ -85,13 +74,10 @@ export function TodayHabits({
                   title={describeTarget(row.habit)}
                 >
                   {row.day.target === null
-                    ? // A per-week habit names no per-day target, so the week is
-                      // the only number it has: "1 of 3 days", "40m of 2h".
+                    ? // A per-week habit names no per-day target, so the week is its only number.
                       describeProgress(row.habit, row.progress.achieved, row.progress.target)
                     : amount
-                      ? // A per-day amount habit is measured against *today's*
-                        // target. Showing the week here would report a number
-                        // the press in front of it does not move by that much.
+                      ? // A per-day amount habit is measured against today's target, which is what the press moves.
                         describeProgress(row.habit, row.day.amount, row.day.target)
                       : DAY_STATE_LABELS[row.day.state]}
                 </span>

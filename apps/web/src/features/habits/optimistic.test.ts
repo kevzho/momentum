@@ -7,14 +7,7 @@ import type { Habit, HabitCompletion, LocalDate } from "@momentum/core/types";
 import { applyCompletion } from "@/features/habits/optimistic";
 import type { HabitView, HabitsPageData } from "@/features/habits/types";
 
-/**
- * The overlay has one job: predict exactly what `record_habit_completion` and
- * `remove_habit_completion` will write, so the reconcile is invisible.
- *
- * Domain Rule 14 is the specification, and these are its cases — one row per
- * habit per local date, boolean habits idempotent within the day, amount habits
- * accumulating, and removal deleting the row rather than decrementing it.
- */
+/** The overlay must predict exactly what `record_habit_completion` and `remove_habit_completion` write. */
 
 const TODAY = localDate("2026-09-09");
 const WEEK: readonly LocalDate[] = Array.from({ length: 7 }, (_, i) =>
@@ -129,8 +122,7 @@ describe("deduplication (Domain Rule 14)", () => {
 
     expect(first(twice).history).toHaveLength(1);
     expect(first(twice).history[0]?.amount).toBe(1);
-    // The second press changes nothing at all — the same no-op the database
-    // performs when the row already exists.
+    // The second press is the same no-op the database performs when the row exists.
     expect(first(twice).progress).toEqual(first(once).progress);
   });
 

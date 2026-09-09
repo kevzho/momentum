@@ -8,23 +8,8 @@ import { TODAY_COPY, describeRisk, riskKey } from "@/features/today/copy";
 import type { TodayRisk } from "@/features/today/types";
 
 /**
- * Is anything at risk.
- *
- * **Rendered only when there is something to say.** An empty At Risk panel is
- * a place for the eye to keep checking and a shape the page keeps reserving,
- * so the section does not exist when the list is empty — the caller renders
- * nothing at all rather than this component with a zero count.
- *
- * Each row is one factual sentence and a glyph. Nothing here is a control that
- * blocks anything, nothing is red-on-red, and nothing characterises the person
- * whose day it is: an overdue task states its deadline, a shortfall states two
- * durations, a double booking states the overlap. Every sentence comes from
- * `copy.ts` or, for the two engine warnings, from `describeWarning` itself
- * (Domain Rule 7).
- *
- * Overdue rows are capped. A user three weeks behind on a project does not need
- * forty rows on the screen they open to start the morning; they need the three
- * most overdue and a way to the list.
+ * Rendered only when there is something to say: the caller renders nothing
+ * for an empty list. Overdue rows are capped, with a link to the full list.
  */
 export function AtRiskPanel({ risks }: { risks: readonly TodayRisk[] }) {
   if (risks.length === 0) return null;
@@ -75,10 +60,7 @@ export function AtRiskPanel({ risks }: { risks: readonly TodayRisk[] }) {
   );
 }
 
-/**
- * A glyph per kind, so the three are distinguishable without reading the
- * sentence and without relying on colour (they all share one).
- */
+/** A glyph per kind, so the three are distinguishable without relying on colour. */
 const RISK_ICON: Record<TodayRisk["kind"], typeof AlertCircleIcon> = {
   overdue: ClockAlertIcon,
   "insufficient-time": AlertCircleIcon,

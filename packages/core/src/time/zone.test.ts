@@ -21,11 +21,7 @@ const d = localDate;
 const i = instant;
 
 /**
- * The fixture zones from docs/ARCHITECTURE.md §10, and the exact transition
- * instants each one has in 2026. Every instant below was read out of the
- * runtime's own tz database rather than from memory — the whole point of these
- * tests is to check our arithmetic against ICU, so hardcoding a remembered
- * date would test nothing.
+ * Transition instants in 2026, read out of the runtime's own tz database:
  *
  *   America/New_York  2026-03-08 07:00Z  local 02:00 -> 03:00   (-5 -> -4)
  *                     2026-11-01 06:00Z  local 02:00 -> 01:00   (-4 -> -5)
@@ -46,7 +42,7 @@ const SANTIAGO = ianaTimeZone("America/Santiago");
 
 const FIXTURE_ZONES: readonly IanaTimeZone[] = [NEW_YORK, LONDON, KOLKATA, AUCKLAND, SANTIAGO, UTC];
 
-/** A date with no transition anywhere in the fixture set, for round-trip checks. */
+/** A date with no transition anywhere in the fixture set. */
 const ORDINARY: LocalDate = d("2026-06-17");
 
 describe("fromLocal / minutesFromMidnight round trip", () => {
@@ -60,7 +56,6 @@ describe("fromLocal / minutesFromMidnight round trip", () => {
   });
 
   it("places a wall-clock time at the zone's actual offset", () => {
-    // 09:00 local on a June morning, in EDT (−4), BST (+1), NZST (+12) and UTC.
     expect(fromLocal(d("2026-06-17"), 9 * 60, NEW_YORK)).toBe("2026-06-17T13:00:00.000Z");
     expect(fromLocal(d("2026-06-17"), 9 * 60, LONDON)).toBe("2026-06-17T08:00:00.000Z");
     expect(fromLocal(d("2026-06-17"), 9 * 60, AUCKLAND)).toBe("2026-06-16T21:00:00.000Z");
@@ -68,19 +63,15 @@ describe("fromLocal / minutesFromMidnight round trip", () => {
   });
 
   it("handles the half-hour offset zone, which whole-hour offset maths gets wrong", () => {
-    // Asia/Kolkata is +05:30. Any implementation that rounds an offset to hours
-    // lands 30 minutes out here and nowhere else in the fixture set.
+    // Asia/Kolkata is +05:30.
     expect(fromLocal(d("2026-09-07"), 9 * 60 + 15, KOLKATA)).toBe("2026-09-07T03:45:00.000Z");
     expect(minutesFromMidnight(i("2026-09-07T03:45:00.000Z"), KOLKATA)).toBe(555);
-    // Local midnight is 18:30Z the previous day, so the date flips mid-afternoon UTC.
     expect(fromLocal(d("2026-09-07"), 0, KOLKATA)).toBe("2026-09-06T18:30:00.000Z");
     expect(localDateOf(i("2026-09-06T18:29:00.000Z"), KOLKATA)).toBe("2026-09-06");
     expect(localDateOf(i("2026-09-06T18:30:00.000Z"), KOLKATA)).toBe("2026-09-07");
   });
 
   it("normalises minutes outside the day by rolling into the neighbouring date", () => {
-    // Geometry hands us these when a block is dragged past the top or bottom of
-    // the grid; throwing would turn a normal drag into an error.
     expect(fromLocal(d("2026-09-07"), 1500, NEW_YORK)).toBe(
       fromLocal(d("2026-09-08"), 60, NEW_YORK),
     );
@@ -93,8 +84,7 @@ describe("fromLocal / minutesFromMidnight round trip", () => {
 
 describe("fromLocal in a DST spring-forward gap", () => {
   it("moves a New York 02:30 forward to the 03:30 that really happens", () => {
-    // The local clock jumps 02:00 -> 03:00 on 2026-03-08, so 02:30 never
-    // occurs. The result is one gap-width later on the clock.
+    // 02:30 never occurs on 2026-03-08; the result is one gap-width later on the clock.
     const result = fromLocal(d("2026-03-08"), 150, NEW_YORK);
     expect(result).toBe("2026-03-08T07:30:00.000Z");
     expect(minutesFromMidnight(result, NEW_YORK)).toBe(210); // 03:30
@@ -111,7 +101,6 @@ describe("fromLocal in a DST spring-forward gap", () => {
   });
 
   it("does the same in the southern hemisphere, where spring is in September", () => {
-    // Pacific/Auckland jumps 02:00 -> 03:00 on 2026-09-27.
     const result = fromLocal(d("2026-09-27"), 150, AUCKLAND);
     expect(result).toBe("2026-09-26T14:30:00.000Z");
     expect(minutesFromMidnight(result, AUCKLAND)).toBe(210);
@@ -124,18 +113,13 @@ describe("fromLocal in a DST spring-forward gap", () => {
   });
 
   it("handles a zone whose gap swallows its own midnight", () => {
-    // America/Santiago moves the clock at 24:00, so 2026-09-06 has no 00:00
-    // and startOfDay has to resolve to 01:00 — the instant the local date
-    // actually changes. A grid that assumed midnight always exists renders the
-    // whole day one hour out here.
+    // America/Santiago moves the clock at 24:00, so 2026-09-06 has no 00:00.
     expect(fromLocal(d("2026-09-06"), 0, SANTIAGO)).toBe("2026-09-06T04:00:00.000Z");
     expect(minutesFromMidnight(i("2026-09-06T04:00:00.000Z"), SANTIAGO)).toBe(60);
     expect(localDateOf(i("2026-09-06T03:59:00.000Z"), SANTIAGO)).toBe("2026-09-05");
   });
 
   it("never returns an instant that is outside the gap it was asked about", () => {
-    // Whatever the disambiguation, the answer has to round-trip to a real time
-    // no earlier than the one requested.
     for (let minutes = 120; minutes < 180; minutes += 5) {
       const resolved = fromLocal(d("2026-03-08"), minutes, NEW_YORK);
       expect(minutesFromMidnight(resolved, NEW_YORK)).toBe(minutes + 60);
@@ -145,13 +129,10 @@ describe("fromLocal in a DST spring-forward gap", () => {
 
 describe("fromLocal in a DST fall-back overlap", () => {
   it("takes the first of the two New York 01:30s", () => {
-    // 01:00–02:00 happens twice on 2026-11-01: once on EDT (−4) and again on
-    // EST (−5). The first is 05:30Z; the second would be 06:30Z.
+    // 01:00–02:00 happens twice on 2026-11-01: 05:30Z on EDT, 06:30Z on EST.
     const result = fromLocal(d("2026-11-01"), 90, NEW_YORK);
     expect(result).toBe("2026-11-01T05:30:00.000Z");
     expect(minutesFromMidnight(result, NEW_YORK)).toBe(90);
-    // Proof that the later instant reads the same wall clock, i.e. that this
-    // really is an overlap and not an ordinary hour.
     expect(minutesFromMidnight(i("2026-11-01T06:30:00.000Z"), NEW_YORK)).toBe(90);
   });
 
@@ -164,7 +145,6 @@ describe("fromLocal in a DST fall-back overlap", () => {
   });
 
   it("does the same in the southern hemisphere, where autumn is in April", () => {
-    // Pacific/Auckland repeats 02:00–03:00 on 2026-04-05.
     const result = fromLocal(d("2026-04-05"), 150, AUCKLAND);
     expect(result).toBe("2026-04-04T13:30:00.000Z");
     expect(minutesFromMidnight(result, AUCKLAND)).toBe(150);
@@ -176,8 +156,7 @@ describe("fromLocal in a DST fall-back overlap", () => {
   });
 
   it("handles a zone whose overlap is the last hour of the day", () => {
-    // America/Santiago repeats 23:00–24:00 on 2026-04-04; the first pass is on
-    // −3 (02:30Z the next UTC day), the second on −4 (03:30Z).
+    // America/Santiago repeats 23:00–24:00 on 2026-04-04.
     expect(fromLocal(d("2026-04-04"), 1410, SANTIAGO)).toBe("2026-04-05T02:30:00.000Z");
     expect(minutesFromMidnight(i("2026-04-05T03:30:00.000Z"), SANTIAGO)).toBe(1410);
   });
@@ -217,8 +196,6 @@ describe("localDayLengthMinutes", () => {
     expect(localDayLengthMinutes(d("2026-11-01"), NEW_YORK)).toBe(1500);
     expect(localDayLengthMinutes(d("2026-09-27"), AUCKLAND)).toBe(1380);
     expect(localDayLengthMinutes(d("2026-04-05"), AUCKLAND)).toBe(1500);
-    // Santiago moves at midnight, so the short day is the one that starts late
-    // and the long day is the one that ends late.
     expect(localDayLengthMinutes(d("2026-09-06"), SANTIAGO)).toBe(1380);
     expect(localDayLengthMinutes(d("2026-04-04"), SANTIAGO)).toBe(1500);
   });
@@ -234,8 +211,7 @@ describe("todayIn / isSameLocalDay", () => {
   });
 
   it("disagrees with UTC for exactly the instants Domain Rule 4 is about", () => {
-    // 2026-09-08T03:30Z is 23:30 on the 7th in New York. Reading the UTC date
-    // would file this block under the wrong day column.
+    // 2026-09-08T03:30Z is 23:30 on the 7th in New York.
     const lateMonday = i("2026-09-08T03:30:00.000Z");
     expect(todayIn(NEW_YORK, lateMonday)).toBe("2026-09-07");
     expect(todayIn(UTC, lateMonday)).toBe("2026-09-08");
@@ -270,8 +246,7 @@ describe("nextLocalMidnight", () => {
   });
 
   it("lands on the transition instant in a zone that skips midnight", () => {
-    // 2026-09-06T00:00 does not exist in Santiago; the local date changes at
-    // 01:00 local, and that is when the calendar has to roll over.
+    // 2026-09-06T00:00 does not exist in Santiago; the local date changes at 01:00.
     const now = fromLocal(d("2026-09-05"), 1410, SANTIAGO);
     expect(nextLocalMidnight(SANTIAGO, now)).toBe("2026-09-06T04:00:00.000Z");
     expect(todayIn(SANTIAGO, nextLocalMidnight(SANTIAGO, now))).toBe("2026-09-06");
@@ -336,12 +311,8 @@ describe("splitByLocalDay", () => {
   });
 
   it("ends a to-midnight segment at wall-clock 1440 on both DST days", () => {
-    // Wall clock, not elapsed time. Both of these days read 00:00 to 24:00 on
-    // the clock, so both segments end at 1440 — even though 2026-11-01 is 25
-    // hours long and 2026-03-08 is 23. Using localDayLengthMinutes here would
-    // draw the fall-back block 90 minutes tall and give the spring-forward one
-    // an end BEFORE its start; the elapsed number is what capacity maths wants,
-    // and it is a different question from where a block sits on a grid.
+    // Wall clock, not elapsed time: both segments end at 1440 even though the
+    // days are 25 and 23 hours long.
     expect(
       splitByLocalDay(
         fromLocal(d("2026-11-01"), 1410, NEW_YORK),
@@ -362,8 +333,6 @@ describe("splitByLocalDay", () => {
       { date: "2026-03-08", startMinutes: 1410, endMinutes: 1440 },
       { date: "2026-03-09", startMinutes: 0, endMinutes: 30 },
     ]);
-    // The elapsed lengths those two days really have, so the distinction the
-    // comment above draws is asserted rather than only described.
     expect(localDayLengthMinutes(d("2026-11-01"), NEW_YORK)).toBe(1500);
     expect(localDayLengthMinutes(d("2026-03-08"), NEW_YORK)).toBe(1380);
   });
@@ -429,8 +398,6 @@ describe("weekRange", () => {
   });
 
   it("is 167 hours wide across a spring-forward week and 169 across a fall-back week", () => {
-    // The window is seven local days, which is not seven times 24 hours. A
-    // query built on 168 hours would miss the last hour of the week.
     const spring = weekRange(d("2026-03-08"), 0, NEW_YORK);
     expect(spring).toEqual({
       start: "2026-03-08T05:00:00.000Z",
@@ -443,8 +410,7 @@ describe("weekRange", () => {
   });
 
   it("starts at the real start of the first day when that day has no midnight", () => {
-    // Santiago's 2026-09-06 begins at 01:00 local. The Monday week containing
-    // it starts on 2026-09-07, so this is the Sunday-start case.
+    // Santiago's 2026-09-06 begins at 01:00 local.
     expect(weekRange(d("2026-09-09"), 0, SANTIAGO).start).toBe("2026-09-06T04:00:00.000Z");
   });
 

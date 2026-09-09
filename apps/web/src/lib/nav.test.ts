@@ -45,10 +45,9 @@ describe("returnable routes", () => {
     ["a route the app does not have", "/nowhere"],
     ["a relative path", "calendar"],
   ])("refuses %s", (_case, value) => {
-    // Being an allow-list rather than a prefix test is the whole point: the
-    // auth callback resolves this value against the origin, and the WHATWG
-    // parser folds `\` and C0 whitespace into `/`, so no test on the raw
-    // string can tell an off-site destination from a local path.
+    // An allow-list rather than a prefix test: the WHATWG parser folds `\` and
+    // C0 whitespace into `/`, so no test on the raw string can tell an off-site
+    // destination from a local path.
     expect(returnableRoute(value)).toBeNull();
   });
 

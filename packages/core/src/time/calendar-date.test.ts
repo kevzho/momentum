@@ -5,7 +5,6 @@ import { localDate } from "./scalars";
 
 const d = localDate;
 
-/** 0 = Sunday … 6 = Saturday, matching the `Weekday` type and date-fns. */
 const SUNDAY = 0;
 const MONDAY = 1;
 const SATURDAY = 6;
@@ -28,9 +27,7 @@ describe("addDays", () => {
   });
 
   it("is unaffected by a DST transition, because a local day is still one date later", () => {
-    // 2026-03-08 is 23 hours long in America/New_York; the date after it is
-    // still 2026-03-09. This is why week navigation is date arithmetic and not
-    // "add 168 hours".
+    // 2026-03-08 is 23 hours long in America/New_York; the date after it is still 2026-03-09.
     expect(addDays(d("2026-03-08"), 1)).toBe("2026-03-09");
     expect(addDays(d("2026-11-01"), 1)).toBe("2026-11-02");
   });

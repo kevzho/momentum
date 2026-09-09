@@ -304,6 +304,9 @@ invalidate another (completing a task from Today invalidates Calendar and Tasks)
 `revalidateTag` in v1 because nothing is cached with tags (§5).
 
 **Route handlers** (`app/**/route.ts`) exist only for non-RSC consumers: `auth/callback`
+(Supabase code exchange), `version` (the build stamp the service worker polls), `api/export` (a
+browser download of the user's rows; its data access lives in `features/export/queries.ts` and
+returns raw `Row<T>`s on purpose), and historically
 (Supabase code exchange), future webhooks, and Phase 12's service-worker offline JSON.
 Never for the app's own UI mutations.
 
@@ -324,6 +327,7 @@ home:
 | Navigational state (week, view, filters)  | URL search params (`?week=2026-09-07&view=week`)           |
 | Per-session UI state (sort, expanded)     | React state; `sessionStorage` where the spec says "persists within a session" |
 | Persisted preferences (theme, sidebar)    | `next-themes` `localStorage`; sidebar in a cookie the server reads (log entry 2026-09-06) |
+| Focus-end notification (on/off)           | `localStorage` `momentum.notifications.focusEnd` via `useSyncExternalStore` in `lib/notifications/focus-notification.ts` (server snapshot: unsupported, off). Per device because the browser permission is per device; no profile column |
 | Profile settings (tz, week start, snap)   | `UserSettingsProvider` context seeded by the server        |
 | Active focus session                      | `FocusSessionProvider` context seeded by the server, ticks locally |
 | Command registry (Phase 11)               | module-level registry + context                            |
@@ -654,7 +658,7 @@ leaves the ledger tables writable by policy, which a direct PostgREST call could
 | Unit         | Vitest (node)                        | `@momentum/core`: time, geometry, recurrence, scheduling, parser, gamification math, analytics aggregation; `@momentum/db` mappers | `pnpm test`                |
 | Component    | Vitest (jsdom) + Testing Library     | `@momentum/ui` primitives' behaviour (keyboard, aria), feature islands' keyboard paths | `pnpm test`                |
 | Integration  | Vitest project `db` against local Supabase | repositories, database functions, **RLS cross-user proofs**, XP idempotency and caps | `MOMENTUM_DB_TESTS=1 pnpm test` |
-| E2E          | Playwright (`e2e/*.spec.ts`, system Chrome via `channel: "chrome"`, `reuseExistingServer`; a `mobile` project emulates an iPhone 13 in Chromium for `@mobile` specs) | the 18 audit workflows (Phase 13), signed in as the seed accounts against the local stack | `pnpm test:e2e`            |
+| E2E          | Playwright (`e2e/*.spec.ts`, system Chrome via `channel: "chrome"`, `reuseExistingServer`; a `mobile` project emulates an iPhone 13 in Chromium for `@mobile` specs; `e2e/fixtures.ts` exports `mail` — the Mailpit API: list, read, clear, `waitForMessage` — `linkTo` and `signInAs`) | the 18 audit workflows (Phase 13), password recovery and sign-up with email in the loop, signed in as the seed accounts against the local stack | `pnpm test:e2e`            |
 | Static       | `tsc`, ESLint, Prettier              | types, architecture boundaries, formatting                            | `pnpm typecheck` `pnpm lint` |
 
 **Commands (root).** `pnpm dev` · `pnpm build` · `pnpm typecheck` (root config, then
@@ -831,6 +835,17 @@ Phase 13").
   `docs/DESIGN_SYSTEM.md` › Sizes.
 - **Auth recovery** uses a `token_hash` email template (`supabase/templates/recovery.html`)
   so the link is not bound to the requesting browser's PKCE cookie.
+- **Projects are non-optimistic.** Their rows are read by the `(app)` layout, so every project
+  action `refresh()`es and the sidebar, Quick Add's picker and the palette index update together;
+  the actions still take the full failure path (transition, `unstable_rethrow`, report,
+  `unavailable`; inline error with Retry inside `ProjectDialog`, toast with Retry outside). The
+  palette's "New project" follows the habits pattern: an intent in the URL (`/tasks?new=project`)
+  honoured once by the page.
+- **One browser notification.** `useFocusTimer` exposes `onPlannedTimeElapsed` (once per session,
+  on the reading where the countdown crosses zero); the focus view shows it on the ring when the
+  page is visible and calls `notifyFocusEnded` when it is hidden. `lib/notifications` is the
+  function a future platform capabilities layer wraps, not replaces. The top bar has no bell: a
+  control that does nothing is not rendered.
 - **/focus reads its URL** through `features/focus/search-params.ts`, keyed as the launchers
   write it (`task`, `minutes`).
 

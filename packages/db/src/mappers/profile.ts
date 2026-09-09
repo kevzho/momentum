@@ -12,12 +12,7 @@ import {
 import type { Json, Row, UpdateRow } from "../types";
 import { isJsonArray, isJsonObject, oneOf, toInstant } from "./scalars";
 
-/**
- * `working_hours` and `focus_windows` are jsonb: the column constrains them to
- * an object and an array, and nothing more. These readers are the boundary
- * where a loosely typed column becomes a domain value — total functions that
- * drop anything malformed rather than letting it reach the scheduler.
- */
+/** `working_hours` and `focus_windows` are loosely typed jsonb; malformed entries are dropped, never passed on. */
 
 const EMPTY_WORKING_HOURS: WorkingHours = {
   0: [],
@@ -35,7 +30,6 @@ function toTimeWindow(value: Json): TimeWindow | null {
   if (typeof start !== "string" || typeof end !== "string") return null;
   if (!isLocalTime(start) || !isLocalTime(end)) return null;
   const window = { start: localTime(start), end: localTime(end) };
-  // A window that does not move forward is not a window.
   return window.start < window.end ? window : null;
 }
 

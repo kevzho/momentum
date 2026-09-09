@@ -11,11 +11,6 @@ import {
   type CommandUsageMap,
 } from "@/features/palette/recents";
 
-/**
- * The ordering the spec asks for — "recent/frequent commands surface first" —
- * and the promise that it can never be the reason the palette fails to open.
- */
-
 const NOW = 1_780_000_000_000;
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;

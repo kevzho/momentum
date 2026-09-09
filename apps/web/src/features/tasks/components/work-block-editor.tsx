@@ -15,21 +15,8 @@ import { Label } from "@momentum/ui/components/label";
 import type { BlockSpan } from "@/features/tasks/optimistic";
 import type { TaskWorkBlock } from "@/features/tasks/types";
 
-/**
- * A task's work blocks — all of them — with add, remove and adjust.
- *
- * This is Domain Rule 2 made visible. The list is 0..n rows, it is headed by
- * the count, and adding a second block does not replace the first. The empty
- * state says so in words, because a user who has only ever seen one-slot
- * schedulers will not assume otherwise.
- *
- * Each row is a day and a time range: a block is time on the calendar, and the
- * calendar is the surface that owns dragging it. Editing here writes the same
- * row a drag on the grid would.
- *
- * Nothing on this panel touches the task's due date, and the due date is edited
- * in a different section with a different label (Domain Rule 1).
- */
+// Editing here writes the same row a drag on the calendar grid would. Nothing
+// on this panel touches the task's due date.
 export function WorkBlockEditor({
   blocks,
   today,
@@ -43,10 +30,7 @@ export function WorkBlockEditor({
   blocks: readonly TaskWorkBlock[];
   today: LocalDate;
   weekStart: Weekday;
-  /**
-   * The length a new block asks for: what is left of the estimate, or a
-   * sensible hour. It is bounded by the day the block lands on.
-   */
+  /** The length a new block asks for; bounded by the day it lands on. */
   defaultMinutes: Minutes;
   disabled: boolean;
   onAdd: (span: BlockSpan) => void;
@@ -89,13 +73,8 @@ export function WorkBlockEditor({
         </ul>
       )}
 
-      {/*
-        `aria-disabled` with a guard, never the native attribute: `disabled` is
-        the sheet's in-flight flag, which goes up *because* this button was
-        pressed, and the browser blurs a natively disabled element — dropping
-        the keyboard user who just added a block on `<body>` (Domain Rule 10;
-        the same pattern as the arrows in `subtask-list.tsx`).
-      */}
+      {/* `aria-disabled` plus a guard, never native `disabled`: the browser
+          would blur the button that was just pressed. */}
       <Button
         type="button"
         variant="outline"
@@ -104,28 +83,15 @@ export function WorkBlockEditor({
         className="self-start aria-disabled:opacity-50"
         onClick={() => {
           if (disabled) return;
-          /*
-           * A new block starts on the day after the last one, at the same time,
-           * so adding three blocks to a task is three clicks rather than three
-           * date pickers. The first goes on today at 09:00 — a placement the
-           * user is expected to adjust, not one the product is asserting is
-           * right.
-           */
+          // A new block starts the day after the last one at the same time;
+          // the first goes on today at 09:00.
           const last = blocks[blocks.length - 1];
-          // `addDays` from the time module, never arithmetic here: a date is a
-          // calendar date and month ends are not a component's business (Domain Rule 5).
           const date = last === undefined ? today : addDays(last.date, 1);
           const startMinutes = last === undefined ? 9 * 60 : last.startMinutes;
 
-          /*
-           * The block is bounded by its own day, which is what `clampSpan`
-           * does for every block a drag on the grid creates. An estimate with
-           * more left in it than the day has room for is the *first* of several
-           * blocks, not one impossible one — unclamped, a remaining estimate
-           * over ~39h builds an end past what `addWorkBlockInput` accepts, and
-           * the button would fail identically on every click because a rejected
-           * add never shrinks the remainder (Domain Rule 2).
-           */
+          // Bounded by its own day (as `clampSpan` does on the grid): unclamped,
+          // a large remaining estimate would exceed what `addWorkBlockInput`
+          // accepts and fail identically on every click.
           const minutes = Math.max(
             MIN_BLOCK_MINUTES,
             Math.min(defaultMinutes, 1440 - startMinutes),
@@ -205,11 +171,8 @@ function WorkBlockRow({
             onUpdate({
               date: block.date,
               startMinutes,
-              // The block keeps its **wall-clock** length when it is moved,
-              // which is what a drag on the grid does and what a user means by
-              // changing when something starts. `block.minutes` is the elapsed
-              // length and differs on a DST day; using it here would silently
-              // resize the block by an hour twice a year.
+              // Keep the wall-clock length, not `block.minutes`: the elapsed
+              // length differs on a DST day and would resize the block by an hour.
               endMinutes: startMinutes + (block.endMinutes - block.startMinutes),
             })
           }
@@ -233,18 +196,8 @@ function WorkBlockRow({
   );
 }
 
-/**
- * A wall-clock time as `HH:MM`.
- *
- * `<input type="time">` rather than a custom control: it is keyboard-operable,
- * localised and understood by assistive technology for free. The value it
- * carries is wall clock in the user's timezone — never an instant — and the
- * server converts it (Domain Rule 4).
- *
- * A block ending past midnight is shown modulo the day, because "00:30" is what
- * the clock says; the minutes-from-start-of-day arithmetic stays in the caller,
- * which is the only place that knows which day the block started on.
- */
+// Wall clock in the user's timezone, never an instant. A block ending past
+// midnight is shown modulo the day.
 function TimeField({
   id,
   label,
@@ -274,8 +227,7 @@ function TimeField({
         onChange={(event) => {
           const parsed = fromTimeValue(event.target.value);
           if (parsed === null) return;
-          // A block that already ran past midnight keeps doing so: the field
-          // edits the clock reading, not which day the block ends on.
+          // The field edits the clock reading, not which day the block ends on.
           onCommit(wraps ? parsed + 1440 : parsed);
         }}
       />

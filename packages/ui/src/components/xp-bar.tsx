@@ -1,25 +1,11 @@
 import * as React from "react";
 import { cn } from "cn";
 
-/**
- * The locale is pinned, for the reason `@momentum/core/time` pins its own
- * (packages/core/src/time/format.ts): this bar is server-rendered into the top
- * bar on every authenticated route, and a bare `toLocaleString()` would group
- * the digits by the visitor's locale on the client and by the Node process's
- * on the server — a hydration mismatch for anyone whose separator is not the
- * comma. Built once at module scope; constructing an `Intl` formatter is the
- * expensive part.
- */
+// Locale pinned: a bare `toLocaleString()` would differ between server and
+// client and cause a hydration mismatch.
 const XP_NUMBER = new Intl.NumberFormat("en-US");
 
-/**
- * Compact level + progress for the top bar. The game layer is present, never
- * dominant: a number and a bar, no hero banner and no celebration (Domain
- * Rule 7, docs/DESIGN_SYSTEM.md § Gamification restraint).
- *
- * Values are display-only. XP is computed by trusted server logic; the client
- * never asserts an amount (Core invariant).
- */
+/** Display-only: XP is computed server-side and the client never asserts an amount. */
 function XPBar({
   level,
   xpIntoLevel,

@@ -1,10 +1,6 @@
 import * as React from "react";
 
-/**
- * One titled section of the drawer: an uppercase label, then either its rows
- * or its compact empty state. A blank region is never an acceptable empty
- * state (docs/DESIGN_SYSTEM.md), so every section declares one.
- */
+/** One titled section of the drawer; every section declares an empty state. */
 export function PlanningSection({
   title,
   empty,

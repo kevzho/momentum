@@ -43,28 +43,12 @@ import {
 import { requireSession } from "@/lib/auth/session";
 
 /**
- * Every mutation the habits surface can make.
- *
- * The shape is the calendar's and the task manager's (docs/ARCHITECTURE.md §6):
- * validate with zod, take the session, call a repository, revalidate, return an
- * `ActionResult`. Nothing throws for a failure a user can cause.
- *
- * Two things are specific to this feature.
- *
- * **A completion is never a write to `habit_completions`.** The table is
- * client-read-only; `record_habit_completion` computes the date in the profile
- * timezone, holds the one-row-per-day invariant and awards the XP once
- * (Domain Rules 4, 6, 14, 15). The client sends a calendar date, not an
- * instant, and never an XP amount.
- *
- * **Nothing here removes anything the user has earned.** Archiving keeps every
- * completion and every point (Domain Rule 7). Un-recording a day deletes that
- * day's row and leaves its XP in the ledger, because the ledger is append-only.
+ * Habit mutations. A completion is never a direct write to `habit_completions`:
+ * the table is client-read-only, and `record_habit_completion` resolves the date
+ * in the profile timezone, keeps one row per day and awards XP once. Nothing
+ * here removes earned XP: archiving keeps completions, and un-recording a day
+ * leaves its XP in the append-only ledger.
  */
-
-/* -------------------------------------------------------------------------- */
-/* Habits                                                                     */
-/* -------------------------------------------------------------------------- */
 
 export async function createHabit(input: unknown): Promise<ActionResult<Habit>> {
   const parsed = createHabitInput.safeParse(input);
@@ -77,8 +61,8 @@ export async function createHabit(input: unknown): Promise<ActionResult<Habit>> 
     try {
       return await habits.insert(supabase, { id, userId, ...fields });
     } catch (error) {
-      // A retry after a lost response collides with itself on the primary key.
-      // That is the retry succeeding (Domain Rule 17).
+      // A retry after a lost response collides with itself on the primary key;
+      // that is the retry succeeding.
       if (!isCode(error, UNIQUE_VIOLATION)) throw error;
       const existing = await habits.findById(supabase, id);
       if (existing === null) throw error;
@@ -87,14 +71,7 @@ export async function createHabit(input: unknown): Promise<ActionResult<Habit>> 
   });
 }
 
-/**
- * The whole form in one write, so a save cannot half-apply.
- *
- * Changing a habit's target does not rewrite its history: the completions are
- * what happened, and re-scoring past days against a new rule would be a
- * retroactive judgement of days the user cannot go back and change
- * (Domain Rule 7).
- */
+/** The whole form in one write. Changing a target never rewrites past completions. */
 export async function updateHabit(input: unknown): Promise<ActionResult<Habit>> {
   const parsed = updateHabitInput.safeParse(input);
   if (!parsed.success) return validationError(parsed.error.issues);
@@ -117,11 +94,8 @@ export async function archiveHabit(input: unknown): Promise<ActionResult<Habit>>
 }
 
 /**
- * Deletes the habit, and by cascade its completions and its calendar blocks.
- *
- * The destructive route, offered beside archiving and never instead of it. The
- * XP those completions earned stays in the ledger, which has no foreign key on
- * `source_id` precisely so that it outlives what earned it.
+ * Deletes the habit and, by cascade, its completions and calendar blocks. Earned
+ * XP stays in the ledger, which has no foreign key on `source_id` for that reason.
  */
 export async function deleteHabit(input: unknown): Promise<ActionResult<{ id: Uuid }>> {
   const parsed = deleteHabitInput.safeParse(input);
@@ -136,19 +110,10 @@ export async function deleteHabit(input: unknown): Promise<ActionResult<{ id: Uu
   });
 }
 
-/* -------------------------------------------------------------------------- */
-/* Completions                                                                */
-/* -------------------------------------------------------------------------- */
-
 /**
- * Recording, or un-recording, one day.
- *
- * Both directions go through the trusted functions, and both are idempotent:
- * recording a boolean habit twice on one day is a no-op, and removing a day
- * that was never recorded returns null rather than failing. That is what makes
- * "exactly one completion" true no matter how many times the control is
- * pressed, or which surface pressed it — the calendar block and this row reach
- * the same database row (Domain Rule 14).
+ * Records or un-records one day. Both directions go through the trusted
+ * functions and are idempotent, so repeated presses from any surface reach the
+ * same row; removing an unrecorded day returns null.
  */
 export async function setHabitCompletion(
   input: unknown,
@@ -166,28 +131,10 @@ export async function setHabitCompletion(
   );
 }
 
-/* -------------------------------------------------------------------------- */
-/* Add to week                                                                */
-/* -------------------------------------------------------------------------- */
-
 /**
- * Reserves calendar time for a habit across one week.
- *
- * The plan is `planHabitWeek` in `@momentum/core/habits` — the same pure
- * function the tests cover — run against the blocks that already exist, so:
- *
- * - a per-day habit gets one block on each of its remaining scheduled days;
- * - `times_per_week` gets its target spread across the days still available,
- *   counting blocks already placed toward it;
- * - `amount_per_week` gets one session, because its target is a quantity and
- *   says nothing about how many sittings it takes;
- * - days already carrying a block for this habit are never planned again, so
- *   pressing the button twice tops the week up rather than doubling it.
- *
- * The wall-clock spans it returns are converted here, with the profile
- * timezone, by the same `spanInstants` rule the calendar's own actions use — a
- * habit block is an ordinary `calendar_blocks` row and is created the same way
- * a dragged task is (Domain Rule 4, docs/ARCHITECTURE.md §11).
+ * Reserves calendar time for a habit across one week via `planHabitWeek`,
+ * differenced against the blocks already placed, so a second press tops the
+ * week up rather than doubling it. Returns only the blocks created.
  */
 export async function addHabitToWeek(input: unknown): Promise<ActionResult<CalendarBlock[]>> {
   const parsed = addHabitToWeekInput.safeParse(input);
@@ -203,9 +150,7 @@ export async function addHabitToWeek(input: unknown): Promise<ActionResult<Calen
 
     const week = weekOf(weekStartDate, profile.weekStart);
     const days = week.days;
-    // The half-open instant window the week covers, resolved exactly as the
-    // calendar's own reads resolve it: `startOfDay` knows that the local days
-    // either side of a DST transition are 23 or 25 hours long.
+    // `startOfDay` handles the 23/25-hour local days either side of a DST transition.
     const window = {
       start: startOfDay(week.start, timezone),
       end: startOfDay(addDays(week.start, 7), timezone),
@@ -230,8 +175,7 @@ export async function addHabitToWeek(input: unknown): Promise<ActionResult<Calen
           userId,
           kind: "habit",
           habitId,
-          // No title: a habit block renders its habit's name, resolved at read
-          // time, so the two can never drift (docs/DOMAIN_RULES.md §19).
+          // No title: a habit block renders its habit's name at read time, so the two never drift.
           ...spanInstants(plan.date, plan.startMinutes, plan.endMinutes, timezone),
         }),
       );
@@ -240,14 +184,9 @@ export async function addHabitToWeek(input: unknown): Promise<ActionResult<Calen
   });
 }
 
-/* -------------------------------------------------------------------------- */
-/* Wall clock → instants                                                      */
-/* -------------------------------------------------------------------------- */
-
 /**
- * The same conversion `features/calendar/actions.ts` makes, and for the same
- * reason: the client is not allowed to assert an instant, and the DST
- * collisions have one resolution in this product, not one per caller.
+ * Same conversion as `features/calendar/actions.ts`: the client never asserts
+ * an instant, and DST collisions resolve one way product-wide.
  */
 function spanInstants(
   date: LocalDate,
@@ -261,10 +200,6 @@ function spanInstants(
     ? { startAt, endAt }
     : { startAt, endAt: addMinutes(startAt, endMinutes - startMinutes) };
 }
-
-/* -------------------------------------------------------------------------- */
-/* Failure                                                                    */
-/* -------------------------------------------------------------------------- */
 
 const UNIQUE_VIOLATION = "23505";
 
@@ -290,14 +225,7 @@ function isCode(error: unknown, code: string): boolean {
   return isDatabaseError(error) && error.code === code;
 }
 
-/**
- * The reads a habit mutation invalidates.
- *
- * `/calendar` and `/today` are not precautionary: "Add to week" writes rows the
- * week grid renders, deleting a habit takes its blocks with it, and completing
- * a habit changes how its block is drawn. A calendar still showing a block the
- * user just removed is the silent divergence Domain Rule 11 forbids.
- */
+/** `/calendar` and `/today` render habit blocks and their completion state, so both are invalidated. */
 function revalidateHabitSurfaces(): void {
   refresh();
   revalidatePath("/calendar");
@@ -315,13 +243,7 @@ async function attempt<T>(operation: () => Promise<T>): Promise<ActionResult<T>>
   }
 }
 
-/**
- * Messages for the constraints a habit interaction can actually trip.
- *
- * Each says what the rule is, in the product's own voice. None of them
- * characterises the user (Domain Rule 7) — a rejected form is a form, not a
- * verdict.
- */
+/** Messages for the constraints a habit interaction can trip; none characterises the user. */
 const CONSTRAINT_MESSAGES: Record<string, string> = {
   habits_name_chk: "A habit needs a name, and it can be at most 100 characters.",
   habits_target_positive_chk: "A target is at least 1.",
@@ -357,15 +279,13 @@ function describe(error: unknown): { code: ActionErrorCode; message: string } {
     case "23503":
       return { code: "not_found", message: "That habit no longer exists." };
     case UNIQUE_VIOLATION:
-      // `habit_completions_uniq` is the one-row-per-day rule (Domain Rule 14).
-      // The trusted function upserts, so reaching this means two writes raced;
-      // the row the user asked for exists either way.
+      // `habit_completions_uniq`: the trusted function upserts, so reaching this
+      // means two writes raced; the row exists either way.
       return { code: "conflict", message: "That day is already recorded." };
     case "23514":
       return { code: "validation", message: constraintMessage(error.message) };
     case "22023":
-      // The recording window and the "this is not a habit block" refusals both
-      // arrive here with a message written for a person to read.
+      // The recording-window and "not a habit block" refusals carry a user-readable message.
       return { code: "validation", message: error.message };
     default:
       return {

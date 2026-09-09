@@ -5,11 +5,9 @@ import * as React from "react";
 import { reportError } from "@/lib/report-error";
 
 /**
- * The last boundary. It replaces the whole document — `<html>` included — so the
- * stylesheet, the theme class and every provider are gone by the time it
- * renders. That is why this is the one file with inline literal colours: they
- * are the sRGB values of `--background`, `--foreground` and `--border` in the
- * light theme, and there is no token layer left to read them from.
+ * Replaces the whole document, `<html>` included, so no stylesheet or token
+ * layer is left. The literal colours are the light-theme sRGB values of
+ * `--background`, `--foreground` and `--border`.
  */
 export default function GlobalError({
   error,

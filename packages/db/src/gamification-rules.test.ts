@@ -17,25 +17,10 @@ import {
 import { QUEST_METRICS, QUEST_PERIODS } from "@momentum/core/types";
 
 /**
- * The Phase 8 migration, read as text.
- *
- * Two jobs, and they are the same two `focus-rules.test.ts` does for Phase 7.
- *
- * **The mirrors are pinned.** `@momentum/core/gamification` states the level
- * curve, the task award, the daily caps and the quest rotation so the interface
- * can show them without a round trip and so they can be tested exhaustively
- * without Docker. Two copies of a rule is the duplication `CLAUDE.md` forbids,
- * so every number here is compared with the one `xp_rule()` returns. Changing a
- * tunable is a migration *and* a one-line change in `core`, or this file goes
- * red.
- *
- * **The structure is asserted.** Some of what Phase 8 claims cannot be shown by
- * calling a function — that no granted function takes an amount, that every
- * ledger insert is guarded by the idempotency index, that nothing in the file
- * ever lowers a total. Those are statements about the *text*, so they are made
- * here. A database suite proves the behaviour when there is a database
- * (`packages/db/tests/gamification.test.ts`); this proves the shape on every
- * `pnpm test`.
+ * Reads the gamification migration as text: pins `@momentum/core/gamification`
+ * to the numbers `xp_rule()` returns, and asserts the structural guarantees
+ * (no granted function takes an amount, one guarded ledger insert, no total
+ * ever lowered). Changing a tunable is a migration *and* a change in `core`.
  */
 
 const MIGRATIONS = join(import.meta.dirname, "../../../supabase/migrations");
@@ -93,9 +78,6 @@ describe("xp_rule() and @momentum/core/gamification state the same numbers", () 
   });
 
   it("defers the focus cap to the focus tunable rather than restating it", () => {
-    // Two numbers that must agree and are written once. `xp_daily_cap` reads
-    // `xp_rule('focus_daily_cap')`, so the ledger's cap and the focus award's
-    // own arithmetic cannot drift apart.
     expect(statements()).toMatch(
       /when 'focus_session'\s+then public\.xp_rule\('focus_daily_cap'\)/,
     );
@@ -121,8 +103,7 @@ describe("the ledger is the only mint, and it mints once", () => {
     const assignments = sql.match(/set\s+xp\s*=\s*([^,\n]+)/g) ?? [];
     expect(assignments.length).toBeGreaterThan(0);
     for (const assignment of assignments) {
-      // `p.xp + new.amount` in the trigger, `v_total` in reconcile_xp. Nothing
-      // subtracts, and nothing takes a number from an argument (Domain Rule 7).
+      // `p.xp + new.amount` in the trigger, `v_total` in reconcile_xp.
       expect(assignment).toMatch(/p\.xp \+ new\.amount|v_total/);
     }
     expect(sql).not.toMatch(/set\s+xp\s*=\s*[^,\n]*-\s/);
@@ -131,9 +112,8 @@ describe("the ledger is the only mint, and it mints once", () => {
   });
 
   it("keys every award on something a delete cannot reset", () => {
-    // A weekly goal is the one claimable thing the user creates and can
-    // destroy, so its award is keyed on (user, week, metric) rather than on the
-    // row id — otherwise delete-and-recreate would mint a second one.
+    // A weekly goal can be deleted and recreated, so its award is keyed on
+    // (user, week, metric), not the row id.
     expect(sql).toContain(
       "public.weekly_goal_award_id(v_row.user_id, v_row.week_start, v_row.metric)",
     );
@@ -162,37 +142,25 @@ describe("no client path can submit an amount", () => {
     return new Set([...sql.matchAll(pattern)].map((match) => match[1] as string));
   }
 
-  /**
-   * The whole exposure matrix, not just this phase's part of it.
-   *
-   * The revoke above strips every function, so this file is now the single
-   * place the reachable surface is declared — twenty-three functions across
-   * five phases. A phase that adds one without adding it here leaves it
-   * unreachable, which is the safe direction to fail in.
-   */
+  /** The whole function surface reachable by a signed-in client; a function missing here is unreachable. */
   const SANCTIONED = [
-    // Phase 2 — the helpers the guard triggers call as the signed-in role.
     "is_trusted",
     "is_valid_timezone",
     "reject_guarded_write",
-    // Phase 3
     "complete_block",
     "uncomplete_block",
     "complete_task",
     "uncomplete_task",
-    // Phase 6
     "record_habit_completion",
     "remove_habit_completion",
     "complete_habit_block",
     "uncomplete_habit_block",
-    // Phase 7
     "start_focus_session",
     "pause_focus_session",
     "resume_focus_session",
     "mark_interruption",
     "finish_focus_session",
     "abandon_focus_session",
-    // Phase 8
     ...granted,
   ];
 
@@ -225,8 +193,6 @@ describe("no client path can submit an amount", () => {
   });
 
   it("opens the reconciliation helpers to the audit key only", () => {
-    // `service_role` is an operator's key, never a browser's: it already
-    // bypasses row-level security, so this adds no reach a client could use.
     expect(grantedTo("service_role")).toEqual(
       new Set(["reconcile_xp", "xp_for_level", "level_for_xp", "local_week_start"]),
     );
@@ -309,7 +275,6 @@ describe("the quest rotation is the same rule in both languages", () => {
 
   it("reads the account offset from the last four hex digits of the uuid", () => {
     expect(sql).toContain("right(replace(p_user_id::text, '-', ''), 4)");
-    // The TypeScript mirror reads the same four characters.
     expect(questRotationOffset("00000000-0000-0000-0000-00000000abcd")).toBe(0xabcd);
   });
 
@@ -340,9 +305,8 @@ describe("the achievement conditions and the text a user reads agree", () => {
   });
 
   it("runs the trigger as the owner, so the evaluator can stay ungranted", () => {
-    // A client inserts its own calendar blocks, so this trigger runs as
-    // `authenticated` on that path; without `security definer` it could not
-    // call `evaluate_achievements`, and block creation would fail outright.
+    // The trigger runs as `authenticated` on a client's block insert; without
+    // `security definer` it could not call the ungranted evaluator.
     const body = sql.slice(sql.indexOf("create function public.evaluate_achievements_touched"));
     expect(body.slice(0, 260)).toContain("security definer");
   });
@@ -357,10 +321,8 @@ describe("the achievement conditions and the text a user reads agree", () => {
       expect(sql).toContain(`${table}\n  referencing new table as inserted`);
     }
 
-    // Six triggers over four tables, and not by preference: Postgres refuses a
-    // transition table on a trigger with a column list *or* with more than one
-    // event, so `calendar_blocks` and `habit_completions` each need one for
-    // insert and one for update.
+    // Postgres refuses a transition table on a trigger with a column list or
+    // more than one event, so two tables need separate insert and update triggers.
     const statements =
       sql.match(/for each statement execute function public\.evaluate_achievements_touched/g) ?? [];
     expect(statements).toHaveLength(6);
@@ -368,9 +330,6 @@ describe("the achievement conditions and the text a user reads agree", () => {
   });
 
   it("narrows each evaluation to what that table could have made true", () => {
-    // The column lists the triggers cannot carry move inside the function, which
-    // narrows the work rather than merely the firing: a task update checks two
-    // conditions, and never the one that walks a habit's whole history.
     const body = sql.slice(sql.indexOf("create function public.evaluate_achievements_touched"));
     expect(body).toContain("when 'tasks'             then array['first_step', 'project_finisher']");
     expect(body).toContain("when 'habit_completions' then array['consistency']");
@@ -382,11 +341,8 @@ describe("the achievement conditions and the text a user reads agree", () => {
   });
 
   it("revokes the function surface by name rather than by default privileges", () => {
-    // The first live run of these migrations showed that
-    // `alter default privileges ... revoke execute` did not reach functions
-    // created afterwards: every one of them carried PUBLIC EXECUTE and was
-    // callable by any signed-in account, `award_xp` among them. A security
-    // boundary may not rest on that difference.
+    // `alter default privileges ... revoke execute` does not reach functions
+    // created afterwards; the security boundary may not rest on it.
     expect(sql).toMatch(/revoke execute on function %s from public, anon, authenticated/);
     for (const regranted of [
       "public.is_trusted()",
@@ -411,7 +367,6 @@ describe("the achievement conditions and the text a user reads agree", () => {
     ]) {
       expect(body).toContain(`when '${key}' then`);
     }
-    // An unknown key is not earned, rather than an error a trigger would raise.
     expect(body).toMatch(/else\s+return false;/);
   });
 });
@@ -434,9 +389,33 @@ describe("coins buy cosmetics only", () => {
   });
 
   it("has no path that sells anything but a cosmetic", () => {
-    // Nothing in this file grants time, capacity, XP or a quest skip for coins.
     const spends = sql.match(/coins = p\.coins - [^;\n]+/g) ?? [];
     expect(spends).toHaveLength(1);
     expect(spends[0]).toContain("v_def.price");
+  });
+});
+
+describe("the quest set a user holds stays visible across a timezone change", () => {
+  const VISIBILITY = join(MIGRATIONS, "20260909150000_quest_visibility.sql");
+  const sql = statements(VISIBILITY);
+  const body = sql.slice(sql.indexOf("create or replace function public.ensure_quest_assignments"));
+
+  it("replaces the function in place, keeping its security posture and its resolution rule", () => {
+    expect(body.slice(0, 200)).toContain("security definer");
+    expect(body.slice(0, 200)).toContain("set search_path = ''");
+    expect(body).toContain("(now() at time zone v_zone)::date");
+    expect(body).toContain("perform public.assign_quests(v_user, 'daily', v_today);");
+    expect(body).toContain("perform public.assign_quests(v_user, 'weekly', v_start);");
+  });
+
+  it("returns the assignments whose window contains now, in the zone each was assigned in", () => {
+    const returned = body.slice(body.indexOf("return query"));
+    expect(returned).toContain("coalesce(a.timezone, v_zone)");
+    expect(returned).toContain("@> now()");
+    expect(returned).not.toContain("a.period_start = v_today");
+  });
+
+  it("neither widens nor narrows the granted surface", () => {
+    expect(sql).not.toMatch(/grant execute|revoke execute/);
   });
 });

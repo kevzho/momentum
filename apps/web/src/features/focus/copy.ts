@@ -3,24 +3,9 @@ import { formatDuration } from "@momentum/core/time";
 import type { Minutes } from "@momentum/core/types";
 
 /**
- * Every word the focus surface says.
- *
- * One module, and tested, for two separate reasons.
- *
- * **Domain Rule 7.** A timer is the easiest place in a productivity product to
- * start scolding people. Nothing here calls a session that ended early a
- * failure, nothing warns the user about what they are about to lose, and the
- * status the database calls `abandoned` is never a word this product shows to
- * a person — it reads "Ended early", which is what happened.
- *
- * **No fabricated capabilities** (`specs/07-focus-mode.md`). Momentum is a web
- * application. It cannot block a website, silence a notification, close an app,
- * or know what the user is doing in another window. Copy that implies otherwise
- * would be a lie the product cannot make true, so `copy.test.ts` greps every
- * string here — and the source of every file in this feature — for the claims
- * this phase is specifically told not to make. The surface states what it
- * does ("records the time it actually took") and nothing more; it does not
- * carry a paragraph explaining what it will not do.
+ * Every user-facing string of the focus surface, in one tested module. Nothing
+ * here scolds (`abandoned` reads "Ended early"), and nothing claims a capability
+ * a web page lacks; `copy.test.ts` greps the strings and the feature's source.
  */
 
 export const FOCUS_COPY = {
@@ -49,7 +34,6 @@ export const FOCUS_COPY = {
   pausedHint: "Paused time is not counted toward the session.",
   ready: "Ready",
 
-  /* History. */
   todayLabel: "Today",
   weekLabel: "This week",
   focused: "Focused",
@@ -60,7 +44,6 @@ export const FOCUS_COPY = {
   noneToday: "No sessions recorded today.",
   noneYet: "No focus sessions yet. Start one above and Momentum will time it.",
 
-  /* Statuses, in the product's own voice. */
   statusCompleted: "Finished",
   statusEndedEarly: "Ended early",
   statusRunning: "Running",
@@ -69,10 +52,6 @@ export const FOCUS_COPY = {
   timerRegionLabel: "Focus session timer",
   historyRegionLabel: "Focus history",
 } as const;
-
-/* -------------------------------------------------------------------------- */
-/* Sentences built from numbers                                               */
-/* -------------------------------------------------------------------------- */
 
 /** "25 minutes, 5 minute break" · "45 minutes". */
 export function describePreset(focusMinutes: Minutes, breakMinutes: Minutes | null): string {
@@ -85,13 +64,7 @@ export function describeStart(minutes: Minutes): string {
   return `Start ${minutes} minutes`;
 }
 
-/**
- * What the timer is doing, for the ring's accessible name and the line under it.
- *
- * Assistive technology gets a sentence rather than a ticking number, because a
- * live region that announced every second would be unusable; the ring's value
- * carries the progress and this carries the meaning.
- */
+/** The ring's accessible name: a sentence, not a ticking number. */
 export function describeTimer(input: {
   plannedMinutes: Minutes;
   remainingSeconds: number;
@@ -114,15 +87,9 @@ export function describeElapsed(elapsedMinutes: Minutes, pausedMinutes: Minutes)
 }
 
 /**
- * "120 of 300 points from focus in the last 24 hours."
- *
- * The cap is a rolling 24-hour window in the ledger (docs/DOMAIN_RULES.md
- * §21), and the sentence says so rather than "today": the number it reports
- * is measured over that window, and a figure labelled with a day the database
- * does not use would read "0 of 300" on a morning when the ledger was still
- * refusing awards. It reads the cap from `@momentum/core/focus`, which
- * `packages/db/src/focus-rules.test.ts` pins to `xp_rule()`; it states the
- * amount already awarded and predicts nothing (Domain Rule 6).
+ * "120 of 300 points from focus in the last 24 hours." The ledger's cap is a
+ * rolling 24-hour window, so the sentence must say that rather than "today".
+ * States what was awarded; predicts nothing.
  */
 export function describeXpInCapWindow(awarded: number): string {
   return `${awarded} of ${FOCUS_XP.dailyCap} points from focus in the last 24 hours.`;

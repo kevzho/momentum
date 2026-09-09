@@ -4,7 +4,13 @@
 Every phase updates it before declaring completion. A fresh context reads
 `CLAUDE.md` → this file → the relevant spec, and knows exactly what to do.
 
-Last updated: 2026-09-09 (Phase 13 — final product-quality audit — **complete**. All 18
+Last updated: 2026-09-09, later the same day (post-audit fix pass — see "What exists after the
+post-audit fix pass": archived tasks are listable and restorable, projects can be created,
+renamed, recoloured and archived, the inert bell is gone and one real focus-end notification
+exists, quests stay visible across a timezone change, every user-owned table exports as JSON,
+and password recovery and sign-up are e2e-tested with email in the loop.)
+
+Earlier that day: (Phase 13 — final product-quality audit — **complete**. All 18
 workflows inspected in a real browser before any fix, 78 findings recorded (2 P0 · 30 P1 ·
 46 P2), every P0 and P1 fixed, 44 P2 fixed and 2 recorded; a Playwright suite now walks the
 18 workflows (`pnpm test:e2e`). Green on the integrated tree: typecheck, lint, 2861 tests
@@ -1384,6 +1390,50 @@ publishable key); `pnpm audit` is clean.
 
 ---
 
+## What exists after the post-audit fix pass (2026-09-09)
+
+Five lanes with disjoint ownership, run after Phase 13 closed, on the six things that stood
+between the audited build and daily personal use.
+
+- **Archived tasks are listable and restorable.** A seventh task view, `archived`
+  (`tasks.listArchivedFor`), an Archived tab with its count, an Unarchive control in the row
+  (Space on an archived row unarchives, never completes) and in the sheet's footer, where
+  Complete and Start focus are hidden for an archived task.
+- **Projects exist as a feature.** `features/projects/`: create (client-generated id,
+  duplicate insert on retry treated as success), rename and recolour, archive — from a
+  "New project" button in the sidebar's project header, a per-row "…" menu, and the palette's
+  "New project" command. Archiving asks first only when the project has open tasks, states
+  the count, and never touches the tasks; archived projects leave every list while blocks
+  keep the colour. Project mutations are the one non-optimistic family (their rows come from
+  the layout), with the full failure path.
+- **The bell is gone and one real notification exists.** When a running focus session's
+  planned time elapses while the page is hidden, the browser shows "Focus session finished"
+  (task title or length as the body, once per session, tag `momentum-focus`, click focuses
+  the window) — behind a per-device switch on /settings that requests permission on enable
+  and a disabled-with-reason state where the API is missing.
+- **Quests stay visible across a timezone change**
+  (`20260909150000_quest_visibility.sql`): `ensure_quest_assignments` now returns every
+  held assignment whose window, in the zone it was assigned in, contains `now()`. Proved by a
+  database test that moves the profile between Pacific/Kiritimati and Pacific/Pago_Pago (25
+  hours apart) and gets the same assignment ids with no new set.
+- **Export.** `GET /api/export` returns the signed-in user's rows from all fourteen
+  user-owned tables as one JSON attachment (`momentum-export-<local date>.json`), linked
+  from Settings › Data as a plain download link.
+- **Recovery and sign-up are e2e-tested with email in the loop.** `e2e/recovery.spec.ts`
+  resets a password from the emailed link, proves the link is single-use, signs in with the
+  new password and restores the old one even on failure; a second test opens the link in a
+  browser that never asked for it. `e2e/signup.spec.ts` creates an account and, with
+  confirmations on, confirms from the email before landing on Today.
+
+Gates on the integrated tree after the pass and the comment sweep: typecheck, lint, 2,915
+tests with the database cases enabled (2,553 unit/component, up from 2,500), the standalone
+db project 455/455, e2e 21/21 (recovery and sign-up with email in the loop, run once with
+confirmations on and once off), a cold build, and a client bundle with no secret pattern.
+The comment sweep that followed cut the TypeScript comment lines from 15,424 to 4,949 with
+every lane proving byte-identical code once comments are stripped.
+
+---
+
 ## What exists after Phase 13
 
 The phase was run as the spec asks: **inspect everything first, then fix.** Five inspection
@@ -1589,6 +1639,20 @@ the audit record.
 
 ## Current known issues
 
+- **Archived projects cannot be restored from the UI.** _(fix pass, open)_ An archived project
+  leaves every list; restoring it means clearing `archived_at` in the database. A task whose
+  project is archived shows no project name in its row and an empty Project select in the
+  sheet, while its blocks keep the project's colour on the calendar by design.
+- **The sign-up spec leaves one `e2e-<timestamp>@momentum.test` user per run.** _(fix pass)_
+  Clean up with `delete from auth.users where email like 'e2e-%@momentum.test'`, or reset.
+- **On the kong-less local stack the test harness needs `SUPABASE_URL`.** _(fix pass,
+  environment)_ `supabase status -o env` prints no `API_URL` without the CLI's kong, so run
+  the database suite as `SUPABASE_URL=http://127.0.0.1:54321 MOMENTUM_DB_TESTS=1 pnpm test`.
+  The hand-run gateway must also carry the network alias `supabase_kong_<project>` and serve
+  `/email/recovery.html` on :8088, or GoTrue falls back to its default PKCE recovery email.
+- **A one-minute focus session's notification reads "1 minutes".** _(fix pass, cosmetic)_
+  `describePreset` does not singularise; the Start button has the same wording.
+
 - **On this host the Supabase CLI's kong container hangs the Docker daemon.** _(Phase 13,
   environment, worked around)_ After `supabase stop`, every `supabase start` created the
   database, applied the migrations and seeded, then hung forever creating `supabase_kong_*`;
@@ -1607,7 +1671,7 @@ the audit record.
   `momentum13` with the gateway `momentum_gateway`; `config.toml` is back to `momentum`, so
   tear it down with `docker rm -f` on those five containers rather than `supabase stop`.
   On a host whose Docker is healthy none of this applies.
-- **Quests can vanish for up to a day after a timezone change** _(Phase 13, PROG-10,
+- ** _(RESOLVED in the post-audit fix pass: `20260909150000_quest_visibility.sql`)_Quests can vanish for up to a day after a timezone change** _(Phase 13, PROG-10,
   recorded)_ `ensure_quest_assignments` returns the set whose period contains "today" in
   the *new* zone, while the existing set (kept, correctly, by the anti-multiplication
   guard) is keyed to the old zone's window — so /today can read "No quests today" although a
@@ -1911,13 +1975,13 @@ the audit record.
   the exFAT volume this repo lives on — the same volume `next dev` already warns is a slow
   filesystem. Worth re-testing from a local-disk checkout before filing anything upstream;
   until then, `pnpm build` needs a cold cache here.
-- **Creating a project has no UI.** _(Phase 4)_ Projects are read everywhere — the
+- ** _(RESOLVED in the post-audit fix pass: features/projects — create, rename, recolour, archive from the sidebar, the row menu and the palette)_Creating a project has no UI.** _(Phase 4)_ Projects are read everywhere — the
   sidebar, Quick Add, the detail sheet, the bulk bar — and the seed supplies four, but
   nothing creates, renames or archives one. No spec owns the project manager; the sidebar's
   former "New project" button now opens Quick Add rather than pretending, and a task can
   always be filed later. Give it to whichever phase first needs a project the seed does not
   have.
-- **Archived tasks are written but never shown.** _(Phase 4)_ The detail sheet archives a
+- ** _(RESOLVED in the post-audit fix pass: the Archived view and Unarchive controls)_Archived tasks are written but never shown.** _(Phase 4)_ The detail sheet archives a
   task and `listFor` excludes archived rows, so archiving is currently one-way through the
   UI. `setArchived(client, id, false)` exists and is the whole of the un-archive path; it
   needs a view to be reachable from. Deleting is reversible only by re-creating.
@@ -1960,7 +2024,7 @@ the audit record.
 - **Build scripts ignored for `sharp` and `unrs-resolver`** (`pnpm-workspace.yaml`).
   Neither is needed in dev or build here. Allow `sharp` if self-hosting with `next/image`
   optimization.
-- **Notifications are inert.** The bell shows a tooltip saying there is nothing, so the
+- ** _(RESOLVED in the post-audit fix pass: the bell was removed; the focus-end browser notification is the product's one notification)_Notifications are inert.** The bell shows a tooltip saying there is nothing, so the
   shell is walkable without pretending the feature exists. _(Phase 2: sign-out is real.
   Phase 4: quick add is real and bound to `Q`; "New project" became "New task" and opens
   it. Phase 11: the top bar's Search button opens the real command palette, and its
@@ -2465,3 +2529,4 @@ One line per implementation session: date, phase, model/effort, outcome.
 | 2026-09-08 | 11    | Opus 5 / high    | Command palette, Quick Add parsing and the typed command registry. `@momentum/core/parser` added as a deterministic, clock-free module: metadata is a trailing run, a bare number is never a duration, a weekday is the *next* one, conflicts stop the scan instead of overwriting, and every non-whitespace character of the input is provably still in the title or in a chip — 57 tests under both process timezones. Chips make parsing refusable: removing one, or setting the control it was filling, returns its words to the title, so a field never has two owners. The palette is a list plus a registry — features declare commands in `features/<feature>/commands.ts`, navigation is derived from `lib/nav.ts`, and one deterministic fuzzy scorer ranks commands, tasks and projects together with recency breaking ties. ⌘K/Ctrl+K from every route, focus trapped and restored to the opener, results announced through the app's one live region, and creation commands that own no surface carry an intent the owning page honours once. The search index costs no query — it is narrowed from rows the shell already read. 2341 unit and component tests green (up from 2155); typecheck, lint and a cold production build green. **Rendered against the live database** for the seeded account with the palette's index verified on the wire; **not driven in a real browser** — the extension was not connected |
 | 2026-09-08 | 12    | Opus 5 / high    | PWA and installability, and the first phase since 3 to be **driven in a real browser** — Chrome 152 over the DevTools protocol, against production builds, because the extension was not connected. The manifest, six icons generated from one mark, a service worker, a self-contained offline page, an offline strip, safe areas and a theme-color that follows the chosen theme. Four defects, three of them found only by verifying: (1) the auth proxy answered `manifest.webmanifest` and `sw.js` with a 307 to `/login` for the credential-less fetches a browser makes, which alone made the app un-installable; (2) the four `useActionState` auth forms re-throw a rejected action into render, so signing in offline reached `global-error.tsx` — now `app/(auth)/error.tsx`; (3) `registration.update()` can never see a deploy, because `public/sw.js` is byte-identical across builds and a soft navigation fetches an RSC payload rather than a document, so a tab open across a deploy would have run the old bundle indefinitely — closed by `app/version/route.ts` and a poll; (4) the offline notice covered the top bar at 393px, caught in a screenshot, and is now a row in each frame rather than an overlay. Verified in the browser: zero manifest parse errors and an empty `Page.getInstallabilityErrors` (the API behind Lighthouse's installability audit); the worker activating with `momentum-{shell,static}-<build>` and **no HTML in any cache** after a controlled load; a navigation with the network cut serving the designed offline page in both themes; a tab left open while a second build was deployed under it being offered the new version, taking it, and ending with only the new caches; `theme-color` on both meta tags following a chosen dark theme under a light OS; and 59/34px iPhone insets landing as frame padding, `<main>` scroll padding and the offline page's own padding. 2385 unit and component tests green (up from 2341), 44 new, 16 of them evaluating the real `public/sw.js` in a fake `ServiceWorkerGlobalScope`; typecheck, lint and a cold production build green. **Not done**: an install on macOS or iOS Safari, and a Lighthouse run |
 | 2026-09-09 | 13    | Fable 5.1 / ultracode | Final product-quality audit. Inspect-then-fix, as the spec demands: five inspection lanes with disjoint ownership walked all 18 workflows in headless Chrome (system Chrome via `playwright-core`; the extension was not connected) as both seed accounts at 1280/375 in both themes, verifying persistence by reload and SQL and forcing every optimistic path to fail; 78 findings (2 P0 · 30 P1 · 46 P2) written into this file before any change. Six fix lanes (five features + the e2e harness) then fixed 76 and recorded 2. P0s: a task dragged from a *scrolled* Plan drawer persisted hours from the pointer (dnd-kit's scroll-adjusted `delta`), and quests could not be claimed at all (`z.uuid()` rejecting md5-derived ids). The P1s were mostly one defect nine times — focus dropped on `<body>` — plus touch targets, unreachable Retry under modals, lost validation messages, no delete confirmation, a four-zone timezone list, week planning missing below `lg`, focus launch ignoring `?task`, a rejected focus/quest call blanking the route, amount habits ticked as 1 unit, a recovery link bound to one browser, inert notification switches. Design audit fixed by removal. `pnpm test:e2e` now exists (18 specs, passed twice in its lane). Gates on the integrated tree: typecheck, lint, `MOMENTUM_DB_TESTS=1 pnpm test` 2861/2861 (the 361 RLS/anti-farm database cases included, fresh seed), `pnpm test:e2e` 18/18, cold build, no secret in the client bundle — the last two suites through a hand-run kong gateway after the CLI's kong container hung the Docker daemon four restarts in a row (known issue). |
+| 2026-09-09 | 13+   | Fable 5.1 / ultracode | Post-audit fix pass, after the first commit and push to `kevzho/momentum`. Five lanes: Archived task view + Unarchive; projects as a feature (create/rename/recolour/archive from sidebar, row menu, palette); bell removed and a real focus-end browser notification behind a per-device switch; `20260909150000_quest_visibility.sql` so quests survive a timezone change; `GET /api/export` + Settings › Data; recovery and sign-up e2e specs with Mailpit in the loop. Then a comment sweep over every TypeScript source. Gates: typecheck, lint, 2,915 tests with the database cases enabled (2,553 unit/component + the database suite, 455 in the standalone db project), e2e 21/21 with email in the loop (recovery proved in a fresh browser with confirmations both on and off), cold build, secret scan clean. |

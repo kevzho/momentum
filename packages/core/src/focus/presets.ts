@@ -1,13 +1,6 @@
 import type { Minutes } from "../types/scalars";
 
-/**
- * The session lengths `specs/07-focus-mode.md` names, plus custom.
- *
- * A preset is a *focus* length and a *break* length. Momentum schedules the
- * focus half and only names the break: nothing here starts a break timer,
- * because a break the product policed would be a capability the product does
- * not have, and a break nobody is timing is exactly what a break is.
- */
+/** A focus length and a break length. Only the focus half is timed; the break is only named. */
 export interface FocusPreset {
   /** Stable key, used in the URL and in the segmented control. */
   id: "25" | "50" | "90";
@@ -21,14 +14,7 @@ export const FOCUS_PRESETS: readonly FocusPreset[] = [
   { id: "90", focusMinutes: 90, breakMinutes: 20 },
 ];
 
-/**
- * The bounds a custom length has to sit inside.
- *
- * They are `focus_planned_chk`'s bounds, not a second opinion about them: a
- * length this module accepts is a length `focus_sessions` will store, so the
- * form cannot offer a number the database will refuse (the same reasoning as
- * the habit schemas mirroring their own constraints).
- */
+/** Must match `focus_planned_chk` on `focus_sessions`. */
 export const MIN_PLANNED_MINUTES: Minutes = 1;
 export const MAX_PLANNED_MINUTES: Minutes = 240;
 

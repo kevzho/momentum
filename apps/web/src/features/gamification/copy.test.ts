@@ -7,27 +7,19 @@ import { QUEST_METRICS } from "@momentum/core/types";
 
 import { METRIC_LABELS, PROGRESS_COPY, progressLabel } from "@/features/gamification/copy";
 
-/**
- * Domain Rule 7, made testable.
- *
- * The rule is about *language*, so it can only be enforced where the language
- * lives. Every string this surface can render is in `copy.ts`, and this file
- * reads all of them — and then reads the feature's own source as well, because
- * a sentence typed straight into a component is a sentence `copy.ts` cannot
- * see. That second half is the one that catches real drift.
- */
+// Reads every string in `copy.ts`, then the feature's own source, because a
+// sentence typed straight into a component is one `copy.ts` cannot see.
 
 const FORBIDDEN =
   /\b(lazy|failed?|failure|missed|behind|unproductive|bad|poor|broken|slacking|excuse|guilt|shame|streak lost|you lost|don't break|do not break|punish|penalt(y|ies)|lose|lost)\b/i;
 
-/** Celebration this product does not do (docs/DESIGN_SYSTEM.md § Gamification restraint). */
+/** Celebration this product does not do (docs/DESIGN_SYSTEM.md, gamification restraint). */
 const FORBIDDEN_CHROME = /\b(confetti|fireworks|combo|multiplier|health bar|damage|boss)\b/i;
 
 function strings(value: unknown, into: string[] = []): string[] {
   if (typeof value === "string") into.push(value);
   else if (typeof value === "function") {
-    // Every formatter in this module takes numbers or a string; call each with
-    // plausible arguments so its output is checked, not just its name.
+    // Call each formatter with plausible arguments so its output is checked.
     try {
       into.push(String((value as (...args: unknown[]) => unknown)(3, 5, "Tasks")));
     } catch {
@@ -77,10 +69,6 @@ describe("the progression vocabulary", () => {
     expect(PROGRESS_COPY.goals.emptyDescription).toMatch(/optional/i);
   });
 });
-
-/* -------------------------------------------------------------------------- */
-/* The same rule, applied to the source                                       */
-/* -------------------------------------------------------------------------- */
 
 const FEATURE = join(import.meta.dirname);
 

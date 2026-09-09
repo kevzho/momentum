@@ -19,13 +19,8 @@ const buttonVariants = cva(
           "bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40",
         link: "text-primary underline-offset-4 hover:underline",
       },
-      /*
-       * Touch targets. On a coarse pointer every size grows to the 40px floor
-       * (`pointer-coarse:`), so a phone gets a tappable control from the same
-       * markup a laptop renders at the design system's dense heights. The two
-       * `xs` sizes are used where 40px of box would not fit, so they keep their
-       * box and gain hit slop from a pseudo-element instead.
-       */
+      // On a coarse pointer every size grows to the 40px floor; the `xs` sizes
+      // keep their box and gain hit slop from a pseudo-element instead.
       size: {
         default:
           "h-8 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2 pointer-coarse:h-10 pointer-coarse:min-w-10",

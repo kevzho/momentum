@@ -16,20 +16,9 @@ import { TodaySection } from "@/features/today/components/today-section";
 import type { NextUp, TodayItem, TodayTask } from "@/features/today/types";
 
 /**
- * What should I do next — the most important component on the page, and the one
- * that must always have a sensible answer.
- *
- * Four states, all of them written out (`selectNextUp` in `agenda.ts` decides
- * which): the next scheduled item, including one already running; the soonest
- * deadline when the day holds nothing scheduled; a genuinely pleasant
- * everything-done state; and an open day. None of them is an error state and
- * none of them scolds (Domain Rule 7).
- *
- * Start focus is a **link**, never a button. A button would start a session,
- * and a session started by navigation would start again every time the page was
- * returned to — including by the back button. The timer is started by a press
- * on /focus, which is Phase 7's decision and the reason `?task=` and `?minutes=`
- * exist.
+ * The four Next Up states `selectNextUp` decides between. Start focus is a
+ * link, never a button: a session started by navigation would start again on
+ * every return, including the back button.
  */
 export function NextUpPanel({
   nextUp,
@@ -74,10 +63,6 @@ export function NextUpPanel({
     </TodaySection>
   );
 }
-
-/* -------------------------------------------------------------------------- */
-/* A scheduled block                                                          */
-/* -------------------------------------------------------------------------- */
 
 function BlockNextUp({
   nextUp,
@@ -141,8 +126,7 @@ function BlockNextUp({
           </Button>
         ) : null}
 
-        {/* A virtual occurrence has a row written for it by the override path,
-            so it can be moved; only an all-day item has no time to move. */}
+        {/* A virtual occurrence can be moved (the override path writes its row); only an all-day item cannot. */}
         {item.allDay ? null : (
           <Button variant="ghost" size="sm" onClick={() => onReschedule(entry)}>
             {TODAY_COPY.nextUp.reschedule}
@@ -152,10 +136,6 @@ function BlockNextUp({
     </>
   );
 }
-
-/* -------------------------------------------------------------------------- */
-/* Nothing scheduled — what is due soonest                                    */
-/* -------------------------------------------------------------------------- */
 
 function TaskNextUp({
   task,
@@ -212,17 +192,7 @@ function TaskNextUp({
   );
 }
 
-/* -------------------------------------------------------------------------- */
-/* Nothing left                                                               */
-/* -------------------------------------------------------------------------- */
-
-/**
- * The two states with nothing to start.
- *
- * They are deliberately different. Finishing a day's work is worth saying so;
- * an empty day is not an achievement and is not a reproach either — it is a
- * day with room in it, and the copy says that and offers the calendar.
- */
+/** The two states with nothing to start: a finished day, and an open one. */
 function ClearDay({ nextUp }: { nextUp: Extract<NextUp, { kind: "done" | "empty" }> }) {
   const done = nextUp.kind === "done";
   const Icon = done ? PartyPopperIcon : SunriseIcon;
@@ -254,17 +224,9 @@ function ClearDay({ nextUp }: { nextUp: Extract<NextUp, { kind: "done" | "empty"
   );
 }
 
-/* -------------------------------------------------------------------------- */
-/* The focus link                                                             */
-/* -------------------------------------------------------------------------- */
-
 /**
- * `/focus?task=&minutes=` — the two parameters Phase 7 shaped for exactly this.
- *
- * The length is the block's own, clamped to the bounds `focus_planned_chk`
- * enforces, so the page it opens is already set up and no value it carries can
- * be one the schema refuses. A block with no task still links: attributing a
- * session is optional, and the length is still worth carrying.
+ * `/focus?task=&minutes=`; the keys must match `features/focus/search-params.ts`.
+ * The length is clamped to `focus_planned_chk`'s bounds. A block with no task still links.
  */
 function focusHref(taskId: string | null, minutes: Minutes | null): Route {
   const params = new URLSearchParams();

@@ -27,14 +27,7 @@ interface Row {
   minutes: number;
 }
 
-/**
- * Chart 2 — where the recorded minutes went.
- *
- * Horizontal, because the labels are project names and a name is easier to read
- * along a row than rotated under a column. Each bar carries its project's own
- * hue, but the hue is decoration: the name sits against the bar, so the chart
- * is fully readable in greyscale (WCAG 1.4.1).
- */
+/** Horizontal: project names read better along a row. The name sits against the bar, so hue is decoration. */
 export function FocusByProjectChart({
   data,
   projects,

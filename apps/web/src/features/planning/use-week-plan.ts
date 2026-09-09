@@ -30,14 +30,7 @@ export interface WeekPlan {
   warnings: readonly PlanningWarning[];
 }
 
-/**
- * Everything the drawer renders, memoised over its props.
- *
- * Each step is a pure function of the one before it, so a change to `items`
- * — a drop, a resize, a rollback — recomputes exactly the commitments, the
- * capacity and the warnings, and a change to `now` (once a minute) recomputes
- * only the warnings, whose insufficient-time check counts from it.
- */
+/** Everything the drawer renders, memoised step by step so a `now` tick recomputes only the warnings. */
 export function useWeekPlan(props: PlanningDrawerProps): WeekPlan {
   const { plan, items, settings, days, today, now } = props;
 

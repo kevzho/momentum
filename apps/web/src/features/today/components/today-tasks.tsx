@@ -10,18 +10,7 @@ import { TODAY_COPY } from "@/features/today/copy";
 import { TodaySection } from "@/features/today/components/today-section";
 import type { TodayTask } from "@/features/today/types";
 
-/**
- * Tasks due today that have no time reserved anywhere.
- *
- * Deliberately narrow. A task due today that is already on the calendar is on
- * the timeline above, and a page that listed it in both places would be asking
- * the same question twice — which is the dashboard clutter the design system
- * names as a failure mode. What is left is the set the timeline cannot show:
- * work with a deadline today and no slot.
- *
- * Rows are the product's own `TaskRow`, so a task looks the same here as on
- * /tasks and is completed the same way.
- */
+/** Tasks due today with no time reserved anywhere; a scheduled one is on the timeline instead. */
 export function TodayTasks({
   tasks,
   pendingIds,

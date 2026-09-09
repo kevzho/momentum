@@ -2,12 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import { validationError } from "@/lib/actions/result";
 
-/**
- * A validation failure has to say what was wrong. Most surfaces show
- * `message` alone, so when zod's only complaint is about a field, that
- * complaint is the message — "check the highlighted fields" with nothing
- * highlighted is what a toast used to say about a 600-character title.
- */
+// Most surfaces show `message` alone, so when zod's only complaint is about a
+// field, that complaint is the message.
 describe("validationError", () => {
   it("uses the first field's message when nothing was said about the form as a whole", () => {
     const result = validationError([

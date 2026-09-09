@@ -9,20 +9,9 @@ import { DEFAULT_TASK_BLOCK_MINUTES } from "@/features/calendar/dnd";
 import type { DaySpan } from "@/features/calendar/types";
 
 /**
- * Keyboard navigation of the grid: the create cursor, and the roving tabindex
- * that keeps a week of blocks from being a week of tab stops.
- *
- * docs/ARCHITECTURE.md §9 gives empty space two keyboard equivalents — a
- * visible cursor moved with the arrows that Enter turns into a block, and
- * Shift+Down to extend it into a span. Both need somewhere to live that is not
- * a single column, because Left and Right cross columns, so the cursor is one
- * piece of state for the whole grid rather than seven.
- *
- * The roving tabindex is the second half of the same problem. Every block is
- * focusable, so without it Tab walks through sixty blocks before reaching the
- * page's next control. Instead the grid offers two tab stops — one column and
- * one block — and the arrow keys move within each group, which is the standard
- * composite-widget pattern and the one screen-reader users expect.
+ * Keyboard navigation of the grid: the create cursor (one piece of state for
+ * the whole grid, since Left/Right cross columns) and the roving tabindex
+ * (two tab stops — one column, one block — with arrows moving within each group).
  */
 
 /** Where the cursor lands when it first appears: 09:00, or the top of the grid. */
@@ -63,14 +52,7 @@ export interface GridCursorController {
 
 export const columnFocusId = (date: LocalDate): string => `column:${date}`;
 
-/**
- * The cursor's opening position on a day.
- *
- * 09:00 rather than the top of the grid: the grid starts at 05:00 by default
- * and a cursor that opens there has to be arrowed through four empty hours
- * before it reaches a time anyone schedules. `clampSpan` pulls it back inside
- * grids that start later or end earlier.
- */
+/** The cursor's opening position on a day; `clampSpan` keeps it inside the grid. */
 export function defaultCursorSpan(date: LocalDate, spec: GridSpec): DaySpan {
   const span = clampSpan(snap(DEFAULT_CURSOR_MINUTES, spec), DEFAULT_TASK_BLOCK_MINUTES, spec);
   return { date, startMinutes: span.start, endMinutes: span.end };
@@ -78,35 +60,24 @@ export function defaultCursorSpan(date: LocalDate, spec: GridSpec): DaySpan {
 
 export function useGridCursor(): GridCursorController {
   const [cursor, setCursor] = React.useState<DaySpan | null>(null);
-  /**
-   * The tab stop of each group. Held as state because `isTabStop` is read
-   * during render, and as one object so that claiming a stop for one group
-   * never disturbs the other.
-   */
+  // The tab stop of each group; state because `isTabStop` is read during render.
   const [tabStops, setTabStops] = React.useState<Record<GridFocusKind, string | null>>({
     column: null,
     block: null,
   });
 
-  // A ref, not state: registration happens in a layout effect for every column
-  // and every block on the week, and re-rendering the grid once per block as it
-  // mounts would be the performance problem specs/03 warns about.
+  // A ref, not state: every column and block registers in a layout effect, and
+  // re-rendering the grid once per mount would be a performance problem.
   const entries = React.useRef(new Map<string, GridFocusEntry>());
 
-  /**
-   * The item whose block should take focus back when it remounts.
-   *
-   * A block's React key is `${item.id}:${date}`, so moving one to another day
-   * unmounts it and mounts a different element — and the keyboard user who
-   * pressed Enter to commit the move is left on `<body>`, at the top of the
-   * page. The item id survives the move; the segment key does not.
-   */
+  // The item whose block should take focus back when it remounts: a block's
+  // key is `${item.id}:${date}`, so a move to another day unmounts it and
+  // would otherwise leave keyboard focus on `<body>`.
   const reclaiming = React.useRef<string | null>(null);
 
   const register = React.useCallback((entry: GridFocusEntry) => {
     entries.current.set(entry.id, entry);
-    // The first element of a group to mount claims its tab stop, so the grid is
-    // reachable before the user has focused anything.
+    // The first element of a group to mount claims its tab stop.
     setTabStops((current) =>
       current[entry.kind] === null ? { ...current, [entry.kind]: entry.id } : current,
     );
@@ -123,9 +94,9 @@ export function useGridCursor(): GridCursorController {
 
       if (wasFocused && entry.kind === "block") {
         reclaiming.current = itemIdOf(entry.id);
-        // If nothing remounts under that item id — the block was deleted, not
-        // moved — focus has to land somewhere real rather than on `<body>`.
-        // A timeout, because this runs before the replacing element mounts.
+        // If nothing remounts under that item id (deleted, not moved), focus
+        // must land somewhere real. A timeout, because this runs before the
+        // replacing element mounts.
         setTimeout(() => {
           if (reclaiming.current === null) return;
           reclaiming.current = null;
@@ -135,23 +106,9 @@ export function useGridCursor(): GridCursorController {
         }, 0);
       }
 
-      /*
-       * Release the stop, then repair it after the commit has settled.
-       *
-       * Releasing alone is not enough: `register` runs on mount, every
-       * surviving block is already mounted, and nothing re-claims — so
-       * deleting the block that happened to hold the stop took the whole
-       * group out of the tab order. Promoting a survivor *here* is not enough
-       * either, because several elements can unmount in one commit and the
-       * survivor picked during the first cleanup may be gone by the last,
-       * leaving the stop pointing at an id nothing renders — which looks
-       * exactly like having no stop at all.
-       *
-       * A microtask runs after every cleanup and every re-registration of the
-       * commit, so `entries` is settled and anything that remounted has
-       * already claimed a null stop. Only a group that is genuinely empty of a
-       * stop is repaired.
-       */
+      // Release the stop, then repair it in a microtask once the commit has
+      // settled: several elements can unmount in one commit, so a survivor
+      // promoted here may itself be gone by the last cleanup.
       setTabStops((current) =>
         current[entry.kind] === entry.id ? { ...current, [entry.kind]: null } : current,
       );
@@ -218,38 +175,27 @@ export function useGridCursor(): GridCursorController {
   };
 }
 
-/**
- * The item a segment belongs to. A segment key is `${item.id}:${date}` and an
- * item id may itself be `${seriesId}:${occurrenceDate}`, so the date is the
- * part after the *last* colon and everything before it is the item.
- */
+// A segment key is `${item.id}:${date}` and an item id may itself contain a
+// colon, so the date is the part after the last one.
 function itemIdOf(segmentKey: string): string {
   const cut = segmentKey.lastIndexOf(":");
   return cut === -1 ? segmentKey : segmentKey.slice(0, cut);
 }
-
-/* -------------------------------------------------------------------------- */
-/* Neighbour resolution — pure, so the ordering rules are testable             */
-/* -------------------------------------------------------------------------- */
 
 function ordered(all: ReadonlyMap<string, GridFocusEntry>, kind: GridFocusKind): GridFocusEntry[] {
   return [...all.values()].filter((entry) => entry.kind === kind).sort(byDateThenStart);
 }
 
 function byDateThenStart(a: GridFocusEntry, b: GridFocusEntry): number {
-  // `LocalDate` is `YYYY-MM-DD`, so lexical order is chronological order and no
-  // date arithmetic is needed to sort a week (Domain Rule 5).
+  // `LocalDate` is `YYYY-MM-DD`, so lexical order is chronological.
   if (a.date !== b.date) return a.date < b.date ? -1 : 1;
   if (a.startMinutes !== b.startMinutes) return a.startMinutes - b.startMinutes;
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 }
 
 /**
- * Up and Down walk the day the element is already on; Left and Right cross to
- * the nearest element in time on an adjacent day, so moving sideways out of a
- * 14:00 block lands near 14:00 rather than back at breakfast. A day with
- * nothing on it is skipped rather than swallowing the keystroke, which is what
- * makes Right usable on a week with two blocks on it.
+ * Up and Down walk the same day; Left and Right cross to the nearest element
+ * in time on an adjacent day, skipping empty days.
  */
 export function neighbourOf(
   from: GridFocusEntry,

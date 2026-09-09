@@ -10,15 +10,8 @@ import type { IanaTimeZone, Instant } from "@momentum/core/types";
 
 import type { AnalyticsPageData, AnalyticsProject } from "@/features/analytics/types";
 
-/**
- * Fixtures for the analytics component suite.
- *
- * They run the *real* aggregation — `summariseAnalytics`, over the same three
- * periods the page reads — rather than hand-writing a summary object. A
- * hand-written one would let a component test keep passing after the maths it
- * renders had changed shape, which is the only failure these tests exist to
- * catch.
- */
+// Runs the real aggregation rather than hand-writing a summary, so a
+// component test cannot keep passing after the maths changed shape.
 
 export const TZ: IanaTimeZone = ianaTimeZone("America/New_York");
 export const TODAY = localDate("2026-06-17");
@@ -76,7 +69,7 @@ export function busyRows(): Rows {
       { startedAt: at("2026-06-16", 9), actualMinutes: 50, projectId: "p1" },
       { startedAt: at("2026-06-16", 14), actualMinutes: 25, projectId: "p2" },
       { startedAt: at("2026-06-15", 10), actualMinutes: 90, projectId: "p1" },
-      // Inside 30 days but outside 7 — the range control has to move this one.
+      // Inside 30 days but outside 7.
       { startedAt: at("2026-06-02", 9), actualMinutes: 45, projectId: "p1" },
       // Inside 90 days but outside 30.
       { startedAt: at("2026-04-20", 9), actualMinutes: 120, projectId: "p2" },
@@ -139,10 +132,7 @@ export function busyRows(): Rows {
   };
 }
 
-/**
- * Enough scheduled work for the block-completion pattern to clear its threshold
- * — fifteen blocks, twelve of them marked done.
- */
+/** Enough scheduled work for the block-completion pattern to clear its threshold. */
 export function manyBlocks(): Rows {
   const blocks = Array.from({ length: 15 }, (_, index) => {
     const date = `2026-06-${String(index + 1).padStart(2, "0")}`;

@@ -50,23 +50,10 @@ import type {
 } from "@/features/calendar/types";
 
 /**
- * The pointer half of the calendar's interaction model (docs/ARCHITECTURE.md §9).
- *
- * The controller returned by `useCalendarDnd` is everything one `DndContext`
- * needs. It owns no geometry of its own: every pixel-to-minute question is
- * answered by `@momentum/core/calendar`, and the two functions at the top of
- * this file — `pointerYWithin` and `resolveCandidateSpan` — are the whole of
- * the maths, kept pure so the drop behaviour can be tested without a browser,
- * a layout engine or a rendered grid.
- *
- * Nothing here mutates. A drag publishes a *candidate* span that the grid draws
- * as a placeholder, and only `onDragEnd` calls a callback. That is what makes
- * Escape free (§9 step 4): there is no write to undo.
+ * The pointer half of the calendar's interaction model: everything one
+ * `DndContext` needs. Geometry comes from `@momentum/core/calendar`. Nothing
+ * here mutates; a drag publishes a candidate span and only `onDragEnd` calls a callback.
  */
-
-/* -------------------------------------------------------------------------- */
-/* The maths                                                                  */
-/* -------------------------------------------------------------------------- */
 
 /** Where the pointer is in the viewport, tracked for the length of a drag. */
 export interface PointerPosition {
@@ -75,24 +62,11 @@ export interface PointerPosition {
 }
 
 /**
- * The pointer's offset inside a day column.
- *
- * From the live pointer position when one is known: `over.rect` is dnd-kit's
- * `Rect`, whose `top` follows the column's own scroll container, so the
- * viewport position minus it is the column offset however far the grid has
- * scrolled since the drag began.
- *
- * The fallback — where the pointer started plus dnd-kit's `delta` — is only
- * right when the dragged element and the column share a scroll container.
- * `delta` is *scroll-adjusted* across the scrollable ancestors of whichever
- * node is currently over, so a task dragged out of the Plan panel's scroller
- * onto the grid's scroller carries the panel's scroll offset in `delta.y` and
- * lands that many pixels away from the pointer. That is why the controller
- * tracks the pointer itself and this only falls back to `delta` when it has
- * nothing better (an activation that carried no coordinates).
- *
- * Null when neither is available; the caller keeps the previous candidate
- * rather than inventing a position.
+ * The pointer's offset inside a day column, from the live pointer when known.
+ * The `delta` fallback is only right when the dragged element and the column
+ * share a scroll container: dnd-kit's `delta` is scroll-adjusted, so a task
+ * dragged out of the scrolled Plan panel would land off by that offset.
+ * Null when neither is available.
  */
 export function pointerYWithin(
   columnTop: number,
@@ -132,14 +106,8 @@ export interface CandidateInput {
 }
 
 /**
- * Where an in-flight drag would land.
- *
- * A move and a task drop are the same operation — place a known duration under
- * the pointer — and differ only in the grab offset, which is zero for a task
- * because the pointer never grabbed a rendered block. A resize is anchored: it
- * keeps the day it started on however far sideways the pointer wanders, because
- * its opposite edge is a fixed time on that day and letting the column change
- * would silently turn a resize into a move to another day.
+ * Where an in-flight drag would land. A resize keeps the day it started on
+ * however far sideways the pointer wanders.
  */
 export function resolveCandidateSpan({ drag, date, pointerY, spec }: CandidateInput): DaySpan {
   if (drag.type === "resize") {
@@ -161,7 +129,7 @@ export function resolveCandidateSpan({ drag, date, pointerY, spec }: CandidateIn
   return { date, startMinutes: span.start, endMinutes: span.end };
 }
 
-/** Keyboard move by minutes. Duration is preserved; `shiftSpan` does not re-snap (§9). */
+/** Keyboard move by minutes. Duration is preserved; `shiftSpan` does not re-snap. */
 export function moveSpanByMinutes(span: DaySpan, delta: Minutes, spec: GridSpec): DaySpan {
   const moved = shiftSpan({ start: span.startMinutes, end: span.endMinutes }, delta, spec);
   return { date: span.date, startMinutes: moved.start, endMinutes: moved.end };
@@ -172,14 +140,7 @@ export function moveSpanByDays(span: DaySpan, days: number): DaySpan {
   return { ...span, date: addDays(span.date, days) };
 }
 
-/**
- * Keyboard resize by minutes.
- *
- * The pointer path goes through `resolveResize`, which takes a pixel position;
- * a keystroke has none, so this is its minute-space equivalent and keeps the
- * same two rules: only the named edge moves, and the span never shrinks past
- * `minMinutes` or inverts.
- */
+/** Keyboard resize by minutes: only the named edge moves, and the span never shrinks past `minMinutes`. */
 export function resizeSpanByMinutes(
   span: DaySpan,
   edge: "start" | "end",
@@ -207,14 +168,7 @@ export function spanFromStart(
   return { date, startMinutes: span.start, endMinutes: span.end };
 }
 
-/**
- * The span between two snapped times, in either drag direction.
- *
- * Drag-to-create runs upward as readily as downward, so the anchor is whichever
- * end the pointer started at rather than the earlier one. A span never comes
- * out shorter than the floor: a 3px drag is a click, and a click creates a
- * block, not a zero-length one.
- */
+/** The span between two snapped times, in either drag direction, never shorter than the floor. */
 export function spanBetween(
   date: DaySpan["date"],
   anchorMinutes: Minutes,
@@ -247,10 +201,6 @@ export function originalSpanOf(drag: DragData): DaySpan | null {
 function clamp(value: number, low: number, high: number): number {
   return Math.min(Math.max(value, low), Math.max(low, high));
 }
-
-/* -------------------------------------------------------------------------- */
-/* The controller                                                             */
-/* -------------------------------------------------------------------------- */
 
 export interface ActiveDrag {
   data: DragData;
@@ -297,11 +247,8 @@ export function useCalendarDnd({
   const [candidate, setCandidate] = React.useState<CandidateSpan | null>(null);
   const [activeDrag, setActiveDrag] = React.useState<ActiveDrag | null>(null);
 
-  // The drag handlers and the announcement callbacks are memoised — dnd-kit
-  // rebuilds its listeners when they change — so they cannot close over
-  // render-scoped values. They read the week through this instead, refreshed
-  // after every commit and therefore always current by the time a pointer
-  // event can reach a handler.
+  // The handlers are memoised (dnd-kit rebuilds its listeners when they
+  // change), so they read render-scoped values through this ref.
   const latest = React.useRef({ settings, callbacks, items });
   React.useEffect(() => {
     latest.current = { settings, callbacks, items };
@@ -312,27 +259,16 @@ export function useCalendarDnd({
   const lastAnnounced = React.useRef({ at: 0, text: "" });
 
   const sensors = useSensors(
-    // A 4px threshold is what keeps a click a click: without it, pressing a
-    // block would start a drag and the "click a block to edit it" and "click
-    // empty space to create" criteria would both be unreachable by mouse.
+    // The distance threshold keeps a click a click.
     useSensor(MouseSensor, { activationConstraint: { distance: 4 } }),
-    // A finger is different: the same 4px would turn every scroll that begins
-    // on a block into a drag, and a block that cannot be scrolled past cannot
-    // be reached on a phone. So a touch drag is a press-and-hold — a swipe
-    // inside the hold's tolerance is left to the browser, which scrolls, and a
-    // hold past the delay picks the block up, after which the sensor cancels
-    // the browser's own touch handling for the rest of the drag. The block's
-    // `touch-manipulation` is what lets the browser scroll in the first case.
+    // Touch is press-and-hold, so a swipe that begins on a block still
+    // scrolls; the block's `touch-manipulation` is what lets the browser do that.
     useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } }),
   );
 
-  /*
-   * The pointer, followed for the length of a drag (see `pointerYWithin`). A
-   * capture listener on the window runs before dnd-kit's own document listener,
-   * so by the time a move reaches `onDragMove` the position is the one that
-   * move carried. Seeded from the activation so the first candidate does not
-   * wait for the first move.
-   */
+  // The pointer, followed for the length of a drag (see `pointerYWithin`). A
+  // capture listener runs before dnd-kit's own document listener, so
+  // `onDragMove` sees the position that move carried.
   const pointer = React.useRef<PointerPosition | null>(null);
   const stopTracking = React.useRef<(() => void) | null>(null);
   const trackPointer = React.useCallback((activatorEvent: Event | null) => {
@@ -364,9 +300,7 @@ export function useCalendarDnd({
       lastAnnounced.current = { at: 0, text: "" };
       trackPointer(event.activatorEvent);
       setActiveDrag({ data: drag, item });
-      // A block's own position is its first candidate, so the placeholder is
-      // already under it when the drag starts rather than appearing on the
-      // first move as a jump.
+      // A block's own position is its first candidate, so the placeholder does not jump in.
       publishCandidate(candidateOf(drag, originalSpanOf(drag)));
     },
     [publishCandidate, trackPointer],
@@ -375,9 +309,7 @@ export function useCalendarDnd({
   const onDragMove = React.useCallback(
     (event: DragMoveEvent) => {
       const next = candidateFromEvent(event, latest.current.settings.spec, pointer.current);
-      // Outside every column the last candidate stands: the placeholder should
-      // not blink out because the pointer crossed the gutter, and a drop out
-      // there is cancelled by `onDragEnd` anyway.
+      // Outside every column the last candidate stands; `onDragEnd` cancels a drop out there.
       if (next) publishCandidate(next);
     },
     [publishCandidate],
@@ -441,14 +373,9 @@ export function useCalendarDnd({
     [reset],
   );
 
-  /**
-   * dnd-kit's own live region carries the pointer drag lifecycle. The
-   * application's `Announcer` carries the keyboard modes and mutation results
-   * (see `announcements.ts`); one event is therefore never spoken twice.
-   *
-   * dnd-kit dispatches these after the matching prop handler, so `outcomeRef`
-   * and `candidateRef` are already current here.
-   */
+  // dnd-kit's live region carries the pointer lifecycle only (see
+  // `announcements.ts`). It dispatches these after the matching prop handler,
+  // so `outcomeRef` and `candidateRef` are already current.
   const announcements = React.useMemo<Announcements>(
     () => ({
       onDragStart({ active }) {
@@ -465,8 +392,7 @@ export function useCalendarDnd({
         lastAnnounced.current = { at: now, text };
         return text;
       },
-      // Position is already covered, at a rate a listener can follow, by
-      // `onDragMove`; announcing the column change as well would double it up.
+      // Position is already spoken by `onDragMove`.
       onDragOver: () => undefined,
       onDragEnd: () => outcomeMessage(outcomeRef.current),
       onDragCancel: () => outcomeMessage(outcomeRef.current),
@@ -550,18 +476,10 @@ function outcomeMessage(outcome: DragOutcome | null): string | undefined {
   }
 }
 
-/* -------------------------------------------------------------------------- */
-/* The interaction context                                                    */
-/* -------------------------------------------------------------------------- */
-
 /**
- * What the day columns and the blocks need from the board: somewhere to publish
- * a keyboard candidate so it renders through the same placeholder as a pointer
- * drag, and the shared grid cursor / roving focus.
- *
- * It is a context rather than props because the grid lane owns the tree between
- * the board and these components, and threading two more props through it would
- * couple the two lanes for no benefit.
+ * What day columns and blocks need from the board: a place to publish a
+ * keyboard candidate (rendered through the same placeholder as a pointer
+ * drag) and the shared grid cursor.
  */
 export interface CalendarInteraction {
   candidate: CandidateSpan | null;

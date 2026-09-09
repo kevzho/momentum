@@ -20,19 +20,9 @@ import {
 } from "@/features/today/fixtures";
 
 /**
- * The optimistic overlay.
- *
- * Every case here asks the same question: does the overlay predict what the
- * server will conclude? It patches facts and re-derives the rest, so the
- * assertions are about the derived values as much as about the patched ones —
- * a reducer that set `completedAt` but left the task's blocks unsettled would
- * pass a shallower test and diverge from the reconciled render.
- *
- * Nothing here tests a revert. There is none to test: on failure the transition
- * settles against unchanged props and React discards the overlay, which is what
- * makes Domain Rule 11 structural rather than promised. What the suite proves
- * instead is that every reducer is pure — the input page is never mutated — so
- * the props React falls back to are still the server's.
+ * Does the overlay predict what the server will conclude? Assertions cover the
+ * derived values as much as the patched ones, and every reducer is pure, since
+ * the input page is what React falls back to on failure.
  */
 
 const NOW = at("2026-09-08", 10, 30);
@@ -85,8 +75,7 @@ describe("block completion", () => {
     });
 
     expect(next.timeline[0]?.item.work?.taskCompletedAt).toBe(NOW);
-    // Domain Rule 13: the other block stays outstanding on the calendar, and is
-    // settled only in the sense that its task is done.
+    // The other block stays outstanding, settled only in the sense that its task is done.
     expect(next.timeline[1]?.item.completedAt).toBeNull();
     expect(next.timeline[1]?.item.work?.taskCompletedAt).toBe(NOW);
     expect(next.tasks[0]?.completedAt).toBe(NOW);
@@ -158,12 +147,8 @@ describe("task completion", () => {
     expect(next.candidates[1]?.completedAt).toBeNull();
   });
 
-  /**
-   * Domain Rule 13: completing a task from anywhere other than a block
-   * completes the task and leaves its blocks untouched. They settle, because a
-   * block whose task is done renders as settled — but nothing was executed and
-   * nothing says it was.
-   */
+  // Completing a task from anywhere other than a block leaves its blocks
+  // untouched: they settle, but nothing says they were executed.
   it("settles the task's blocks without claiming any of them ran", () => {
     const page = todayPage({
       timeline: timelineOf([workItem({ id: "a", taskId: "t1" })]),

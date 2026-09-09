@@ -1,19 +1,9 @@
 import type { LocalDate, Minutes, Uuid } from "@momentum/core/types";
 
 /**
- * The typed payloads that travel through dnd-kit, and the guards that read them
- * back out.
- *
- * dnd-kit's `active.data.current` is `Record<string, unknown> | undefined`, so
- * every consumer would otherwise cast. These guards are the one place that
- * happens: a payload either matches its shape or the drag is ignored, which is
- * the correct behaviour for a pointer event carrying something the calendar did
- * not put there.
- *
- * Three drag kinds, one droppable kind (docs/ARCHITECTURE.md §9). Droppables
- * are the day columns, not the time slots: seven nodes instead of five hundred,
- * and the time comes from the pointer's Y through the geometry in
- * `@momentum/core/calendar`.
+ * Typed dnd-kit payloads and the guards that read them back; a payload that
+ * does not match its shape is ignored. Droppables are day columns, not time
+ * slots: the time comes from the pointer's Y via `@momentum/core/calendar`.
  */
 
 /** An unscheduled task dragged out of the Plan panel onto the grid. */
@@ -76,10 +66,6 @@ export function taskDraggableId(taskId: Uuid): string {
   return `task:${taskId}`;
 }
 
-/* -------------------------------------------------------------------------- */
-/* Guards                                                                     */
-/* -------------------------------------------------------------------------- */
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
@@ -124,10 +110,5 @@ export function asDayDropData(value: unknown): DayDropData | null {
     : null;
 }
 
-/**
- * The length a task's block gets when it is dropped with no estimate.
- * specs/03-weekly-calendar.md fixes the estimate case ("`estimated_minutes`
- * determines the initial block length") and says nothing about its absence;
- * 30 minutes is one snap-friendly block that the user can immediately resize.
- */
+/** The length a task's block gets when it is dropped with no estimate. */
 export const DEFAULT_TASK_BLOCK_MINUTES: Minutes = 30;

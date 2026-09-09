@@ -14,29 +14,9 @@ import {
 } from "./support/harness";
 
 /**
- * The habits' trusted writes, proved against a real database.
- *
- * Four claims can only be made here, because they are claims about Postgres
- * rather than about TypeScript (docs/ARCHITECTURE.md §13):
- *
- * 1. `habit_completions_uniq` — one row per habit per user-local date — is a
- *    **constraint**, not a UI convention (Domain Rule 14). The suite writes the
- *    same day from both surfaces and counts rows.
- * 2. `completion_date` is a `date` computed in the *profile's* timezone, so a
- *    completion at 23:30 local belongs to that local day whatever UTC says
- *    (Domain Rule 4).
- * 3. XP is awarded once per completion, ever — including across a removal and a
- *    re-record, which is what the deterministic row id exists for
- *    (Domain Rule 6).
- * 4. Nothing is ever withdrawn: removing a completion leaves its XP, and
- *    archiving a habit leaves its whole history (Domain Rule 7).
- *
- * The suite skips itself cleanly without `MOMENTUM_DB_TESTS=1`, so `pnpm test`
- * stays green with no Docker. Run with:
- *   `MOMENTUM_DB_TESTS=1 pnpm test` against a freshly reset stack.
- *
- * Fixtures are created and torn down per test rather than borrowed from the
- * seed, which the RLS suite counts rows in.
+ * The habits' trusted writes, proved against a real database: one completion
+ * per habit per profile-local date, XP awarded once and never withdrawn.
+ * Run with `MOMENTUM_DB_TESTS=1 pnpm test`. Fixtures are per test.
  */
 
 const describeDb = DB_TESTS_ENABLED ? describe : describe.skip;
@@ -58,17 +38,8 @@ describeDb("habit completion", () => {
     ownerId = await userIdOf(owner);
     admin = adminClient();
 
-    /*
-     * A known day.
-     *
-     * Phase 8 caps what one local day can earn from habit completions, and the
-     * cap is a property of the *account* — every suite that records a habit
-     * completion for today contributes to it, and this one asserts that an
-     * award lands. Left alone, the file is green on a fresh database and red on
-     * the second run against the same one. Pruning today's habit ledger rows is
-     * the harness resetting the day it is about to make claims about; nothing
-     * the application can do deletes a ledger row.
-     */
+    // Today's habit cap is a property of the account and survives earlier
+    // runs; prune today's habit ledger rows so an award can land. Harness only.
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
     await admin
@@ -101,15 +72,8 @@ describeDb("habit completion", () => {
   });
 
   afterEach(async () => {
-    /*
-     * The ledger outlives its sources by design — `xp_events.source_id` has no
-     * foreign key — so deleting the habit does not delete the XP it earned, and
-     * a suite that runs sixteen completions for one account on one day would
-     * otherwise walk into the per-day habit cap Phase 8 added and stop earning
-     * part-way through. Removing the fixture's own ledger rows is the harness
-     * reaching past the product's front door to undo a fixture, exactly as
-     * `focus.test.ts` does, and not a path the application has.
-     */
+    // The ledger outlives its sources, so the fixture's own ledger rows are
+    // removed too or the suite walks into the per-day habit cap. Harness only.
     const { data: completions } = await admin
       .from("habit_completions")
       .select("id")
@@ -118,7 +82,6 @@ describeDb("habit completion", () => {
       await admin.from("xp_events").delete().eq("source_id", row.id);
     }
 
-    // Cascades take the completions and any blocks with it.
     await habits.remove(owner, habitId);
   });
 
@@ -142,17 +105,11 @@ describeDb("habit completion", () => {
     return data.length;
   }
 
-  /* ---------------------------------------------------------------------- */
-  /* One row per habit per local date                                       */
-  /* ---------------------------------------------------------------------- */
-
   it("records a day and stores it as a user-local calendar date", async () => {
     const row = await habits.recordCompletion(owner, habitId, today);
 
     expect(row.completionDate).toBe(today);
     expect(row.amount).toBe(1);
-    // A `date` column, never an instant: it round-trips as the day the user
-    // was living in, not as a UTC timestamp (Domain Rule 4).
     expect(row.completionDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 
@@ -169,9 +126,6 @@ describeDb("habit completion", () => {
   it("refuses a second row for the same habit and date, at the database", async () => {
     const row = await habits.recordCompletion(owner, habitId, today);
 
-    // The uniqueness is a constraint, not a UI check: writing round the
-    // function is refused by the grants, and writing round the grants is
-    // impossible for a client at all (Domain Rules 14, 15).
     const { error } = await owner.from("habit_completions").insert({
       habit_id: habitId,
       user_id: ownerId,
@@ -207,8 +161,6 @@ describeDb("habit completion", () => {
   });
 
   it("records the same row whether the day comes from the page or from a block", async () => {
-    // A habit block on today, completed from the calendar, then the same day
-    // recorded again from the habits page: one row, not two.
     const startAt = fromLocal(today, 9 * 60, timezone);
     const endAt = fromLocal(today, 10 * 60, timezone);
 
@@ -233,10 +185,6 @@ describeDb("habit completion", () => {
     expect(await completionRows()).toHaveLength(1);
   });
 
-  /* ---------------------------------------------------------------------- */
-  /* The recording window                                                   */
-  /* ---------------------------------------------------------------------- */
-
   it("accepts yesterday, today and tomorrow", async () => {
     const days = [-1, 0, 1].map((offset) => addDays(today, offset));
     for (const day of days) {
@@ -253,10 +201,6 @@ describeDb("habit completion", () => {
     });
   });
 
-  /* ---------------------------------------------------------------------- */
-  /* XP, once and never withdrawn                                           */
-  /* ---------------------------------------------------------------------- */
-
   it("awards a habit's XP exactly once per completion", async () => {
     const row = await habits.recordCompletion(owner, habitId, today);
     await habits.recordCompletion(owner, habitId, today);
@@ -265,9 +209,8 @@ describeDb("habit completion", () => {
   });
 
   it("does not mint a second award when a day is removed and recorded again", async () => {
-    // Domain Rule 6: XP is idempotent with respect to the triggering event. The
-    // completion's id is derived from (habit, date), so the re-record collides
-    // with its own earlier award instead of adding one.
+    // The completion's id is derived from (habit, date), so a re-record
+    // collides with its own earlier award.
     const first = await habits.recordCompletion(owner, habitId, today);
     await habits.removeCompletion(owner, habitId, today);
     const again = await habits.recordCompletion(owner, habitId, today);
@@ -281,7 +224,6 @@ describeDb("habit completion", () => {
     await habits.removeCompletion(owner, habitId, today);
 
     expect(await completionRows()).toHaveLength(0);
-    // Nothing is ever taken back (Domain Rule 7); the ledger is append-only.
     expect(await xpRowsFor(row.id)).toBe(1);
   });
 
@@ -289,10 +231,6 @@ describeDb("habit completion", () => {
     const removed = await habits.removeCompletion(owner, habitId, today);
     expect(removed).toBeNull();
   });
-
-  /* ---------------------------------------------------------------------- */
-  /* Blocks                                                                 */
-  /* ---------------------------------------------------------------------- */
 
   it("completing a habit block records exactly one completion and marks the span", async () => {
     const { data: block, error } = await owner
@@ -309,7 +247,6 @@ describeDb("habit completion", () => {
     if (error) throw error;
 
     await owner.rpc("complete_habit_block", { p_block_id: block.id });
-    // A retry that lost its response finishes the same job, twice over.
     await owner.rpc("complete_habit_block", { p_block_id: block.id });
 
     expect(await completionRows()).toHaveLength(1);
@@ -341,7 +278,6 @@ describeDb("habit completion", () => {
     await owner.rpc("complete_habit_block", { p_block_id: block.id });
     await owner.rpc("uncomplete_habit_block", { p_block_id: block.id });
 
-    // The day the user ticked themselves survives; only the block is reopened.
     expect(await completionRows()).toHaveLength(1);
     const { data: after } = await owner
       .from("calendar_blocks")
@@ -375,10 +311,6 @@ describeDb("habit completion", () => {
 
     if (task?.id) await owner.from("tasks").delete().eq("id", task.id);
   });
-
-  /* ---------------------------------------------------------------------- */
-  /* Ownership and archiving                                                */
-  /* ---------------------------------------------------------------------- */
 
   it("refuses to record a completion on another account's habit", async () => {
     await expect(habits.recordCompletion(neighbour, habitId, today)).rejects.toMatchObject({

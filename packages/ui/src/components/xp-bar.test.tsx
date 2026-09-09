@@ -20,12 +20,7 @@ describe("XPBar", () => {
     expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe("0");
   });
 
-  /**
-   * The bar is server-rendered into the top bar on every authenticated route,
-   * so the digits have to group identically on both sides of hydration. The
-   * spy is the load-bearing half of this: on a machine whose default locale is
-   * already en-US, a reverted `toLocaleString()` produces the same text.
-   */
+  // The spy is load-bearing: on an en-US machine a reverted `toLocaleString()` gives the same text.
   it("groups digits with a pinned locale, never the host's", () => {
     const toLocaleString = vi.spyOn(Number.prototype, "toLocaleString");
     render(<XPBar level={7} xpIntoLevel={1240} xpForNextLevel={2000} />);

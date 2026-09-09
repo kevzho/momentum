@@ -16,14 +16,6 @@ import {
 } from "@/features/calendar/projection";
 import type { CalendarItem } from "@/features/calendar/types";
 
-/**
- * The projection is where instants become grid coordinates, so it is where
- * Domain Rule 4 either holds or quietly fails. These tests are the integration
- * between `@momentum/core/time` (which knows about timezones) and
- * `@momentum/core/calendar` (which knows about pixels) — each of those is
- * exhaustively tested on its own; what is tested here is the join.
- */
-
 const NEW_YORK = ianaTimeZone("America/New_York");
 const AUCKLAND = ianaTimeZone("Pacific/Auckland");
 
@@ -93,13 +85,9 @@ describe("buildSegments", () => {
   });
 
   it("splits a block that crosses midnight across both columns", () => {
-    // 23:30 Tuesday to 00:30 Wednesday. Domain Rule 4: the first half is
-    // Tuesday's, however late it is, and the UI only makes that true because
-    // the projection says so.
+    // 23:30 Tuesday to 00:30 Wednesday.
     const block = item("2026-09-08", 23 * 60 + 30, 60, { title: "Night shift" });
-    // The window has to grow to 00:00 for the Wednesday tail to exist at all —
-    // `resolveGridSpec` and `buildSegments` are a pair, and this is the case
-    // that proves it.
+    // The window has to grow to 00:00 for the Wednesday tail to exist at all.
     const spec = resolveGridSpec([block], WEEK, NEW_YORK);
     expect(spec.dayStartMinutes).toBe(0);
     const byDate = buildSegments([block], WEEK, NEW_YORK, spec);
@@ -118,10 +106,7 @@ describe("buildSegments", () => {
   });
 
   it("keeps a midnight-crossing block sane on a spring-forward day", () => {
-    // 2026-03-08 in America/New_York is 23 hours long. The column still shows
-    // 24 wall-clock hours, so the first segment must run 23:30 → 24:00 and the
-    // second 00:00 → 00:30 — never an inverted span, which is what an elapsed
-    // day length would produce here.
+    // 2026-03-08 in America/New_York is 23 hours long; the column still shows 24 wall-clock hours.
     const march = [d("2026-03-08"), d("2026-03-09")];
     const block = item("2026-03-08", 23 * 60 + 30, 60);
     const byDate = buildSegments(
@@ -158,8 +143,7 @@ describe("buildSegments", () => {
   });
 
   it("resolves the day column in the profile timezone, not the host's", () => {
-    // 2026-09-09T09:00Z is 21:00 on the 9th in Auckland (UTC+12) — the same
-    // instant lands on a different column for a different profile.
+    // 21:00 on the 9th in Auckland (UTC+12) is 05:00 on the 9th in New York.
     const block = item("2026-09-09", 21 * 60, 30, {}, AUCKLAND);
     const inAuckland = buildSegments([block], WEEK, AUCKLAND, DEFAULT_GRID_SPEC);
     const inNewYork = buildSegments([block], WEEK, NEW_YORK, DEFAULT_GRID_SPEC);
@@ -184,8 +168,7 @@ describe("buildSegments", () => {
   });
 
   it("separates blocks that are only close, not overlapping, once rendered", () => {
-    // Two 5-minute blocks 10 minutes apart do not overlap in the data, but both
-    // render at the 15-minute floor and would be drawn on top of each other.
+    // Both render at the 15-minute floor, so they would otherwise be drawn on top of each other.
     const a = item("2026-09-09", 9 * 60, 5);
     const b = item("2026-09-09", 9 * 60 + 10, 5);
     const wednesday = buildSegments([a, b], WEEK, NEW_YORK, DEFAULT_GRID_SPEC).get("2026-09-09");
@@ -202,8 +185,6 @@ describe("buildSegments", () => {
   });
 
   it("drops a segment the given spec cannot show, which is why the spec is derived from the items", () => {
-    // Passing a window that predates the block is the mistake this pair exists
-    // to prevent; asserting it here keeps the coupling visible.
     const block = item("2026-09-08", 23 * 60 + 30, 60);
     const tooNarrow = buildSegments([block], WEEK, NEW_YORK, DEFAULT_GRID_SPEC);
 
@@ -232,8 +213,6 @@ describe("resolveGridSpec", () => {
   });
 
   it("grows down to the hour containing the earliest block", () => {
-    // 04:30 is before the 05:00 default. Clipping it would hide a real
-    // commitment, which is worse than a slightly taller grid.
     const spec = resolveGridSpec([item("2026-09-08", 4 * 60 + 30, 60)], WEEK, NEW_YORK);
 
     expect(spec.dayStartMinutes).toBe(4 * 60);
@@ -277,9 +256,6 @@ describe("initialScrollMinutes", () => {
   });
 
   it("is not dragged to midnight by the tail of an overnight block", () => {
-    // The block starts at 23:30; its 00:00 continuation the next morning is not
-    // something the user starts at midnight, and a week containing one should
-    // still open on the working day.
     const overnight = [item("2026-09-08", 23 * 60 + 30, 60)];
     const spec = resolveGridSpec(overnight, WEEK, NEW_YORK);
 
@@ -320,11 +296,7 @@ describe("spanOf and labels", () => {
   });
 
   it("counts a DST-spanning block in wall-clock minutes, not elapsed ones", () => {
-    // 01:00 to 05:00 on 2026-03-08 in New York is four hours on the clock and
-    // three hours of elapsed time. The editor and the undo path hand these
-    // minutes straight back to `fromLocal`, which reads them as wall clock, so
-    // an elapsed answer here would silently shorten the block by an hour every
-    // time one was saved.
+    // 01:00 to 05:00 on 2026-03-08 in New York is four hours on the clock and three elapsed.
     const springForward = item("2026-03-08", 60, 180);
     expect(springForward.startAt).toBe("2026-03-08T06:00:00.000Z");
     expect(springForward.endAt).toBe("2026-03-08T09:00:00.000Z");
@@ -334,8 +306,7 @@ describe("spanOf and labels", () => {
       endMinutes: 300,
     });
 
-    // And the mirror: 25 hours in the day, so four wall-clock hours are five
-    // elapsed ones.
+    // The mirror: four wall-clock hours are five elapsed ones.
     const fallBack = item("2026-11-01", 60, 300);
     expect(spanOf(fallBack, NEW_YORK)).toEqual({
       date: "2026-11-01",
@@ -345,8 +316,7 @@ describe("spanOf and labels", () => {
   });
 
   it("expresses a midnight-crossing span as minutes past the start day's midnight", () => {
-    // Deliberately not clamped to 1440: the editor edits one block, and a block
-    // that ends at 00:30 the next day is 1470 minutes past its own midnight.
+    // Deliberately not clamped to 1440.
     expect(spanOf(item("2026-09-08", 23 * 60 + 30, 60), NEW_YORK).endMinutes).toBe(1470);
   });
 

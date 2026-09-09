@@ -18,21 +18,12 @@ import { focusFirstAvailable, tabbableNeighbours } from "@/lib/use-opener-focus"
 
 /**
  * One task in the planning drawer: a dnd-kit drag source that is, first, a
- * button.
- *
- * Dragging is the accelerator. Activating the row (click, Enter, Space) or
- * pressing `F` opens Find Time; `S` opens the manual scheduling dialog. Those
- * are the keyboard routes Domain Rule 10 requires, which is why the keyboard
- * sensor's activator is deliberately not forwarded on Enter/Space: an
- * unscheduled task has no position on the board to move from, so a keyboard
- * drag would have nothing to say.
- *
- * The drag payload and the draggable id are unchanged from the Phase 3 panel,
- * so the grid's drop path keeps working without knowing the panel was
- * replaced.
+ * button. Activation or `F` opens Find Time; `S` opens the manual dialog.
+ * Enter/Space are not forwarded to the keyboard sensor: an unscheduled task
+ * has no board position to move from.
  */
 
-/** Priority is never colour alone: P1–P3 carry the flag glyph; P4 renders nothing, as `TaskRow` does. */
+// P4 renders nothing, as `TaskRow` does.
 const PRIORITY_TONE: Record<TaskPriority, string> = {
   1: "text-destructive",
   2: "text-warning",
@@ -59,10 +50,8 @@ export function PlanningTaskRow({
   onFindTime,
   onSchedule,
 }: PlanningTaskRowProps) {
-  // `satisfies` rather than a type annotation: dnd-kit types `data` as
-  // `Record<string, any>`, and an interface has no implicit index signature, so
-  // an annotated `TaskDragData` would not be assignable. The literal is still
-  // checked against the payload contract in `dnd.ts`.
+  // `satisfies`, not an annotation: dnd-kit types `data` as `Record<string, any>`
+  // and an interface has no implicit index signature.
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: taskDraggableId(task.id),
     data: {
@@ -83,14 +72,9 @@ export function PlanningTaskRow({
     [setNodeRef],
   );
 
-  /*
-   * Scheduling an UNSCHEDULED row removes it from the list in the same frame
-   * the block appears, and when that row is the focused one — it was just
-   * used from the keyboard — the browser would drop focus on `<body>`. Hand
-   * it to the next row instead (Domain Rule 10). A layout cleanup, because
-   * that is the last moment the node is still in the document and still
-   * focused; a passive one runs after both are gone.
-   */
+  // Scheduling removes the row in the same frame; hand focus to a neighbour
+  // instead of `<body>`. A layout cleanup, because a passive one runs after
+  // the node has left the document.
   React.useLayoutEffect(() => {
     const node = nodeRef.current;
     if (!node) return;
@@ -102,7 +86,7 @@ export function PlanningTaskRow({
   }, []);
 
   function handleKeyDown(event: React.KeyboardEvent<HTMLButtonElement>) {
-    // A modified key is the browser's (⌘F is find-in-page), never the row's.
+    // A modified key is the browser's (⌘F is find-in-page).
     const plain = !event.metaKey && !event.ctrlKey && !event.altKey;
     if (plain && (event.key === "f" || event.key === "F")) {
       event.preventDefault();
@@ -114,9 +98,7 @@ export function PlanningTaskRow({
       if (!pending) onSchedule(task);
       return;
     }
-    // Enter and Space activate the row as the button it is, and the click
-    // handler opens Find Time. Handing them to the keyboard sensor instead
-    // would start a drag that has no grid position to move.
+    // Enter and Space activate the button; the keyboard sensor must not start a drag.
     if (event.key === "Enter" || event.key === " ") return;
     listeners?.onKeyDown?.(event);
   }

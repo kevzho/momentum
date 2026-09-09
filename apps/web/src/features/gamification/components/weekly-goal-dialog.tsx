@@ -28,22 +28,10 @@ import { METRIC_LABELS, PROGRESS_COPY } from "@/features/gamification/copy";
 import { useOpenerFocus } from "@/lib/use-opener-focus";
 
 /**
- * Setting a weekly goal.
- *
- * The target field is bounded by the same number a *quest* on that metric is
- * bounded by, and the input says so before the server does — a goal that pushed
- * someone into an unhealthy week would be no better for having been self-set
- * (Domain Rule 7). The reward is flat and stated up front, so it is clear that
- * a bigger number buys nothing.
- *
- * The week is not a field. It is resolved from the profile when the action
- * runs, because a goal filed under a week the user is not in would be measured
- * against the wrong rows (Domain Rule 4).
- *
- * Opened from the "Set a goal" button rather than a `DialogTrigger`, so Radix
- * has nothing to return focus to on its own; `useOpenerFocus` sends it back to
- * that button on Escape, Cancel and "Set goal" alike, instead of dropping a
- * keyboard user on `<body>` (Domain Rule 10).
+ * The target is bounded by the same number a quest on that metric is, and the
+ * reward is flat. The week is not a field: it is resolved from the profile
+ * when the action runs. Opened from a button rather than a `DialogTrigger`,
+ * so `useOpenerFocus` sends focus back to it.
  */
 export interface WeeklyGoalDraft {
   metric: QuestMetric;
@@ -69,13 +57,9 @@ export function WeeklyGoalDialog({
   const [title, setTitle] = React.useState("");
   const openerFocus = useOpenerFocus(open);
 
-  /*
-   * Derived rather than synchronised. The schema allows one goal per metric per
-   * week, so `available` shrinks the moment a goal is created — and a metric
-   * held in state would then name a row that can no longer be made. Falling
-   * back during render keeps the two in step without an effect that corrects
-   * itself a frame later.
-   */
+  // Derived rather than synchronised: `available` shrinks the moment a goal is
+  // created, and a metric held in state would then name a row that can no
+  // longer be made.
   const metric: QuestMetric =
     chosen !== null && available.includes(chosen) ? chosen : (available[0] ?? "tasks_completed");
 

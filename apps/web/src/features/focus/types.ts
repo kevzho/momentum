@@ -12,33 +12,20 @@ import type {
   Uuid,
 } from "@momentum/core/types";
 
-/**
- * What `/focus` reads, resolved on the server.
- *
- * The client island renders this and nothing else: it fetches nothing, and the
- * only clock it reads is corrected against `serverNow` (Domain Rule 5).
- */
-
 /** A task the user can attribute a session to. */
 export interface FocusTaskOption {
   id: Uuid;
   title: string;
   priority: TaskPriority;
   estimatedMinutes: Minutes | null;
-  /** Measured so far, from earlier sessions (Domain Rule 3). */
+  /** Measured so far, from earlier sessions. */
   actualMinutes: Minutes;
   projectId: Uuid | null;
   projectName: string | null;
   projectColor: ProjectColor | null;
 }
 
-/**
- * The live session, with everything the timer needs to derive its own numbers.
- *
- * The pauses travel with it deliberately: remaining time is a function of the
- * start and the pause spans, so a payload carrying one without the other would
- * be a payload the client had to guess from.
- */
+/** The live session with its pauses: remaining time is a function of both. */
 export interface LiveFocusSession {
   session: FocusSession;
   pauses: FocusPause[];
@@ -55,12 +42,7 @@ export interface FocusSessionRow {
 }
 
 export interface FocusPageData {
-  /**
-   * The instant the server rendered at. The client measures its own clock
-   * against this once, and applies the difference to every reading afterwards
-   * — so a device whose clock is minutes out still shows the session the
-   * database is timing.
-   */
+  /** The instant the server rendered at; the client corrects its own clock against it once. */
   serverNow: Instant;
   timezone: IanaTimeZone;
   today: LocalDate;
@@ -76,10 +58,6 @@ export interface FocusPageData {
   requestedTaskId: Uuid | null;
   /** From `?minutes=`: the length a calendar block suggested. */
   requestedMinutes: Minutes | null;
-  /**
-   * Focus XP in the ledger over the cap's own window — the last 24 hours,
-   * rolling (docs/DOMAIN_RULES.md §21) — so the page can state the cap against
-   * the number the database is actually holding it to.
-   */
+  /** Focus XP awarded over the cap's own rolling 24-hour window. */
   focusXpInCapWindow: number;
 }

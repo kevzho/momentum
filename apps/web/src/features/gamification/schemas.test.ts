@@ -6,15 +6,8 @@ import {
   idInput,
 } from "@/features/gamification/schemas";
 
-/**
- * The ids the database mints are not RFC 9562 UUIDs.
- *
- * `quest_assignment_id()` is `md5(...)::uuid` (Domain Rules §20), so the
- * version nibble is whatever the hash produced. These are real ids from a
- * seeded database — the ones a Claim button actually sends — and none of them
- * has a `4` where a v4 UUID would; the first has version nibble `d`, variant
- * `3`. A schema that refused them refused every claim from the interface.
- */
+// Real ids from a seeded database: `quest_assignment_id()` is `md5(...)::uuid`,
+// so none has a `4` where a v4 UUID would (the first has version nibble `d`).
 const HASH_DERIVED_IDS = [
   "ad72fcea-d19a-d1b0-3a5e-0f7f5a1b2c3d",
   "0b8c2f61-7e0e-0f8a-1c34-9a0b1c2d3e4f",
@@ -22,7 +15,7 @@ const HASH_DERIVED_IDS = [
   "00000000-0000-0000-0000-000000000000",
 ];
 
-/** The ids a client mints with `crypto.randomUUID()` (Domain Rule 17). */
+/** The ids a client mints with `crypto.randomUUID()`. */
 const V4_ID = "9b2c5e4a-1f3d-4b8e-9c7a-2d6f8e1a3b5c";
 
 describe("idInput", () => {

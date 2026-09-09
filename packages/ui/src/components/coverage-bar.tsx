@@ -6,17 +6,8 @@ import { cn } from "cn";
 import type { Coverage } from "@momentum/core/tasks";
 
 /**
- * Scheduled versus estimated, as a bar.
- *
- * "The gap between estimate and scheduled time is the number that makes the
- * planner useful" (specs/04-task-manager.md), so the bar's job is to make the
- * gap visible rather than to celebrate the fill. Over-scheduling is drawn as
- * its own segment rather than by letting the bar run past its track: a task
- * with 90 minutes booked against a 60-minute estimate has over-committed the
- * week, and a full bar would say the opposite.
- *
- * The state is carried by more than colour: every bar has a label beside it,
- * and the accessible name states both numbers.
+ * Scheduled versus estimated. Over-scheduling is drawn as its own segment
+ * inside the track, never by letting the bar run past it.
  */
 const STATE_FILL: Record<Coverage["state"], string> = {
   unestimated: "bg-muted-foreground/40",
@@ -37,8 +28,6 @@ function CoverageBar({
   label: string;
 }) {
   const ratio = coverage.ratio ?? 0;
-  // The filled part never exceeds the track. What is over is drawn beside it,
-  // out of the same 100%, so the two together are still one bar.
   const filled = Math.min(1, ratio);
   const over = coverage.state === "over" ? Math.min(1, ratio - 1) : 0;
 

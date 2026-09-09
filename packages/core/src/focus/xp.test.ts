@@ -2,17 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import { FOCUS_XP, focusXpAward } from "./xp";
 
-/**
- * The anti-farming rules, exhaustively.
- *
- * `finish_focus_session()` is where these run for real; this suite pins the
- * rule itself, and `packages/db/src/focus-rules.test.ts` pins the SQL to the
- * same numbers, so a change to one without the other cannot ship.
- *
- * The property the whole set adds up to is the one the spec states: repeatedly
- * starting and abandoning trivial sessions must not be profitable.
- */
-
 function award(over: Partial<Parameters<typeof focusXpAward>[0]> = {}) {
   return focusXpAward({
     actualMinutes: 25,
@@ -29,7 +18,7 @@ describe("focusXpAward — the base rule", () => {
   });
 
   it("counts measured minutes, never the planned ones", () => {
-    // Planned 90, sat down for 12. The estimate earns nothing (Domain Rule 3).
+    // Planned 90, sat down for 12.
     expect(award({ actualMinutes: 12, plannedMinutes: 90 }).amount).toBe(12);
   });
 });
@@ -52,7 +41,6 @@ describe("focusXpAward — sub-minimum sessions earn nothing", () => {
   });
 
   it("gives a trivial session no bonus to rescue it", () => {
-    // Planned two minutes, ran two minutes: "completed", and still nothing.
     const result = award({ actualMinutes: 2, plannedMinutes: 2, taskPriority: 1 });
     expect(result.amount).toBe(0);
     expect(result.plannedBonus).toBe(0);
@@ -165,8 +153,6 @@ describe("focusXpAward — the per-day cap", () => {
   });
 
   it("records the time either way — a cap limits the reward, not the measurement", () => {
-    // Nothing in this module touches actual minutes; the assertion is that the
-    // award is the only thing the cap returns.
     const result = award({ actualMinutes: 200, focusXpAwardedToday: FOCUS_XP.dailyCap });
 
     expect(result.amount).toBe(0);

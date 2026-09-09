@@ -19,11 +19,7 @@ import type { ProjectSummaryWithCount } from "@/features/tasks/types";
 import { useSidebar } from "@/components/sidebar-context";
 import { SETTINGS_NAV } from "@/lib/nav";
 
-/**
- * Mobile navigation: the same registry as the desktop rail, in a drawer. The
- * trigger is the only navigation chrome a phone carries, which keeps the top
- * bar readable at 375px.
- */
+/** The same registry as the desktop rail, in a drawer. */
 export function MobileNav({ projects }: { projects: readonly ProjectSummaryWithCount[] }) {
   const { mobileOpen, setMobileOpen } = useSidebar();
   const close = () => setMobileOpen(false);
@@ -39,9 +35,8 @@ export function MobileNav({ projects }: { projects: readonly ProjectSummaryWithC
       <SheetContent
         side="left"
         className="max-w-(--sidebar-width) gap-0"
-        // Radix skips links when it picks what to focus first, which would land
-        // a screen-reader user on "New task" — a drawer that opens as
-        // navigation starts on its first destination instead.
+        // Radix skips links when it picks what to focus first, which would land a
+        // screen-reader user on "New task" instead of the first destination.
         onOpenAutoFocus={(event) => {
           const content = event.currentTarget;
           if (!(content instanceof HTMLElement)) return;

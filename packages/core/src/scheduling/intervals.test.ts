@@ -24,11 +24,6 @@ import {
 import type { Commitment } from "./types";
 
 /**
- * The interval arithmetic under the same fixture zones the time module uses
- * (docs/ARCHITECTURE.md §10). The suite runs twice, under `TZ=UTC` and
- * `TZ=America/Los_Angeles`, so a function that read the process timezone
- * would fail one of them.
- *
  *   America/New_York  2026-03-08 spring forward (02:00 -> 03:00)
  *                     2026-11-01 fall back      (02:00 -> 01:00)
  *   America/Santiago  2026-09-06 spring forward at midnight (no 00:00 that day)
@@ -187,7 +182,6 @@ describe("windows on a day", () => {
     const [fall] = windowIntervalsOn(d("2026-11-01"), [earlyWindow], NEW_YORK);
     expect(intervalMinutes(spring!)).toBe(120);
     expect(intervalMinutes(fall!)).toBe(240);
-    // The clock readings are what the user configured, on both days.
     expect(spring?.startMinutes).toBe(60);
     expect(spring?.endMinutes).toBe(240);
     expect(fall?.startMinutes).toBe(60);
@@ -195,8 +189,7 @@ describe("windows on a day", () => {
   });
 
   it("drops a window whose edges both fall inside a gap", () => {
-    // 02:00–03:00 does not happen on 2026-03-08 in New York; both edges
-    // resolve to the same instant, so there is no time to offer.
+    // 02:00–03:00 does not happen on 2026-03-08 in New York; both edges resolve to the same instant.
     expect(
       windowIntervalsOn(d("2026-03-08"), [{ start: t("02:00"), end: t("03:00") }], NEW_YORK),
     ).toEqual([]);
@@ -261,7 +254,7 @@ describe("occupiesTime (Domain Rule 13)", () => {
         }),
       ),
     ).toBe(false);
-    // But a block that was executed stays time that was spent.
+    // An executed block stays time that was spent.
     expect(
       occupiesTime(
         commitment({
@@ -338,8 +331,7 @@ describe("wall clock ↔ instants", () => {
   });
 
   it("keeps the drawn length for a slot straddling the far edge of a gap", () => {
-    // 02:30–03:00 on the spring-forward day: the start moves to 03:30 and the
-    // end stays at 03:00, so the length is the only meaning left.
+    // 02:30–03:00 on the spring-forward day: the start moves to 03:30 and the end stays at 03:00.
     const interval = intervalOfSlot(
       { date: d("2026-03-08"), startMinutes: 150, endMinutes: 180 },
       NEW_YORK,
@@ -353,29 +345,20 @@ describe("wall clock ↔ instants", () => {
     expect(snapInstantUp(at(MONDAY, 555), 15, NEW_YORK)).toBe(at(MONDAY, 555));
     expect(snapInstantUp(at(MONDAY, 1435), 15, NEW_YORK)).toBe(at(d("2026-09-08"), 0));
 
-    // 01:20 in the *second* pass of the fall-back hour: the first 01:30 is in
-    // the past, so the snap lands on the second one.
+    // 01:20 in the second pass of the fall-back hour: the first 01:30 is in the past.
     const secondPass = i("2026-11-01T06:20:00.000Z"); // 01:20 EST
     const snapped = snapInstantUp(secondPass, 15, NEW_YORK);
     expect(snapped).toBe("2026-11-01T06:30:00.000Z");
     expect(snapped >= secondPass).toBe(true);
   });
 
-  /**
-   * `now` comes from a millisecond clock, and a minute reading cannot see the
-   * seconds under it: 14:30:27.456 reads 870 minutes, which is on the
-   * 15-minute grid, while the instant itself is 27 seconds past the boundary.
-   * Handing it back would give Find Time a start no wall-clock span resolves
-   * to, and the candidate — with the whole free window that opened at `now` —
-   * would be dropped as unwritable.
-   */
+  // 14:30:27.456 reads 870 minutes, on the 15-minute grid, but is 27 seconds past the boundary.
   it("takes the next increment when the boundary minute is already under way", () => {
     expect(snapInstantUp(i("2026-09-07T18:30:27.456Z"), 15, NEW_YORK)).toBe(at(MONDAY, 885));
     expect(snapInstantUp(i("2026-09-07T18:30:00.003Z"), 15, NEW_YORK)).toBe(at(MONDAY, 885));
-    // The boundary itself, and a minute that is not one, are unaffected.
     expect(snapInstantUp(i("2026-09-07T18:30:00.000Z"), 15, NEW_YORK)).toBe(at(MONDAY, 870));
     expect(snapInstantUp(i("2026-09-07T18:31:00.000Z"), 15, NEW_YORK)).toBe(at(MONDAY, 885));
-    // 23:45:00.500 has no later boundary of its own day; the next is midnight.
+    // 23:45:00.500: the next boundary is midnight.
     expect(snapInstantUp(i("2026-09-08T03:45:00.500Z"), 15, NEW_YORK)).toBe(at(d("2026-09-08"), 0));
   });
 });

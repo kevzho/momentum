@@ -16,18 +16,8 @@ import {
 import { requireSession } from "@/lib/auth/session";
 
 /**
- * The settings page's one mutation.
- *
- * The shape every action shares (docs/ARCHITECTURE.md §6): validate with zod,
- * take the session, call a repository, `refresh()` on success, return an
- * `ActionResult`. The row is the caller's own profile — `userId` comes from
- * the verified session, never from the input — and row-level security is
- * what makes a crafted request against someone else's row match nothing.
- *
- * It returns the whole profile rather than the patch, because the stored
- * value can differ from what was sent: overlapping windows are merged by the
- * schema, and the page re-seeds its controls from the answer so what the user
- * sees is what was saved.
+ * Returns the whole profile rather than the patch: overlapping windows are
+ * merged by the schema, and the page re-seeds its controls from the answer.
  */
 export async function updateProfileSettings(input: unknown): Promise<ActionResult<Profile>> {
   const parsed = updateProfileSettingsInput.safeParse(input);
@@ -38,20 +28,8 @@ export async function updateProfileSettings(input: unknown): Promise<ActionResul
   return attempt(() => profiles.updateProfileSettings(supabase, userId, parsed.data));
 }
 
-/* -------------------------------------------------------------------------- */
-/* Failure                                                                    */
-/* -------------------------------------------------------------------------- */
-
-/**
- * Runs the mutation and turns anything it throws into an `ActionResult`.
- *
- * On success the current route is refreshed, and `/calendar` is revalidated
- * with it: working hours and focus windows are inputs to the planning
- * drawer's capacity and Find Time maths, and the timezone and week start
- * decide which column is which. Every `(app)` route is dynamic and reads the
- * profile per request, so nothing else holds a stale copy to invalidate
- * (docs/ARCHITECTURE.md §5).
- */
+// `/calendar` is revalidated too: working hours, focus windows, timezone and
+// week start all feed the planning drawer.
 async function attempt<T>(operation: () => Promise<T>): Promise<ActionResult<T>> {
   try {
     const data = await operation();
@@ -65,7 +43,6 @@ async function attempt<T>(operation: () => Promise<T>): Promise<ActionResult<T>>
   }
 }
 
-/** The fields of a PostgREST error this module reads. */
 interface DatabaseError {
   code: string;
   message: string;
@@ -82,12 +59,6 @@ function isDatabaseError(value: unknown): value is DatabaseError {
   );
 }
 
-/**
- * Messages for the constraints a settings write can trip. Each mirrors a rule
- * the schema already checks, so reaching one means the client sent something
- * the page should not have produced; the message states the rule rather than
- * repeating Postgres.
- */
 const CONSTRAINT_MESSAGES: Record<string, string> = {
   profiles_display_name_chk: "Display names are at most 80 characters.",
   profiles_week_start_chk: "Week start is a day of the week.",
@@ -96,28 +67,12 @@ const CONSTRAINT_MESSAGES: Record<string, string> = {
   profiles_focus_windows_chk: "Focus windows are a list of windows.",
 };
 
-/**
- * `validate_timezone()` raises `22023` with `invalid timezone: <name>`
- * (`supabase/migrations/20260906120000_enums_and_helpers.sql`). The name is
- * the useful part — it is what the user just chose — so it is lifted out and
- * put in a sentence rather than the trigger's wording being shown as-is.
- */
+// `validate_timezone()` raises `22023` with `invalid timezone: <name>`
+// (`supabase/migrations/20260906120000_enums_and_helpers.sql`).
 const INVALID_TIMEZONE = /^invalid timezone: (.*)$/;
 
-/**
- * Maps a thrown value onto the codes the UI branches on. The codes are
- * Postgres SQLSTATEs, which PostgREST passes through verbatim:
- *
- *   42501  the row is not the caller's, or a guard trigger refused a write
- *          to a guarded column
- *   PGRST116  `.single()` matched nothing — the profile is hidden or gone
- *   23514  a check constraint; the constraint name is in the message
- *   22023  an argument the database rejected: the timezone trigger
- *
- * Anything else — including a fetch that never reached the database — is
- * `unavailable`, and is not re-thrown: a settings page replaced by an error
- * boundary over one failed save is worse than a toast (Domain Rule 11).
- */
+// Postgres SQLSTATEs, passed through by PostgREST verbatim. Nothing is
+// re-thrown: an error boundary over one failed save is worse than a toast.
 function describe(error: unknown): { code: ActionErrorCode; message: string } {
   if (!isDatabaseError(error)) {
     return {

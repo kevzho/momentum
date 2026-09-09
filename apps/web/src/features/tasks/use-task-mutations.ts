@@ -31,24 +31,11 @@ import { useOptimisticAction } from "@/lib/actions/use-optimistic-action";
 import type { ActionError, ActionResult } from "@/lib/actions/result";
 import { useUserSettings } from "@/lib/time/user-settings";
 
-/**
- * Every task mutation, over one optimistic overlay.
- *
- * `useOptimisticAction` is the product's one optimistic mechanism
- * (docs/ARCHITECTURE.md §8) and its contract is one action per hook. The task
- * manager has thirteen mutations over one list, and thirteen `useOptimistic`
- * calls over the same array would each hold a different view of it — the list
- * can only render one. So this is the calendar's arrangement applied here: a
- * single hook whose `action` dispatches on the patch and whose `optimistic` is
- * the pure reducer in `optimistic.ts`.
- *
- * Rollback is still the mechanism's, not this file's: on failure the transition
- * settles against unchanged props and React discards the overlay. There is no
- * revert written anywhere in this feature, which is precisely why there is none
- * to get wrong (Domain Rule 11).
- */
+// One `useOptimisticAction` for every mutation: several `useOptimistic` calls
+// over the same list would each hold a different view of it. Rollback is the
+// mechanism's; no revert is written here.
 
-/** A patch and the call that persists it, dispatched together so they cannot diverge. */
+/** A patch and the call that persists it, dispatched together. */
 interface Mutation {
   patch: TaskPatch;
   run: () => Promise<ActionResult<unknown>>;
@@ -62,11 +49,8 @@ export interface TaskMutations {
   setCompletion: (id: Uuid, completed: boolean) => void;
   remove: (id: Uuid) => void;
   archive: (id: Uuid) => void;
-  /**
-   * Places `id` at `toIndex` of `ordered`. Answers whether a write was issued:
-   * a move that changes nothing writes nothing, and the caller must not
-   * announce a move that did not happen.
-   */
+  unarchive: (id: Uuid) => void;
+  /** Places `id` at `toIndex` of `ordered`. Returns whether a write was issued. */
   reorder: (id: Uuid, ordered: readonly Task[], toIndex: number) => boolean;
   bulkComplete: (ids: readonly Uuid[], completed: boolean) => void;
   bulkMove: (ids: readonly Uuid[], projectId: Uuid | null) => void;
@@ -87,23 +71,12 @@ export function useTaskMutations(serverState: TasksPageData): {
   state: TasksPageData;
   pending: boolean;
   pendingIds: ReadonlySet<Uuid>;
-  /**
-   * The most recent failure, until the next write is dispatched. The toast
-   * carries it too; this is for the surface that owns the rows — the detail
-   * sheet renders a validation message next to the fields it rolled back,
-   * where a toast behind a modal sheet cannot be read or reached.
-   */
+  /** The most recent failure, until the next write; for surfaces a toast cannot reach. */
   failure: TaskFailure | null;
   mutate: TaskMutations;
 } {
   const { timezone } = useUserSettings();
 
-  /*
-   * The ids of rows with a write in flight, for the "pending" affordance.
-   * Cleared when the transition settles — success or failure — because the row
-   * is either reconciled or rolled back, and either way it is no longer
-   * in flight.
-   */
   const [pendingIds, setPendingIds] = React.useState<ReadonlySet<Uuid>>(new Set());
   const [failure, setFailure] = React.useState<TaskFailure | null>(null);
 
@@ -176,16 +149,19 @@ export function useTaskMutations(serverState: TasksPageData): {
           run: () => deleteTask({ id }),
         }),
 
-      /*
-       * Archiving hides the task from every view, so the overlay removes it
-       * from the list — which is what `matchesView` will decide a moment later
-       * from the persisted row anyway.
-       */
+      // Archiving hides the task from every view, so the overlay removes it.
       archive: (id) =>
         dispatch({
           patch: { kind: "delete", ids: [id] },
           touched: [id],
           run: () => archiveTask({ id, archived: true }),
+        }),
+
+      unarchive: (id) =>
+        dispatch({
+          patch: { kind: "update", id, fields: { status: "open", archivedAt: null } },
+          touched: [id],
+          run: () => archiveTask({ id, archived: false }),
         }),
 
       reorder: (id, ordered, toIndex) => {
@@ -221,12 +197,7 @@ export function useTaskMutations(serverState: TasksPageData): {
           run: () => bulkDeleteTasks({ ids }),
         }),
 
-      /*
-       * A work block. The id is generated here so the optimistic block and the
-       * persisted row share a key and a retry collides with itself
-       * (Domain Rule 17). Adding a second block to a task does not replace the
-       * first — the whole point of Domain Rule 2.
-       */
+      // Id generated here so the optimistic block and the persisted row share a key.
       addBlock: (taskId, span) => {
         const id = crypto.randomUUID();
         dispatch({
@@ -258,9 +229,7 @@ export function useTaskMutations(serverState: TasksPageData): {
         const subtask: Task = {
           id,
           userId: parent?.userId ?? "",
-          // `enforce_subtask_depth()` rewrites this to the parent's on write;
-          // matching it here keeps the optimistic row and the persisted one the
-          // same shape.
+          // `enforce_subtask_depth()` rewrites this to the parent's on write.
           projectId: parent?.projectId ?? null,
           parentTaskId: parentId,
           title,
@@ -301,14 +270,8 @@ export function useTaskMutations(serverState: TasksPageData): {
   return { state, pending, pendingIds, failure, mutate };
 }
 
-/**
- * A `Partial<Task>` reduced to the fields `updateTaskInput` accepts.
- *
- * The sheet edits domain objects; the action takes a narrow patch. Filtering
- * here rather than at each call site means a future field added to `Task` — an
- * `actualMinutes` recomputed by a focus session, say — cannot accidentally be
- * sent to an action that would refuse it (Domain Rule 15).
- */
+// A `Partial<Task>` reduced to the fields `updateTaskInput` accepts, so a
+// guarded column can never be sent to an action that would refuse it.
 function serialisable(fields: Partial<Task>): Record<string, unknown> {
   const patch: Record<string, unknown> = {};
   if (fields.title !== undefined) patch.title = fields.title;
@@ -320,7 +283,7 @@ function serialisable(fields: Partial<Task>): Record<string, unknown> {
   return patch;
 }
 
-/** One step past the last sibling, so a new subtask lands at the bottom of its list. */
+// One step past the last sibling.
 function nextSortOrder(tasks: readonly Task[], parentId: Uuid): number {
   const siblings = tasks.filter((task) => task.parentTaskId === parentId);
   return siblings.reduce((max, task) => Math.max(max, task.sortOrder), 0) + 1;

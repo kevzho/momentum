@@ -6,13 +6,6 @@ import { localDate } from "@momentum/core/time";
 
 import { WarningsList } from "@/features/planning/components/warnings-list";
 
-/**
- * The list renders what the engine says, one row per warning, keyed by the
- * engine's own key. The wording is the engine's responsibility (and its
- * tests); this stubs both functions so the list can be tested before the
- * engine lands and independently of it afterwards.
- */
-
 vi.mock("@momentum/core/scheduling", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@momentum/core/scheduling")>();
   return {
@@ -78,7 +71,6 @@ describe("WarningsList", () => {
       const icon = row.querySelector("svg");
       expect(icon?.getAttribute("aria-hidden")).toBe("true");
     }
-    // Four kinds, four different glyphs.
     const glyphs = new Set(rows.map((row) => row.querySelector("svg")?.innerHTML));
     expect(glyphs.size).toBe(4);
   });

@@ -5,14 +5,7 @@ import { instant } from "@momentum/core/time";
 
 import type { ProgressBadge } from "@/features/gamification/types";
 
-/**
- * Celebration, and — mostly — the absence of it.
- *
- * specs/08-gamification.md is more specific about what must *not* happen than
- * about what must: no confetti for every checkbox, celebration reserved for a
- * level up, an achievement and a weekly goal, and never a queue of toasts. Each
- * of those is a case below.
- */
+// Mostly the absence of celebration: none for every checkbox, and never a queue of toasts.
 
 vi.mock("@momentum/ui/components/toast", () => ({
   toast: {
@@ -119,13 +112,8 @@ describe("ProgressProvider", () => {
     expect(toast.xp).not.toHaveBeenCalled();
   });
 
-  /*
-   * One live region, one announcement. `toast.xp` and `toast.celebrate` say
-   * nothing themselves and sonner's own region is switched off in the toast
-   * primitive, so this component is the only voice for an XP change — and it
-   * speaks through the `Announcer`, once, in the same region as everything
-   * else (docs/ARCHITECTURE.md §15).
-   */
+  // One live region, one announcement: `toast.xp` and `toast.celebrate` say
+  // nothing themselves and sonner's own region is off in the toast primitive.
   it("announces an XP change exactly once, through the Announcer", async () => {
     const { rerender } = render(
       <AnnouncerProvider>
@@ -148,8 +136,8 @@ describe("ProgressProvider", () => {
   });
 
   it("never announces a loss when a total somehow goes down", () => {
-    // Nothing in the product lowers XP (Domain Rule 7), and if a number ever
-    // arrived lower this must stay silent rather than invent a "-20 XP".
+    // Nothing in the product lowers XP; a lower number must stay silent rather
+    // than invent a "-20 XP".
     const { rerender } = render(<ProgressProvider badge={badgeOf()} />);
     rerender(<ProgressProvider badge={badgeOf({ xpTotal: 800, level: 4 })} />);
 

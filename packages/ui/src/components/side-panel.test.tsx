@@ -4,13 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { SidePanel } from "@momentum/ui/components/side-panel";
 
-/**
- * Domain Rule 10. The close button lives inside the panel it closes, so
- * pressing it removes the pressed element from the DOM. Nothing else restores
- * focus — this is not a modal and there is no Radix focus scope around it — so
- * the panel has to hand focus to the control that brings it back, or a
- * keyboard user lands on `<body>` and tabs from the top of the shell.
- */
+/** Not a modal: nothing but `returnFocusTo` keeps a keyboard user off `<body>` after the close button unmounts. */
 describe("SidePanel", () => {
   function Harness({ withReturnFocus }: { withReturnFocus: boolean }) {
     const toggle = React.useRef<HTMLButtonElement>(null);

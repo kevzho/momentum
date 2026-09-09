@@ -3,14 +3,7 @@ import { cn } from "@momentum/ui/lib/utils";
 
 import type { CalendarDay } from "@/features/calendar/types";
 
-/**
- * The row of day headers above the grid.
- *
- * Today is distinguished, not shouting (specs/03-weekly-calendar.md): a tinted
- * cell and a weighted date, both built from the accent pair so they survive
- * either theme, plus a word for anyone who cannot see either. The tint on the
- * column itself continues the same signal downward.
- */
+/** The row of day headers above the grid. */
 export function DayHeaderRow({
   days,
   gridClassName,
@@ -20,8 +13,8 @@ export function DayHeaderRow({
 }) {
   return (
     <div data-slot="day-header-row" className={cn(gridClassName, "border-b")}>
-      {/* The corner above the time gutter: empty, and sticky so a sideways
-          scroll never slides a day column under the hour labels. */}
+      {/* The corner above the time gutter; sticky so a sideways scroll never
+          slides a day column under the hour labels. */}
       <div className="sticky left-0 z-sticky border-r bg-background" />
 
       {days.map((day) => (

@@ -11,15 +11,6 @@ import {
 import type { CompletedTaskFact } from "./facts";
 import { periodContains, type AnalyticsPeriod } from "./period";
 
-/**
- * When tasks were completed: one series over the period's days, one over the
- * hours of the local clock.
- *
- * Both read `completedAt`, which is a timestamp the database stamped, and both
- * resolve it in the user's timezone rather than the server's — a task finished
- * at 23:40 belongs to the day the user finished it (Domain Rule 4).
- */
-
 /** Completed tasks inside the period, with a usable timestamp. */
 export function completedIn(
   tasks: readonly CompletedTaskFact[],
@@ -46,13 +37,7 @@ export function tasksCompletedByDay(
   );
 }
 
-/**
- * Chart 6: how completions fall across the hours of the local clock.
- *
- * Twenty-four buckets always, including the empty ones — an axis that showed
- * only the hours with data would make four scattered completions look like a
- * routine.
- */
+/** Chart 6: completions per local hour. Always twenty-four buckets, including empty ones. */
 export function tasksCompletedByHour(
   tasks: readonly CompletedTaskFact[],
   period: AnalyticsPeriod,

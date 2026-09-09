@@ -34,44 +34,24 @@ type OverCapacityWarning = Extract<PlanningWarning, { kind: "over-capacity" }>;
 type InsufficientTimeWarning = Extract<PlanningWarning, { kind: "insufficient-time" }>;
 
 /**
- * Conflict detection: the four warnings specs/05-week-planning.md names —
- * overlap, past deadline, over capacity, insufficient time
- * (docs/SCHEDULING.md "Capacity and conflicts").
- *
- * Every warning is information. Nothing here decides anything, blocks
- * anything or ranks anything; the user is allowed to double-book a morning
- * or plan twelve hours on a Tuesday, and the drawer's job is to make sure
- * that does not happen by accident. Accordingly the copy `describeWarning`
- * produces states a fact about the schedule — an amount, a date, a title —
- * and never a verdict about the person (Domain Rule 7).
- *
- * The list is deterministic: the same input gives the same warnings in the
- * same order, whatever order the commitments and tasks arrived in, so a row
- * keyed by `warningKey` never jumps as an optimistic block lands.
+ * Conflict detection (docs/SCHEDULING.md). Every warning is information;
+ * nothing blocks an action, and `describeWarning` states a fact about the
+ * schedule, never a verdict about the person (Domain Rule 7). The list is
+ * deterministic whatever order the inputs arrived in.
  */
 
 export interface ConflictInput {
   context: PlanningContext;
   commitments: readonly Commitment[];
   tasks: readonly PlanningTask[];
-  /**
-   * The current instant, for the insufficient-time check, which counts open
-   * working time from now to the deadline. Null (before hydration) counts from
-   * the start of today instead.
-   */
+  /** The current instant for the insufficient-time check. Null (before hydration) counts from the start of today. */
   now: Instant | null;
 }
 
-/* -------------------------------------------------------------------------- */
-/* Over-capacity tolerance                                                    */
-/* -------------------------------------------------------------------------- */
-
 /**
- * A day is over capacity when its planned minutes exceed its working minutes
- * by more than the tolerance — "substantially exceeds", in the spec's words.
- * A quarter of the window, but never less than an hour: an eight-hour day
- * warns above ten hours planned, and a day off (no window) warns above one
- * hour, so a Saturday errand does not trip it and a Saturday of work does.
+ * Over capacity is planned minutes beyond working minutes plus a tolerance: a
+ * quarter of the window, never less than an hour, so a day off warns above
+ * one hour planned.
  */
 export const OVER_CAPACITY_MIN_TOLERANCE_MINUTES: Minutes = 60;
 export const OVER_CAPACITY_TOLERANCE_RATIO = 0.25;
@@ -89,22 +69,11 @@ export function exceedsWorkingWindow(plannedMinutes: Minutes, workingMinutes: Mi
   return plannedMinutes > workingMinutes + overCapacityTolerance(workingMinutes);
 }
 
-/* -------------------------------------------------------------------------- */
-/* Detection                                                                  */
-/* -------------------------------------------------------------------------- */
-
 function compareStrings(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
-/**
- * One warning per pair of occupying commitments whose spans intersect. Two
- * events count too — that is a double booking.
- *
- * A sweep: sorted by start (ties by id), each block is compared only with the
- * blocks that start before it ends, so the earlier-starting block is always
- * `first` and the scan is O(n log n + pairs).
- */
+/** One warning per pair of occupying commitments whose spans intersect. A sweep sorted by start, so the earlier block is always `first`. */
 function overlapWarnings(
   commitments: readonly Commitment[],
   tz: PlanningContext["timezone"],
@@ -140,12 +109,7 @@ function overlapWarnings(
   );
 }
 
-/**
- * Every work block of an open task that starts on a local date after the
- * task's due date. The block's execution state does not matter — a block
- * worked after the deadline was still scheduled after it — but a completed
- * task's blocks are settled and say nothing.
- */
+/** Every work block of an open task that starts on a local date after its due date; a completed task's blocks say nothing. */
 function pastDeadlineWarnings(
   commitments: readonly Commitment[],
   tz: PlanningContext["timezone"],
@@ -170,12 +134,7 @@ function pastDeadlineWarnings(
   );
 }
 
-/**
- * Each day whose planned minutes exceed its working window by more than the
- * tolerance, in range order, then the range as a whole against the week's
- * totals. Both may fire: a week can be within its total and still have one
- * day far over, and a week can be over without any single day being so.
- */
+/** Each over-capacity day in range order, then the range as a whole. Both may fire. */
 function overCapacityWarnings(capacity: WeekCapacity): OverCapacityWarning[] {
   const warnings: OverCapacityWarning[] = [];
   for (const day of capacity.days) {
@@ -199,11 +158,7 @@ function overCapacityWarnings(capacity: WeekCapacity): OverCapacityWarning[] {
   return warnings;
 }
 
-/**
- * Open working minutes from `from` to the end of `dueDate`: the working
- * windows of every day from `start` to `dueDate` inclusive, with nothing
- * before `from` counted, minus the merged busy list.
- */
+/** Open working minutes from `from` to the end of `dueDate`. */
 function openMinutesBefore(
   dueDate: LocalDate,
   start: LocalDate,
@@ -220,16 +175,10 @@ function openMinutesBefore(
 }
 
 /**
- * Tasks whose remaining estimate is larger than the open working time left
- * before their deadline.
- *
- * Bounded to due dates the range can see. The engine only holds the range's
- * commitments, so for a deadline after the last day — or before the first,
- * when a future week is being planned — it cannot tell how much of the time
- * between here and there is free, and would either invent a shortage (no
- * working days to count) or invent capacity (working days with no blocks in
- * them). It says nothing instead. Overdue tasks never warn either: their
- * state is a section of the drawer, not a conflict about the plan.
+ * Tasks whose remaining estimate exceeds the open working time before their
+ * deadline. Bounded to due dates inside the range: the engine only holds the
+ * range's commitments, so beyond it it would invent a shortage or capacity.
+ * Overdue tasks never warn.
  */
 function insufficientTimeWarnings(
   tasks: readonly PlanningTask[],
@@ -276,12 +225,7 @@ function insufficientTimeWarnings(
   );
 }
 
-/**
- * Every warning for the range, in a stable order: all overlaps (by date,
- * first id, second id), then past deadlines (by date, block id), then
- * over-capacity days in range order with the range-level one last, then
- * insufficient time (by due date, task id).
- */
+/** Every warning for the range, in a stable order: overlaps, past deadlines, over-capacity (range-level last), insufficient time. */
 export function detectConflicts(input: ConflictInput): PlanningWarning[] {
   const { context, commitments, tasks, now } = input;
   return [
@@ -292,11 +236,7 @@ export function detectConflicts(input: ConflictInput): PlanningWarning[] {
   ];
 }
 
-/* -------------------------------------------------------------------------- */
-/* Keys and copy                                                              */
-/* -------------------------------------------------------------------------- */
-
-/** A stable key for a list row: the kind plus what the warning points at. */
+/** A stable key for a list row. */
 export function warningKey(warning: PlanningWarning): string {
   switch (warning.kind) {
     case "overlap":
@@ -310,16 +250,12 @@ export function warningKey(warning: PlanningWarning): string {
   }
 }
 
-/** `"Tue Sep 8"` — weekday and month-day, the one date shape every warning uses. */
+/** `"Tue Sep 8"`. */
 function dayLabel(date: LocalDate): string {
   return `${formatLocalDate(date, "weekday")} ${formatLocalDate(date, "monthDay")}`;
 }
 
-/**
- * One neutral sentence: a fact about the schedule, never a judgement about
- * the person. Amounts via `formatDuration`, dates via `dayLabel`; no "you",
- * no verdict, no adjective about the day.
- */
+/** One neutral sentence: a fact about the schedule, never a judgement about the person. No "you", no verdict. */
 export function describeWarning(warning: PlanningWarning): string {
   switch (warning.kind) {
     case "overlap":

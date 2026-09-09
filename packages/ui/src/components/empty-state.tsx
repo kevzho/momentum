@@ -1,14 +1,7 @@
 import * as React from "react";
 import { cn } from "cn";
 
-/**
- * Icon · title · one line · one action. Every list surface declares one; a
- * blank region is never an acceptable empty state (docs/DESIGN_SYSTEM.md).
- *
- * `compact` is for an empty *section* inside a page that has other content —
- * an empty "Overdue" group among full ones. A centred block there is just a
- * hole in the page, so the compact form states the same thing in one row.
- */
+/** `compact` is for an empty section inside a page that has other content. */
 function EmptyState({
   icon: Icon,
   title,

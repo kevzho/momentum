@@ -8,23 +8,14 @@ type Announce = (message: string, politeness?: Politeness) => void;
 
 const AnnouncerContext = React.createContext<Announce | null>(null);
 
-/**
- * The mounted provider, for the one caller that is not a component: the toast
- * API (`toast.error("…")` is a plain function). Everything else uses the hook.
- */
+/** For the toast API, which is not a component. Everything else uses the hook. */
 let mounted: Announce | null = null;
 
 function announceStandalone(message: string, politeness: Politeness = "polite"): void {
   mounted?.(message, politeness);
 }
 
-/**
- * The single `aria-live` region for the whole application.
- *
- * Dynamic changes that a sighted user sees — a task completed, XP earned, a
- * block moved, a timer finished — are announced through here, exactly once,
- * from one place. Components never render live regions of their own.
- */
+/** The single `aria-live` region for the whole application. Components never render their own. */
 function AnnouncerProvider({ children }: { children: React.ReactNode }) {
   const [polite, setPolite] = React.useState("");
   const [assertive, setAssertive] = React.useState("");

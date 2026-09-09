@@ -7,26 +7,6 @@ import { localDate } from "@momentum/core/time";
 
 import type { ActionResult } from "@/lib/actions/result";
 
-/**
- * Quick Add's two contracts beyond "a title is enough".
- *
- * **One gesture owns one id.** The create carries a client-generated UUID so a
- * retry after a lost response collides with the row that already committed and
- * is absorbed as a success (Domain Rule 17). Minting a fresh id per attempt
- * turns that guarantee into a duplicate task.
- *
- * **Closing puts the user back.** It is opened by `Q` from anywhere, so there is
- * no trigger for Radix to restore focus to and the user would otherwise be
- * dropped on `<body>` (Domain Rule 10).
- *
- * **A rejected call is a toast, not a blank route.** `createTask` reports
- * failure by returning, but the *call* can still reject before it has an answer
- * to return, and React re-throws a rejection out of a transition — which would
- * hand the whole page the user pressed `Q` on to an error boundary. Quick Add
- * is the one write outside `useOptimisticAction`, so it restates that hook's
- * rule here (Domain Rule 11).
- */
-
 const { createTaskMock, errorToast, successToast, pushMock, reportError } = vi.hoisted(() => ({
   createTaskMock: vi.fn(),
   errorToast: vi.fn(),
@@ -45,11 +25,8 @@ vi.mock("@momentum/ui/components/toast", () => ({
   },
 }));
 
-/*
- * Only `useRouter` is replaced. `unstable_rethrow` and `redirect` stay real, or
- * the test that pins "a redirect is control flow, not failure" would be pinning
- * a stub of the very function under test.
- */
+// Only `useRouter` is replaced: `unstable_rethrow` and `redirect` must stay
+// real for the redirect test to mean anything.
 vi.mock("next/navigation", async (importOriginal) => ({
   ...(await importOriginal<typeof import("next/navigation")>()),
   useRouter: () => ({ push: pushMock, replace: vi.fn(), refresh: vi.fn() }),
@@ -64,7 +41,6 @@ const { ErrorBoundary } = await import("@/components/error-boundary");
 
 const TODAY = localDate("2026-09-07");
 
-/** The shell, minimally: something to open Quick Add from, and to come back to. */
 function Shell() {
   const quickAdd = useQuickAdd();
   return (
@@ -89,7 +65,6 @@ const SCHOOL = {
   color: "blue" as const,
 };
 
-/** The same shell, with a project for `#school` to resolve against. */
 function renderShellWithProjects() {
   render(
     <QuickAddProvider projects={[SCHOOL]} today={TODAY} weekStart={1}>
@@ -109,11 +84,6 @@ async function openAndType(opener: HTMLElement, title: string) {
   return field;
 }
 
-/**
- * The Retry the failure offers — inside the dialog, under the field. A toast
- * behind a modal is under its pointer lock and outside its focus trap, so the
- * failure is rendered where the user can reach it.
- */
 function retryInline(): void {
   fireEvent.click(screen.getByRole("button", { name: "Retry" }));
 }
@@ -151,8 +121,7 @@ describe("Quick Add", () => {
     });
 
     expect(idsCreated()).toHaveLength(2);
-    // The same row, offered to the server twice — `createTask` absorbs the
-    // unique violation and returns the existing task.
+    // The same id twice: `createTask` absorbs the unique violation.
     expect(idsCreated()[0]).toBe(idsCreated()[1]);
   });
 
@@ -162,7 +131,6 @@ describe("Quick Add", () => {
     const opener = renderShell();
     const field = await openAndType(opener, "Buy milk");
 
-    // Shift+Enter keeps the dialog open for the next capture.
     await act(async () => {
       fireEvent.keyDown(field, { key: "Enter", shiftKey: true });
     });
@@ -176,8 +144,7 @@ describe("Quick Add", () => {
   });
 
   it("turns a rejected call into the same inline failure, with a Retry that keeps the id", async () => {
-    // Offline, a 5xx, an action id gone stale after a deploy: the call rejects
-    // before the action has an `{ ok: false }` to return.
+    // The call rejects before the action has an `{ ok: false }` to return.
     createTaskMock.mockRejectedValue(new Error("Failed to fetch"));
 
     const opener = renderShell();
@@ -187,34 +154,26 @@ describe("Quick Add", () => {
       fireEvent.keyDown(field, { key: "Enter" });
     });
 
-    // The server's own `unavailable` wording, so there is one message for
-    // "could not reach the server" whichever side noticed.
     expect(failureShown()).toContain(
       "Momentum could not reach the server. Your change was not saved.",
     );
     expect(screen.getByRole("button", { name: "Retry" })).toBeDefined();
 
-    // Swallowed for the user, not for us.
     expect(reportError).toHaveBeenCalledTimes(1);
 
-    // The dialog is still standing and still holds the title: a rejection
-    // re-thrown out of the transition would have taken the route with it.
+    // A rejection re-thrown out of the transition would have taken the route with it.
     expect(screen.getByLabelText<HTMLInputElement>("Task title").value).toBe("Buy milk");
 
     await act(async () => {
       retryInline();
     });
 
-    // Domain Rule 17 holds on this path too — a rejection is exactly the case
-    // where the write may have committed without the answer coming back.
     expect(idsCreated()).toHaveLength(2);
     expect(idsCreated()[0]).toBe(idsCreated()[1]);
   });
 
   it("lets a redirect through, because that is control flow and not failure", async () => {
-    // `redirect()` travels as a thrown value. Turning it into a toast would
-    // strand the user on the page they were being moved off, so
-    // `unstable_rethrow` re-throws it and the boundary above takes it.
+    // `redirect()` travels as a thrown value; `unstable_rethrow` must let it through.
     createTaskMock.mockImplementation(() => redirect("/login"));
 
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -236,8 +195,7 @@ describe("Quick Add", () => {
 
     expect(screen.getByRole("alert").textContent).toContain("Quick Add could not be loaded");
     expect(errorToast).not.toHaveBeenCalled();
-    // The boundary reports it, as it reports anything it catches; what matters
-    // is that `submit` never claimed it as a transport failure of its own.
+    // The boundary reports it; `submit` must not have claimed it as its own failure.
     expect(reportError).not.toHaveBeenCalledWith(expect.anything(), { source: "quickAdd" });
   });
 
@@ -247,8 +205,6 @@ describe("Quick Add", () => {
     fireEvent.click(opener);
     const field = await screen.findByLabelText("Task title");
 
-    // The field is focused without `autoFocus`, which would have run before
-    // Radix could record where the user came from.
     await waitFor(() => expect(document.activeElement).toBe(field));
 
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
@@ -318,8 +274,6 @@ describe("natural-language capture", () => {
       fireEvent.keyDown(field, { key: "Enter" });
     });
 
-    // The date is cleared and its word is back in the title — nothing typed is
-    // lost, and the estimate beside it is unaffected.
     expect(created()).toMatchObject({
       title: "Finish essay tomorrow",
       dueDate: null,
@@ -350,9 +304,7 @@ describe("natural-language capture", () => {
   it("stays typable when the line is nothing but metadata", async () => {
     const field = await openAndType(renderShellWithProjects(), "tomorrow 60m");
 
-    // No title left, so there is nothing to create — and nothing was thrown.
-    // `aria-disabled`, not the native attribute: the browser blurs a natively
-    // disabled control, and Add is one that disables itself by working.
+    // No title left, so nothing to create; `aria-disabled` rather than native.
     expect(screen.getByRole("button", { name: "Add task" }).getAttribute("aria-disabled")).toBe(
       "true",
     );
@@ -396,10 +348,8 @@ describe("failures inside the dialog", () => {
     expect(document.getElementById(field.getAttribute("aria-describedby") ?? "")?.textContent).toBe(
       "Titles are at most 500 characters.",
     );
-    // Retrying the same input cannot succeed, so nothing offers to.
     expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
     expect(errorToast).not.toHaveBeenCalled();
-    // The dialog is still standing, with the title, for the user to fix.
     expect(field.value).toBe("Buy milk");
   });
 
@@ -446,7 +396,7 @@ describe("what survives a dismissal", () => {
     const opener = renderShell();
     const field = await openAndType(opener, "Book the dentist");
 
-    // Escape closes the dialog, but it is not "throw this away".
+    // Escape closes the dialog but keeps the draft.
     fireEvent.keyDown(field, { key: "Escape" });
     await waitFor(() => expect(screen.queryByLabelText("Task title")).toBeNull());
 
@@ -454,7 +404,7 @@ describe("what survives a dismissal", () => {
     const reopened = await screen.findByLabelText<HTMLInputElement>("Task title");
     expect(reopened.value).toBe("Book the dentist");
 
-    // Cancel is.
+    // Cancel discards it.
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     await waitFor(() => expect(screen.queryByLabelText("Task title")).toBeNull());
 
@@ -489,8 +439,6 @@ describe("what the page underneath seeds", () => {
       fireEvent.keyDown(field, { key: "Enter" });
     });
 
-    // Filed into the project the page was showing, and placed first in the
-    // list rather than tied with every other capture at 0.
     expect(created()).toMatchObject({ projectId: SCHOOL.id, sortOrder: -7 });
   });
 });

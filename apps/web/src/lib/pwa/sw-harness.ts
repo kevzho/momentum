@@ -3,19 +3,10 @@ import { join } from "node:path";
 import { createContext, runInContext } from "node:vm";
 
 /**
- * Runs `public/sw.js` — the real file, unmodified — in a fake
- * `ServiceWorkerGlobalScope`.
- *
- * The service worker is the one piece of Phase 12 that cannot be exercised by
- * rendering something: it is a separate global scope, it is plain JavaScript
- * outside the module graph, and the behaviour that matters (what it caches,
- * what it refuses to touch, what it does on activate) only shows up as
- * side-effects on `caches`. Testing a copy of the logic would prove nothing
- * about the file the browser downloads, so this evaluates that file.
- *
- * `runInContext` also puts the worker's own function declarations on the
- * context object, which is how `strategyFor` — the routing table, and the only
- * decision in the file — becomes directly assertable.
+ * Runs `public/sw.js` (the real file, unmodified) in a fake
+ * `ServiceWorkerGlobalScope`. `runInContext` puts the worker's own function
+ * declarations on the context object, which is how `strategyFor` becomes
+ * directly assertable.
  */
 
 const SOURCE = readFileSync(join(import.meta.dirname, "..", "..", "..", "public", "sw.js"), "utf8");
@@ -95,7 +86,7 @@ export interface Harness {
   fetched: string[];
   /** Set this to make the network fail, as being offline does. */
   offline: boolean;
-  /** Make one URL answer with a non-ok response instead of a success. */
+  /** Make one URL answer with a non-ok response. */
   failFor(path: string): void;
   /** Create a cache as if an earlier build (or another library) had left it. */
   seedCache(name: string): void;

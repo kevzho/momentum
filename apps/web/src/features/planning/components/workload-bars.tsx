@@ -9,20 +9,9 @@ import { cn } from "@momentum/ui/lib/utils";
 import { WORKLOAD_HEADING, workloadRowLabel } from "@/features/planning/copy";
 
 /**
- * Per-day workload (specs/05-week-planning.md):
- *
- *     Mon ███████░░   6h 30m
- *     Tue ████░░░░░   3h 25m
- *
- * Each row is a bar of the day's planned minutes drawn over a faint track of
- * its working window, so the eye can compare the two without being told what
- * to think about them. Every bar shares one scale — the longest planned day,
- * the longest working day, or an hour, whichever is greatest — so lengths are
- * comparable down the column. Past days are muted and today carries a mark;
- * neither is colour alone.
- *
- * Each row is one `role="img"` with the whole fact as its name. Nothing here
- * characterises a day (Domain Rule 7).
+ * Per-day workload: a bar of planned minutes over a track of the working
+ * window, all rows on one shared scale. Each row is one `role="img"` with the
+ * whole fact as its name; nothing here characterises a day (Domain Rule 7).
  */
 
 export interface WorkloadRow {
@@ -32,7 +21,7 @@ export interface WorkloadRow {
   isPast: boolean;
 }
 
-/** The floor under the scale: a week of empty days still draws an hour-wide track. */
+// A week of empty days still draws an hour-wide track.
 const MIN_SCALE_MINUTES: Minutes = 60;
 
 export function workloadScale(
@@ -44,12 +33,7 @@ export function workloadScale(
   );
 }
 
-/**
- * One row per displayed day, in display order, from the capacity's per-day
- * list. Looked up by date rather than by index so the drawer never depends on
- * the engine returning days in any particular order; a day the engine did not
- * report (it always does) draws as empty rather than crashing the column.
- */
+/** One row per displayed day, in display order. Looked up by date, so a missing day draws as empty. */
 export function workloadRows(
   days: readonly LocalDate[],
   workloads: readonly DayWorkload[],
@@ -67,7 +51,6 @@ export function workloadRows(
   });
 }
 
-/** A bar's width, as a CSS percentage of the shared scale. */
 function widthOf(minutes: Minutes, scale: Minutes): string {
   const ratio = Math.min(1, Math.max(0, minutes / scale));
   return `${Math.round(ratio * 1000) / 10}%`;

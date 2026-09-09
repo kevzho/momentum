@@ -8,13 +8,8 @@ import {
   uniqueName,
 } from "./fixtures";
 
-/**
- * Workflows 13 and 14 — earn XP, level up.
- *
- * The neighbour account is used because task XP is capped over a rolling
- * 24-hour window and the populated account is shared with every other check
- * run against this database; the neighbour has headroom.
- */
+// The neighbour account is used because task XP is capped over a rolling
+// 24-hour window and the populated account is shared with every other check.
 test.describe("Progress", () => {
   test("completing a task grows the ledger the top bar reads", async ({ page }) => {
     await signIn(page, "neighbour");
@@ -25,14 +20,12 @@ test.describe("Progress", () => {
     await page.goto("/tasks");
     await completeFromList(page, title);
 
-    // XP is computed by the database, never asserted by the client, so the
-    // badge is read back from a fresh request rather than from the page that
-    // sent the mutation.
+    // XP is computed by the database, so the badge is read back from a fresh request.
     await page.goto("/progress");
     const after = await readXpBadge(page);
     expect(after.level > before.level || after.remaining < before.remaining).toBe(true);
 
-    // The ledger names the event in the database's own words (Domain Rule 6).
+    // The ledger names the event in the database's own words.
     await expect(page.getByText(`Completed "${title}"`, { exact: true })).toBeVisible();
   });
 

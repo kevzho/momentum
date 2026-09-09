@@ -38,41 +38,13 @@ import { useOpenerFocus } from "@/lib/use-opener-focus";
 
 const NO_PROJECT = "__none__";
 
-/**
- * Quick Add. The most-used interaction in the product, so the budget is
- * keystrokes rather than features.
- *
- * **Two interactions from anywhere in the app**: `Q` (or the top bar's `+`)
- * opens it with the title field focused, and typing a title then pressing Enter
- * creates the task. Everything else — project, priority, date, duration — is
- * reachable without leaving the keyboard and is entirely optional.
- *
- * It is mounted once, in the shell, so it is the same two keystrokes on the
- * calendar, on Today and on Settings. It is a `Dialog` and not a `SideSheet`
- * because it is a transient capture, not a surface to work in — the one place
- * in the product where interrupting is the point.
- *
- * **Natural-language capture (Phase 11).** The title is a single free-text
- * input whose value runs through `@momentum/core/parser` on every keystroke —
- * a pure function, so typing is never waiting on it and a line it cannot read
- * costs nothing but a title that keeps every word of itself.
- *
- * What the parser recognised shows as removable chips under the field. One rule
- * governs the field and the chip together: **whichever of the two most recently
- * expressed the intent owns the value.** A chip is the text saying it, so while
- * the chip is there the control below merely displays it; setting that control
- * takes the value over and hands the words back to the title, and removing the
- * chip does the same and clears the field. Either way nothing the user typed
- * disappears, and no field ever has two owners.
- */
+// Quick Add, mounted once in the shell. The title runs through
+// `@momentum/core/parser` on every keystroke; recognised tokens show as chips.
+// Whichever of the chip or the control below most recently expressed the
+// intent owns the value, and nothing the user typed is ever discarded.
 export interface QuickAddContextValue {
   open: (defaults?: QuickAddDefaults) => void;
-  /**
-   * What the page underneath would seed a capture with. A project view sets
-   * its project here so `Q` and the page's own "New task" button open the same
-   * dialog with the same values; the page clears it when it leaves. Values
-   * passed to `open` win over these.
-   */
+  /** Page-level defaults for a capture; values passed to `open` win over these. */
   setDefaults: (defaults: QuickAddDefaults) => void;
 }
 
@@ -83,17 +55,14 @@ export interface QuickAddDefaults {
 
 const QuickAddContext = React.createContext<QuickAddContextValue | null>(null);
 
-/** `openQuickAdd()` — a no-op outside the shell, never a thrown error. */
+/** A no-op outside the shell, never a thrown error. */
 export function useQuickAdd(): QuickAddContextValue {
   return React.useContext(QuickAddContext) ?? { open: noop, setDefaults: noop };
 }
 
 function noop() {}
 
-/**
- * The title's bound, mirrored from `createTaskInput` so an over-long paste is
- * refused here, on the field, before it is sent to be refused by the schema.
- */
+/** Mirrors `createTaskInput`. */
 const TITLE_MAX_LENGTH = 500;
 
 export function QuickAddProvider({
@@ -106,32 +75,17 @@ export function QuickAddProvider({
   projects: readonly ProjectSummary[];
   today: LocalDate;
   weekStart: Weekday;
-  /**
-   * The `sortOrder` a capture is created with: one step below the user's
-   * lowest, so the new task is the first row of the Inbox rather than one more
-   * row tied at `0` (`sortOrderBefore` in `@momentum/core/tasks`, computed by
-   * the shell's read).
-   */
+  /** The `sortOrder` a capture is created with: one step below the user's lowest. */
   newTaskSortOrder?: number;
   children: React.ReactNode;
 }) {
   const [open, setOpen] = React.useState(false);
   const [defaults, setDefaults] = React.useState<QuickAddDefaults>({});
-  /*
-   * Bumped on every opening and used as the dialog's `key`, so each opening
-   * gets a fresh component with fresh state. That is React's own answer to
-   * "reset this form when it reopens" — clearing five `useState`s from an
-   * effect is a cascading render, and a form that remembers the last thing you
-   * typed into it is a bug people notice immediately.
-   */
+  // Bumped on every opening and used as the dialog's `key`, so each opening
+  // remounts with fresh state instead of resetting five `useState`s in an effect.
   const [session, setSession] = React.useState(0);
-  /*
-   * The one thing that survives a dismissal: a title that was typed and then
-   * escaped from. Escape and a click outside close the dialog, but neither is
-   * "throw this away" — Cancel is, and so is adding the task — so the words
-   * are offered back on the next opening rather than silently dropped
-   * (specs/11-command-palette.md: nothing typed is lost).
-   */
+  // A title escaped from is offered back on the next opening; only Cancel and
+  // adding the task discard it.
   const [draft, setDraft] = React.useState("");
   const pageDefaults = React.useRef<QuickAddDefaults>({});
 
@@ -149,12 +103,8 @@ export function QuickAddProvider({
     [],
   );
 
-  /*
-   * `Q` from anywhere. Ignored while the user is typing somewhere else, while a
-   * modifier is held (that is a browser or OS shortcut), and while another
-   * dialog is open — Radix marks the rest of the page `aria-hidden`, and
-   * stacking a second dialog on top of a sheet is not a capture flow.
-   */
+  // `Q` from anywhere, except while typing, with a modifier held, or with
+  // another dialog open.
   React.useEffect(() => {
     function onKeyDown(event: KeyboardEvent): void {
       if (event.key !== "q" && event.key !== "Q") return;
@@ -215,56 +165,28 @@ function QuickAddDialog({
   newTaskSortOrder: number;
   /** A title escaped from last time, offered back. */
   initialTitle: string;
-  /** Called with the title to keep for next time — `""` when it was used or discarded. */
+  /** The title to keep for next time; `""` when it was used or discarded. */
   onDismiss: (kept: string) => void;
 }) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
 
-  /*
-   * `Q` and the top bar's `+` open this from wherever the user was, so there is
-   * no `Dialog.Trigger` for Radix to return focus to and its modal content
-   * cancels the restore FocusScope would otherwise do — leaving a keyboard user
-   * on `<body>` at the top of the page (Domain Rule 10). Same helper the
-   * calendar's programmatically opened surfaces use.
-   */
+  // Opened programmatically, so there is no `Dialog.Trigger` for Radix to
+  // return focus to.
   const openerFocus = useOpenerFocus();
 
-  /*
-   * Seeded from `defaults` at mount, and the provider remounts this component
-   * on every opening — so reopening starts clean, seeded by whatever the caller
-   * asked for. Adding a task from inside a project should not require choosing
-   * the project you are already in.
-   */
+  // Seeded at mount; the provider remounts this component on every opening.
   const [title, setTitle] = React.useState(initialTitle);
   const [projectId, setProjectId] = React.useState<Uuid | null>(defaults.projectId ?? null);
   const [priority, setPriority] = React.useState<TaskPriority | null>(null);
   const [dueDate, setDueDate] = React.useState<LocalDate | null>(defaults.dueDate ?? null);
   const [estimatedMinutes, setEstimatedMinutes] = React.useState<number | null>(null);
-  /*
-   * The tokens the user has taken back — by removing a chip, or by setting the
-   * control that token was filling. The parser reads a dismissed token as an
-   * ordinary word, so its text stays in the title exactly where it was typed
-   * (specs/11-command-palette.md: never discard what was typed).
-   */
+  // Tokens the user has taken back; the parser reads them as ordinary words.
   const [dismissed, setDismissed] = React.useState<readonly DismissedToken[]>([]);
-  /*
-   * The last failure, shown inside the dialog rather than as a toast. This is
-   * a modal: a toast behind it is under Radix's pointer lock and outside its
-   * focus trap, so a Retry offered there cannot be reached until the dialog is
-   * closed — and closing it is what the user was avoiding. The message and its
-   * Retry sit under the field instead, and a validation message sits on the
-   * field it is about. Cleared by the next keystroke.
-   */
+  // Shown inside the dialog: a toast behind a modal is outside its focus trap.
   const [error, setError] = React.useState<(ActionError & { retry?: () => void }) | null>(null);
 
-  /*
-   * Recomputed on every keystroke, because it is a pure function of the string:
-   * no effect, no debounce, and no parsed state that can fall out of step with
-   * the input. That is what "typing stays fluid even when parsing fails" comes
-   * down to — a line the parser cannot read costs a title with every word still
-   * in it, and nothing else.
-   */
+  // A pure function of the string: no effect, no debounce, no state to drift.
   const parsed = React.useMemo(
     () => parseQuickAdd(title, { today, projects, dismissed }),
     [dismissed, projects, title, today],
@@ -277,48 +199,34 @@ function QuickAddDialog({
     estimatedMinutes: parsed.estimatedMinutes ?? estimatedMinutes,
   };
 
-  /*
-   * What is wrong with the title, if anything: the schema's own bound, checked
-   * as the user types, and otherwise whatever the server said about the field.
-   */
   const titleError =
     parsed.title.length > TITLE_MAX_LENGTH
       ? `Titles are at most ${TITLE_MAX_LENGTH} characters.`
       : (error?.fieldErrors?.title?.[0] ?? null);
   const canSubmit = !pending && parsed.title !== "" && titleError === null;
-  /* A failure that belongs to no field, or a field the dialog does not show. */
+  // A failure that belongs to no field, or to a field the dialog does not show.
   const generalError =
     error === null || (error.code === "validation" && error.fieldErrors?.title !== undefined)
       ? null
       : error;
 
-  /** Closes and forgets the draft: the words were used, or the user discarded them. */
+  // Closes and forgets the draft.
   function close(): void {
     onDismiss("");
     onOpenChange(false);
   }
 
-  /**
-   * Setting a control takes its field over from the text: the tokens that were
-   * filling it are dismissed — which returns their words to the title — and the
-   * control's own value takes effect. One owner per field, always.
-   */
+  // Setting a control takes its field over from the text: the tokens filling
+  // it are dismissed, returning their words to the title.
   function takeOver(kind: ParsedFieldKind, apply: () => void): void {
     const taken = parsed.tokens.filter((token) => token.kind === kind);
     if (taken.length > 0) setDismissed((current) => [...current, ...taken.map(asDismissed)]);
     apply();
   }
 
-  /*
-   * `id` defaults once per gesture, not once per attempt: the failure toast's
-   * Retry — offered for a rejected call as much as for a returned failure —
-   * passes the same one back, so a retry after a lost response collides with
-   * the row that already committed and `createTask` absorbs it as a success
-   * instead of writing a twin (Domain Rule 17). Quick Add does not hold
-   * an optimistic row of its own: it can be opened from any route, and most of
-   * them do not render a task list to put one in. The task appears when
-   * `refresh()` lands, and the toast confirms it in the meantime.
-   */
+  // `id` defaults once per gesture, not per attempt, so Retry after a lost
+  // response collides with the row that already committed instead of writing
+  // a twin. No optimistic row: most routes have no task list to put one in.
   function submit(closeAfter: boolean, id: Uuid = crypto.randomUUID()): void {
     if (!canSubmit) return;
     setError(null);
@@ -338,24 +246,9 @@ function QuickAddDialog({
           sortOrder: newTaskSortOrder,
         });
       } catch (thrown) {
-        /*
-         * A rejected call is not the same event as a returned `{ ok: false }`,
-         * but the user has to experience it as one — the rule
-         * `useOptimisticAction` applies, restated here because Quick Add is the
-         * one write that does not go through it. Offline, a 5xx, an aborted
-         * request, an action id gone stale after a deploy: all of them reject
-         * here, and React re-throws a rejection out of the transition at the
-         * next render, so the route's error boundary would replace whatever
-         * page the user pressed `Q` on — over one uncaptured task.
-         *
-         * `unstable_rethrow` first, because `redirect()` and `notFound()`
-         * travel as thrown values: those are control flow, not failure, and
-         * swallowing one would strand the user on a page they were being moved
-         * off. What is left is a transport failure or a bug inside the action —
-         * still reported, it just no longer blanks the route on its way to
-         * being seen. It falls through to the branch below, whose Retry hands
-         * the same `id` back (Domain Rule 17).
-         */
+        // A rejection inside the transition would reach the route's error
+        // boundary, so it becomes a failed result. `unstable_rethrow` first:
+        // `redirect()` and `notFound()` travel as thrown values.
         unstable_rethrow(thrown);
         reportError(thrown, { source: "quickAdd" });
         result = failure(
@@ -365,11 +258,7 @@ function QuickAddDialog({
       }
 
       if (!result.ok) {
-        /*
-         * Kept with the gesture's id so Retry resends the same row (Domain
-         * Rule 17). A validation failure carries no Retry: the same input
-         * cannot succeed twice, and the message says what to change.
-         */
+        // A validation failure carries no Retry: the same input cannot succeed twice.
         setError({
           ...result.error,
           ...(result.error.code === "validation" ? {} : { retry: () => submit(closeAfter, id) }),
@@ -384,7 +273,6 @@ function QuickAddDialog({
       if (closeAfter) {
         close();
       } else {
-        // "Add another" is a fresh capture, chips and overrides included.
         setTitle("");
         setDismissed([]);
       }
@@ -395,7 +283,7 @@ function QuickAddDialog({
     <Dialog
       open={open}
       onOpenChange={(next) => {
-        // Escape or a click outside: the title is kept for the next opening.
+        // Escape or a click outside keeps the title for the next opening.
         if (!next) onDismiss(title);
         onOpenChange(next);
       }}
@@ -415,23 +303,13 @@ function QuickAddDialog({
         </DialogHeader>
 
         <div className="flex flex-col gap-3">
-          {/*
-            One free-text input, and the only required field. Everything the
-            parser recognises in it is shown as a chip below rather than being
-            taken silently.
-
-            No `autoFocus`: React applies it during commit, before Radix's
-            FocusScope runs, and FocusScope skips its mount event entirely when
-            focus is already inside — which would leave `useOpenerFocus` with
-            nothing to send the user back to. With no close button this is the
-            first tabbable node in the dialog, so FocusScope focuses exactly
-            this field anyway.
-          */}
+          {/* No `autoFocus`: React applies it before Radix's FocusScope runs,
+              which then skips its mount event and leaves `useOpenerFocus` with
+              nothing to return to. As the first tabbable node it is focused anyway. */}
           <Input
             value={title}
-            // `readOnly`, never `disabled`, while the write is in flight: the
-            // browser blurs a disabled element, and this is the element that
-            // pressed Enter (Domain Rule 10).
+            // `readOnly`, never `disabled`: the browser blurs a disabled element,
+            // and this is the element that pressed Enter.
             readOnly={pending}
             placeholder="What needs doing?"
             aria-label="Task title"
@@ -479,12 +357,7 @@ function QuickAddDialog({
             </div>
           )}
 
-          {/*
-            What the parser took, and the way back out of it. Each chip is a
-            real button (Domain Rule 10), and removing one returns its words to
-            the title rather than deleting them — parsing is a suggestion, and a
-            suggestion the user cannot decline is an interpretation.
-          */}
+          {/* Removing a chip returns its words to the title rather than deleting them. */}
           {parsed.tokens.length > 0 ? (
             <div
               role="group"
@@ -547,11 +420,8 @@ function QuickAddDialog({
             />
           </div>
 
-          {/*
-            `aria-disabled` with a guard, never the native attribute: Add is the
-            control that starts the write, and a natively disabled button is
-            blurred by the browser the moment it works (Domain Rule 10).
-          */}
+          {/* `aria-disabled` plus a guard, never native `disabled`: the browser
+              would blur the button that started the write. */}
           <div className="flex items-center justify-end gap-2">
             <Button
               type="button"
@@ -581,16 +451,11 @@ function QuickAddDialog({
   );
 }
 
-/** `4` — "no priority set", the value the schema defaults to. */
+/** "No priority set", the schema's default. */
 const DEFAULT_PRIORITY: TaskPriority = 4;
 
-/**
- * A parsed token, as the thing the parser must stop treating as metadata.
- *
- * Keyed by kind and text rather than by position, so a dismissal survives the
- * user editing the front of the line — which they do constantly, since the
- * title is what they came here to type.
- */
+// Keyed by kind and text rather than position, so a dismissal survives edits
+// to the front of the line.
 function asDismissed(token: { kind: ParsedFieldKind; text: string }): DismissedToken {
   return { kind: token.kind, text: token.text };
 }

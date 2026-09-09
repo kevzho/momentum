@@ -3,12 +3,6 @@ import type { Instant, LocalDate, LocalTime } from "@momentum/core/types";
 
 import type { Json } from "../types";
 
-/**
- * The nullable lifts every mapper needs. Kept here so no mapper reimplements
- * "null stays null", and so the branded constructors are called in exactly one
- * place per scalar kind.
- */
-
 export function toInstant(value: string): Instant {
   return instant(value);
 }
@@ -37,12 +31,7 @@ export function isJsonArray(value: Json | undefined): value is Json[] {
   return Array.isArray(value);
 }
 
-/**
- * Narrows a value the database column only constrains loosely (a smallint, an
- * enum stored as text) to one of the domain union's members. Rows that reach a
- * mapper have already passed the check constraints, so a miss is a schema bug
- * and should be loud rather than silently coerced.
- */
+/** Narrows a loosely constrained column value to a domain union member; throws on a miss, which is a schema bug. */
 export function oneOf<T>(members: readonly T[], value: unknown, context: string): T {
   if ((members as readonly unknown[]).includes(value)) {
     return value as T;

@@ -38,13 +38,6 @@ import type { ProjectSummary } from "@/features/tasks/types";
 
 const ANY = "__any__";
 
-/**
- * Sort, filter and search over the current view.
- *
- * A filter narrows a view and never widens it (`selectTasks`), which is why
- * this sits under the view tabs rather than beside them: the tabs choose the
- * question, this narrows the answer. Both persist for the session.
- */
 export function TaskToolbar({
   sort,
   direction,
@@ -144,8 +137,7 @@ export function TaskToolbar({
               </Select>
             </div>
 
-            {/* "Scheduled" is answered by whether the task owns a work block —
-                never by a column on the task (Domain Rule 2). */}
+            {/* "Scheduled" means the task owns a work block, never a column on the task. */}
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="filter-scheduled">Scheduled</Label>
               <Select

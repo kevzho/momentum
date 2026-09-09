@@ -4,17 +4,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ServiceWorker } from "@/components/service-worker";
 import { BUILD_VERSION, SERVICE_WORKER_URL, serviceWorkerUrl } from "@/lib/pwa/build-version";
 
-/**
- * The update path.
- *
- * "A stale service worker serving an old bundle is worse than no service worker
- * at all" is the sentence Phase 12 turns on, and this file is where it is held
- * to. The four behaviours below are each a way of getting it wrong: never
- * offering the update, offering it on a first install (when there is nothing to
- * replace), activating it under a running session, or activating it and leaving
- * the old bundle on screen.
- */
-
 const { toastInfo } = vi.hoisted(() => ({ toastInfo: vi.fn() }));
 
 vi.mock("@momentum/ui/components/toast", () => ({ toast: { info: toastInfo } }));
@@ -82,7 +71,7 @@ function installContainer(registration: Registration, controller: unknown) {
   return container;
 }
 
-/** What `/version` answers. Defaults to "the server is on this same build". */
+/** What `/version` answers. Defaults to the same build. */
 function serveVersion(version: string | null) {
   vi.stubGlobal(
     "fetch",
@@ -127,9 +116,8 @@ describe("ServiceWorker registration", () => {
       scope: "/",
       updateViaCache: "none",
     });
-    // The version is the whole update mechanism: `public/sw.js` is
-    // byte-identical across deploys, so a changed query is what makes the
-    // browser treat it as a new script.
+    // `public/sw.js` is byte-identical across deploys; the changed query is what
+    // makes the browser treat it as a new script.
     expect(SERVICE_WORKER_URL).toMatch(/^\/sw\.js\?v=.+/);
   });
 
@@ -157,8 +145,7 @@ describe("ServiceWorker registration", () => {
     await waitFor(() => expect(toastInfo).toHaveBeenCalledOnce());
     const [message, options] = toastInfo.mock.calls[0] as [string, { duration: number }];
     expect(message).toMatch(/new version/i);
-    // It waits for the user rather than expiring: a build they were told about
-    // and could no longer take would be worse than not telling them.
+    // Waits for the user rather than expiring.
     expect(options.duration).toBe(Infinity);
   });
 
@@ -211,8 +198,7 @@ describe("ServiceWorker registration", () => {
     render(<ServiceWorker />);
     await waitFor(() => expect(container.register).toHaveBeenCalled());
 
-    // Without this the page would keep running the old bundle under the new
-    // worker — the exact staleness the phase is about.
+    // Without this the page keeps running the old bundle under the new worker.
     container.fire("controllerchange");
     expect(reload).toHaveBeenCalledOnce();
 
@@ -221,9 +207,8 @@ describe("ServiceWorker registration", () => {
   });
 
   it("does not reload when the very first worker claims the page", async () => {
-    // No controller: this page loaded before any worker existed, `activate`
-    // called `clients.claim()`, and the bundle on screen is already current.
-    // Reloading here would be a flash on someone's first visit.
+    // No controller: this page loaded before any worker existed and the bundle
+    // on screen is already current.
     const container = installContainer(fakeRegistration(), null);
     render(<ServiceWorker />);
     await waitFor(() => expect(container.register).toHaveBeenCalled());
@@ -242,18 +227,15 @@ describe("ServiceWorker registration", () => {
     registration.update.mockClear();
     becomeVisible();
 
-    // Same build: nothing to register, but `update()` still runs in case
-    // `sw.js` itself changed at this same version.
+    // Same build: `update()` still runs in case `sw.js` itself changed.
     await waitFor(() => expect(registration.update).toHaveBeenCalled());
     expect(container.register).toHaveBeenCalledTimes(1);
   });
 
   it("registers the new build's worker when the server says it has moved on", async () => {
-    // The case the whole `/version` endpoint exists for: a tab open across a
-    // deploy. `registration.update()` cannot see it — `public/sw.js` is
-    // byte-identical, so the bytes at the *registered* URL have not changed —
-    // and the client router only ever fetches RSC payloads, so the page never
-    // reloads on its own either.
+    // A tab open across a deploy: `registration.update()` cannot see it because
+    // the bytes at the registered URL have not changed, and the client router
+    // only fetches RSC payloads.
     const registration = fakeRegistration();
     const container = installContainer(registration, { fake: "controller" });
     render(<ServiceWorker />);
@@ -268,7 +250,7 @@ describe("ServiceWorker registration", () => {
         updateViaCache: "none",
       }),
     );
-    // Registering the new URL *is* the update; asking the old one again is not.
+    // Registering the new URL is the update.
     expect(registration.update).not.toHaveBeenCalled();
   });
 

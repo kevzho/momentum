@@ -3,10 +3,6 @@ import { describe, expect, it } from "vitest";
 
 import { CalendarBlock } from "@momentum/ui/components/calendar-block";
 
-/**
- * Domain Rule: block kinds must be distinguishable without colour. Each kind
- * carries its own outline treatment and its own accessible name.
- */
 describe("CalendarBlock", () => {
   it("names the kind for assistive technology", () => {
     render(<CalendarBlock kind="work" title="Literature review" />);
@@ -25,11 +21,7 @@ describe("CalendarBlock", () => {
     expect(screen.getByText(/completed/)).toBeDefined();
   });
 
-  /**
-   * Domain Rule 13: an unexecuted block of a completed task stays on the
-   * calendar. It has to read as settled without reading as executed, so it is
-   * de-emphasised but never struck through.
-   */
+  // A settled block is de-emphasised but never struck through.
   it("marks a block whose task is complete as settled, not as completed", () => {
     const { container } = render(<CalendarBlock kind="work" title="Essay" settled />);
     const block = container.firstElementChild;
@@ -63,7 +55,6 @@ describe("CalendarBlock", () => {
 
   it("keeps the time on a block too short to show a second line", () => {
     render(<CalendarBlock kind="event" title="Standup" timeLabel="09:00 – 09:15" compact />);
-    // Not rendered as the visible second line, but still in the block's text.
     expect(screen.getByText(/09:00 – 09:15/)).toBeDefined();
   });
 });

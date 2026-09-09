@@ -7,28 +7,13 @@ import type { Instant } from "@momentum/core/types";
 import { useFocusTimer } from "@/features/focus/use-focus-timer";
 
 /**
- * The rendering loop, and the claim that it is *only* a rendering loop.
- *
- * The maths is `packages/core/src/focus/timer.test.ts`. What is tested here is
- * the thing that maths depends on being true of its caller: that the answer is
- * recomputed from timestamps and the current instant, so a tab that missed a
- * thousand intervals is right on its first frame back.
- *
- * The tests drive the wall clock rather than the interval, because that is the
- * failure being reproduced. `vi.advanceTimersByTime` alone would fire the
- * intervals a throttled tab never gets; moving `Date.now()` forward *without*
- * firing them is what a backgrounded tab and a sleeping machine actually look
- * like.
+ * The maths is `packages/core/src/focus/timer.test.ts`. These tests drive the
+ * wall clock without firing intervals, which is what a throttled tab looks like.
  */
 
 const STARTED_AT = instant("2026-09-07T09:00:00.000Z");
 const SERVER_NOW = instant("2026-09-07T09:00:00.000Z");
 
-/*
- * The fixture's epoch, for driving the fake clock. `Date.parse` of an `Instant`
- * is safe by construction — the brand guarantees canonical UTC — and a test
- * that pins a clock is the one place a millisecond number is the right shape.
- */
 const STARTED_EPOCH = Date.parse(STARTED_AT);
 
 function Probe({
@@ -36,15 +21,20 @@ function Probe({
   pauses = [],
   status = "running" as const,
   endedAt = null as Instant | null,
+  startedAt = STARTED_AT,
+  onPlannedTimeElapsed,
 }: {
   serverNow?: Instant;
   pauses?: { pausedAt: Instant; resumedAt: Instant | null }[];
   status?: "running" | "paused" | "completed" | "abandoned";
   endedAt?: Instant | null;
+  startedAt?: Instant;
+  onPlannedTimeElapsed?: () => void;
 }) {
   const { state } = useFocusTimer({
-    session: { plannedMinutes: 25, startedAt: STARTED_AT, endedAt, status, pauses },
+    session: { plannedMinutes: 25, startedAt, endedAt, status, pauses },
     serverNow,
+    onPlannedTimeElapsed,
   });
 
   return (
@@ -64,13 +54,7 @@ function elapsed(): number {
   return Number(screen.getByTestId("elapsed").textContent);
 }
 
-/**
- * Moves the wall clock without firing anything — a throttled tab, or sleep.
- *
- * `vi.advanceTimersByTime` would move the clock *and* fire every interval on
- * the way, which is the one thing a backgrounded tab does not do. Setting the
- * system time reproduces the real failure: time passed, and nothing ran.
- */
+/** Moves the wall clock without firing intervals (`vi.advanceTimersByTime` would fire them). */
 function wallClock(ms: number): void {
   vi.setSystemTime(STARTED_EPOCH + ms);
 }
@@ -234,5 +218,74 @@ describe("useFocusTimer", () => {
     });
 
     expect(elapsed()).toBe(25 * 60);
+  });
+});
+
+describe("the planned time elapsing", () => {
+  it("is reported once, when the countdown crosses zero", () => {
+    const elapsed = vi.fn();
+    render(<Probe onPlannedTimeElapsed={elapsed} />);
+
+    act(() => {
+      vi.advanceTimersByTime(24 * 60_000 + 59_000);
+    });
+    expect(elapsed).not.toHaveBeenCalled();
+
+    act(() => {
+      vi.advanceTimersByTime(1_000);
+    });
+    expect(elapsed).toHaveBeenCalledTimes(1);
+
+    // Overrunning is not crossing again.
+    act(() => {
+      vi.advanceTimersByTime(10 * 60_000);
+    });
+    expect(elapsed).toHaveBeenCalledTimes(1);
+  });
+
+  it("is reported when a throttled tab comes back already past the length", () => {
+    const elapsed = vi.fn();
+    render(<Probe onPlannedTimeElapsed={elapsed} />);
+
+    act(() => {
+      wallClock(40 * 60_000);
+      returnToForeground();
+    });
+
+    expect(elapsed).toHaveBeenCalledTimes(1);
+  });
+
+  it("is not reported for a page mounted on a session already past its length", () => {
+    const elapsed = vi.fn();
+    wallClock(30 * 60_000);
+    render(
+      <Probe serverNow={instant("2026-09-07T09:30:00.000Z")} onPlannedTimeElapsed={elapsed} />,
+    );
+
+    act(() => {
+      vi.advanceTimersByTime(5_000);
+    });
+
+    expect(elapsed).not.toHaveBeenCalled();
+  });
+
+  it("is reported again for the next session", () => {
+    const elapsed = vi.fn();
+    const { rerender } = render(<Probe onPlannedTimeElapsed={elapsed} />);
+
+    act(() => {
+      vi.advanceTimersByTime(25 * 60_000);
+    });
+    expect(elapsed).toHaveBeenCalledTimes(1);
+
+    // A new session, started at the moment the first one ran out.
+    rerender(
+      <Probe startedAt={instant("2026-09-07T09:25:00.000Z")} onPlannedTimeElapsed={elapsed} />,
+    );
+    act(() => {
+      vi.advanceTimersByTime(25 * 60_000);
+    });
+
+    expect(elapsed).toHaveBeenCalledTimes(2);
   });
 });

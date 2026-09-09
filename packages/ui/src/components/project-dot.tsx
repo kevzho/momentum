@@ -2,11 +2,7 @@ import * as React from "react";
 import { cn } from "cn";
 import type { ProjectColor } from "@momentum/core/types";
 
-/**
- * The only place a `ProjectColor` is mapped to a token. Tailwind needs the
- * class name written out, so this record is exhaustive by construction: adding
- * a hue to PROJECT_COLORS without adding it here is a type error.
- */
+/** The only place a `ProjectColor` maps to classes; exhaustive, so a new hue without a style here is a type error. */
 const PROJECT_SURFACE: Record<ProjectColor, string> = {
   slate: "bg-project-slate text-project-slate-fg border-project-slate-border",
   red: "bg-project-red text-project-red-fg border-project-red-border",
@@ -42,10 +38,7 @@ function projectSurface(color: ProjectColor): string {
   return PROJECT_SURFACE[color];
 }
 
-/**
- * The project color dot. Colour is never the only signal: the dot always sits
- * next to the project's name or carries one through `label`.
- */
+/** Always sits next to the project's name or carries one through `label`. */
 function ProjectDot({
   color,
   label,

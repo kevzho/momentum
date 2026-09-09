@@ -14,12 +14,6 @@ import type {
   WorkBlockContext,
 } from "@/features/calendar/types";
 
-/**
- * Domain Rule 13 decides what the control on a block says, and the server
- * decides which of the two sentences applies. Everything here is about that
- * promise: the user reads what the click is about to do, and completing a block
- * from the board never doubles as opening it.
- */
 const SETTINGS: CalendarSettings = {
   timezone: ianaTimeZone("UTC"),
   weekStart: 1,
@@ -125,7 +119,6 @@ describe("BlockView", () => {
     const open = vi.fn();
     const callbacks = makeCallbacks();
     render(
-      // Standing in for the block shell, which opens the editor on click.
       <div onClick={open}>
         <BlockView segment={makeSegment(makeItem())} settings={SETTINGS} callbacks={callbacks} />
       </div>,
@@ -148,7 +141,6 @@ describe("BlockView", () => {
     renderBlock(makeItem({ work: work({ taskCompletedAt: instant("2026-09-07T18:00:00Z") }) }));
 
     expect(screen.getByText(/task completed/)).toBeDefined();
-    // Still actionable: the span itself was never executed.
     expect(screen.getByRole("button", { name: "Done with this block" })).toBeDefined();
   });
 
@@ -157,12 +149,6 @@ describe("BlockView", () => {
     expect(screen.queryByRole("button")).toBeNull();
   });
 
-  /*
-   * Phase 6. Completing a habit block records the habit for that day, so the
-   * control appears — but only where `record_habit_completion` would accept the
-   * date. A block older than yesterday still renders and still shows on the
-   * board; it simply offers no control that would have to fail.
-   */
   it("gives a habit block a control on the days its completion can be recorded", () => {
     renderBlock(
       makeItem({

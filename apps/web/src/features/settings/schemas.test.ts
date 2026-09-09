@@ -4,16 +4,6 @@ import { localTime } from "@momentum/core/time";
 
 import { normaliseWindows, updateProfileSettingsInput } from "@/features/settings/schemas";
 
-/**
- * The settings action's input contract.
- *
- * Every rule here mirrors one the database enforces — `profiles_*_chk`, the
- * timezone trigger, the jsonb shape the mapper reads — so a bad value comes
- * back as a sentence on the field rather than as a constraint violation the
- * page would have to translate. The one rule the database does not have,
- * merging overlapping windows, is the schema's own and is tested as such.
- */
-
 const HOURS = {
   0: [],
   1: [{ start: "09:00", end: "17:00" }],
@@ -27,7 +17,7 @@ const HOURS = {
   6: [],
 };
 
-/** A window as the mapper hands it to the page: branded, so the test types the way the code does. */
+/** A window as the mapper hands it to the page: branded. */
 const stored = (window: { start: string; end: string }) => ({
   start: localTime(window.start),
   end: localTime(window.end),

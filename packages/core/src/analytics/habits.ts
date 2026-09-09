@@ -4,28 +4,10 @@ import type { HabitCompletionFact, HabitFact } from "./facts";
 import type { AnalyticsPeriod } from "./period";
 
 /**
- * Habit consistency, one row per local date — the heatmap's data, and the
- * habit-completion rate on the summary tiles.
- *
- * Consistency, never streaks (Domain Rule 7). A day nothing happened on lowers
- * a rate; it deletes nothing, resets nothing and is not drawn as a penalty.
- *
- * Two rules carried over from `@momentum/core/habits`, because a rate that
- * disagreed with the habits page would be a second opinion about the same
- * facts:
- *
- * - **A habit is only answerable for the dates it existed.** `trackedFrom` is
- *   its creation date and `archivedFrom` the date it was retired; outside that
- *   span it expects nothing. A habit created on Thursday is not 0% for Monday.
- * - **Today is not over.** The last date of the period counts toward the
- *   denominator only once it has been met, so an unfinished day can raise the
- *   rate and never lower it.
- *
- * Only the per-day cadence produces an expectation for a specific date:
- * "three times a week, any days" names no day, and treating an arbitrary one as
- * due would invent a schedule the user did not choose. Completions of those
- * habits are still recorded on the day they happened — that is what `recorded`
- * carries — so the heatmap shows the work without inventing a target for it.
+ * Habit consistency per local date. Must agree with `@momentum/core/habits`: a
+ * habit is only answerable between `trackedFrom` and `archivedFrom`, and the
+ * last date counts toward the denominator only once met. Only per-day cadences
+ * produce an expectation for a specific date.
  */
 
 /** One date of the heatmap. */
@@ -85,13 +67,7 @@ export function habitConsistencyByDay(
   });
 }
 
-/**
- * The period's habit completion rate.
- *
- * The final date is excluded from the denominator unless it was fully met —
- * the same rule `habitStats` applies to today, so the two surfaces cannot
- * disagree about a day that is still in progress.
- */
+/** The period's habit completion rate. The final date is excluded from the denominator unless fully met, as `habitStats` does for today. */
 export function habitCompletionRate(days: readonly HabitDay[]): HabitRateValue {
   let met = 0;
   let expected = 0;

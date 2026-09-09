@@ -15,11 +15,7 @@ interface SidebarContextValue {
 
 const SidebarContext = React.createContext<SidebarContextValue | null>(null);
 
-/**
- * Collapse state is seeded from the cookie the server already read, so the
- * first paint is the correct width and the toggle stays in sync with what is
- * persisted. Nothing else in the app owns this state.
- */
+// Seeded from the cookie the server already read, so the first paint is the correct width.
 export function SidebarProvider({
   defaultState,
   children,

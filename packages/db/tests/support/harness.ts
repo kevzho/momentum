@@ -5,12 +5,8 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "../../src/database.types";
 
 /**
- * The integration harness.
- *
- * These tests run against a real local Supabase, because the thing under test
- * *is* the policies — mocking the client would prove nothing
- * (docs/ARCHITECTURE.md §13). They skip themselves cleanly when
- * MOMENTUM_DB_TESTS is unset, so `pnpm test` stays green without Docker.
+ * Integration harness against a real local Supabase — the policies are the
+ * thing under test. Suites skip themselves when MOMENTUM_DB_TESTS is unset.
  */
 
 export const DB_TESTS_ENABLED = process.env.MOMENTUM_DB_TESTS === "1";
@@ -29,10 +25,7 @@ interface LocalKeys {
 
 let cachedKeys: LocalKeys | undefined;
 
-/**
- * Reads the local stack's URL and keys. Environment first (CI sets them), then
- * `supabase status`, so a developer needs no setup beyond a running stack.
- */
+/** Local stack URL and keys: environment first, then `supabase status`. */
 export function localKeys(): LocalKeys {
   if (cachedKeys) return cachedKeys;
 
@@ -90,14 +83,9 @@ export async function signIn(user: { email: string; password: string }): Promise
 }
 
 /**
- * A client with no schema type argument, so `from()` takes a table name the
- * caller computed rather than a literal.
- *
- * The RLS sweep walks every table in a loop and writes `{ [ownerColumn]: id }`,
- * which the generated types correctly refuse for a *union* of tables — there is
- * no single row shape that satisfies all of them. Reaching for the untyped
- * client there is deliberate and confined to that sweep; every specific
- * assertion uses the typed one.
+ * Untyped client for the RLS sweep, which writes `{ [ownerColumn]: id }` across
+ * a computed table name that the generated types correctly refuse. Every
+ * specific assertion uses the typed one.
  */
 export async function signInGeneric(user: {
   email: string;
@@ -122,10 +110,7 @@ export function signedOutGenericClient(): SupabaseClient {
   });
 }
 
-/**
- * The service-role client. Used only to set up and tear down fixtures —
- * never to assert anything, because it bypasses the policies under test.
- */
+/** Service-role client for fixtures only — never assert with it; it bypasses the policies under test. */
 export function adminClient(): TestClient {
   const { url, secretKey } = localKeys();
   return createClient<Database>(url, secretKey, {

@@ -41,12 +41,6 @@ const ALL = [...DAILY, ...WEEKLY];
 const ALICE = "3f2a91c4-5d6e-4a7b-8c9d-0e1f2a3b4c5d";
 const BOB = "8b7c6d5e-4f3a-4b2c-9d8e-7f6a5b4c3d2e";
 
-/**
- * The acceptance criterion, stated three ways: the same user and date always
- * produce the same quests, different dates produce different ones, and no
- * target the product can express asks for an unhealthy amount of work.
- */
-
 describe("selectQuests", () => {
   const date = localDate("2026-09-07");
 
@@ -69,7 +63,6 @@ describe("selectQuests", () => {
   it("assigns three daily quests and two weekly ones", () => {
     expect(selectQuests(ALL, ALICE, "daily", date)).toHaveLength(QUEST_SLOTS.daily);
     expect(selectQuests(ALL, ALICE, "weekly", date)).toHaveLength(QUEST_SLOTS.weekly);
-    // Inside the spec's "3–4 per day", and never a list to clear.
     expect(QUEST_SLOTS.daily).toBeGreaterThanOrEqual(3);
     expect(QUEST_SLOTS.daily).toBeLessThanOrEqual(4);
   });
@@ -143,7 +136,6 @@ describe("quest targets are bounded", () => {
   });
 
   it("never allows a day of focus that would be unhealthy", () => {
-    // "No 'focus for 8 hours' quest, ever" (specs/08-gamification.md).
     expect(QUEST_TARGET_CAPS.daily.focus_minutes).toBeLessThanOrEqual(2 * 60);
     expect(QUEST_TARGET_CAPS.weekly.focus_minutes).toBeLessThanOrEqual(6 * 60);
     expect(isHealthyQuestTarget("daily", "focus_minutes", 8 * 60)).toBe(false);
@@ -203,13 +195,11 @@ describe("questFactsFor", () => {
       // 23:40 local on the 7th — the UTC date is already the 8th.
       { completedAt: instant("2026-09-08T03:40:00.000Z"), priority: 1 as const },
       { completedAt: instant("2026-09-07T14:00:00.000Z"), priority: 3 as const },
-      // The day before: outside a one-day period, inside the week.
       { completedAt: instant("2026-09-06T14:00:00.000Z"), priority: 1 as const },
       { completedAt: null, priority: 2 as const },
     ],
     focusSessions: [
       { startedAt: instant("2026-09-07T13:00:00.000Z"), actualMinutes: 50 as Minutes },
-      // Ended early: the minutes still count.
       { startedAt: instant("2026-09-07T18:00:00.000Z"), actualMinutes: 12 as Minutes },
       { startedAt: instant("2026-09-06T18:00:00.000Z"), actualMinutes: 30 as Minutes },
       { startedAt: instant("2026-09-07T19:00:00.000Z"), actualMinutes: null },
