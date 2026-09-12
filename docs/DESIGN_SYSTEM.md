@@ -88,6 +88,13 @@ Nothing else. If two adjacent elements have different radii, one of them is wron
 glyph row exists because `rounded-md` on a 16px box is a circle; it is not a licence for
 `rounded-sm` on links, chips or rows (the Phase 13 audit normalised those to `rounded-md`).
 
+The primitives carry the roles, so a call site never chooses: `Button` (every size), `Input`,
+`Textarea`, `SelectTrigger`, `Toggle`, `ToggleGroup`, `InputGroup` and the palette's input are
+`rounded-md`; `Popover`, `DropdownMenu`, `Dialog`, `Sheet` and the command dialog are
+`rounded-lg`. The vendored radix-nova sources shipped default-size controls at `rounded-lg`,
+which put a control's corner beside a surface's in every toolbar; the UI polish pass
+(2026-09-12) moved them onto the control role.
+
 ### Typography
 
 One family: **Geist Sans** (`--font-sans`). **Geist Mono** (`--font-mono`) only for
@@ -109,6 +116,11 @@ Hierarchy comes from weight and color before size.
 
 The page title lives in `PageHeader` and nowhere else. The top bar shows the current
 section name only when `PageHeader` is not rendered (mobile). One title per page.
+
+A section label is the row in the table above and nothing more: no leading icon, no count
+baked into the text (a count sits at the row's far end in `text-xs text-muted-foreground`,
+as `TodaySection` does). Progress lost its per-section icons in the UI polish pass; the icon
+belongs in the row's content when it means something, never on the label.
 
 ### Color
 
@@ -268,7 +280,7 @@ data, server actions). Feature components compose these; they do not restyle the
 
 | Group    | Primitive           | Responsibility                                                              |
 | -------- | ------------------- | --------------------------------------------------------------------------- |
-| Layout   | `PageHeader`        | The one page title, optional actions slot. Never duplicated by the top bar. |
+| Layout   | `PageHeader`        | The one page title, optional actions slot. Never duplicated by the top bar. Below `md` the title is visually hidden and the actions form a left-anchored toolbar row at the gutter — never a control floating at the far edge of an empty row. `PageHeaderSkeleton` mirrors both. |
 |          | `SidePanel`         | Persistent, collapsible column beside content (the calendar's Plan my week drawer). |
 |          | `SideSheet`         | Modal-free detail surface on shadcn `sheet` (task detail, block edit).      |
 | State    | `EmptyState`        | icon · title · one-line description · single primary action. `titleAs="h1"` for a page-level empty state such as the 404 _(Phase 13)_. |
@@ -301,8 +313,9 @@ data, server actions). Feature components compose these; they do not restyle the
 
 `AppShell` · `Sidebar` (navigation links, collapse state) · `SidebarNav` (the one
 navigation list, shared by the rail and the mobile drawer) · `MobileNav` (drawer below
-`md`) · `TopBar` (section name on mobile, quick-add, palette trigger, `XPBar`, profile
-menu — no bell) · `ProjectDialog` (name + a `role=radiogroup` of twelve `ProjectDot` swatches,
+`md`) · `TopBar` (section name on mobile, the quick-add button as an `outline` icon button and the palette
+trigger as `ghost` — chrome stays quiet so each page's own action is the one primary in view —
+`XPBar`, profile menu — no bell) · `ProjectDialog` (name + a `role=radiogroup` of twelve `ProjectDot` swatches,
 arrows/Home/End move the selection) · `ProjectMenu` (the sidebar row's "…": Rename, Archive;
 revealed on hover/focus-within, always on coarse pointers) · the seventh task view tab "Archived"
 (an archived row shows a restore icon button in the checkbox's slot and a muted title without
@@ -321,6 +334,11 @@ width. See the decisions log in `docs/ARCHITECTURE.md`.
 hides it visually below `md`; `TopBar` shows the section name only below `md` and marks it
 `aria-hidden`, because the `h1` is still the accessible heading. No page renders two
 competing titles, at any width.
+
+**The one level bar rule.** `XPBar` in the top bar is the level indicator from `sm` up. Below
+`sm` the top bar hides it and Today's `DayProgress` draws the bar instead; from `sm` up
+`DayProgress` is a one-line meta row (level · XP into level · today's delta). The bar exists
+exactly once at every width.
 
 If a page needs a style that does not exist here, add it to the primitive layer — do not
 inline it.

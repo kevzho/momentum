@@ -106,7 +106,7 @@ export function ProgressView({ data }: { data: ProgressPageData }) {
       {/* Explicit `minmax(0, 1fr)` tracks: an implicit `auto` track sizes to the
           widest row's min-content, which at 375px pushed controls past the viewport. */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <Section title={PROGRESS_COPY.quests.dailyTitle} icon={ListChecksIcon}>
+        <Section title={PROGRESS_COPY.quests.dailyTitle}>
           {data.daily.length === 0 ? (
             <EmptyState
               compact
@@ -131,7 +131,7 @@ export function ProgressView({ data }: { data: ProgressPageData }) {
           )}
         </Section>
 
-        <Section title={PROGRESS_COPY.quests.weeklyTitle} icon={TargetIcon}>
+        <Section title={PROGRESS_COPY.quests.weeklyTitle}>
           {data.weekly.length === 0 ? (
             <EmptyState
               compact
@@ -158,7 +158,6 @@ export function ProgressView({ data }: { data: ProgressPageData }) {
 
         <Section
           title={PROGRESS_COPY.goals.title}
-          icon={TargetIcon}
           action={
             <Button variant="ghost" size="sm" onClick={() => setGoalOpen(true)}>
               <PlusIcon aria-hidden="true" className="size-3.5" />
@@ -174,9 +173,9 @@ export function ProgressView({ data }: { data: ProgressPageData }) {
               description={PROGRESS_COPY.goals.emptyDescription}
             />
           ) : (
-            <ul className="flex flex-col gap-2">
+            <ul className="flex flex-col gap-3">
               {data.goals.map((goal) => (
-                <li key={goal.id} className="flex flex-col gap-1.5">
+                <li key={goal.id} className="flex flex-col gap-1">
                   <div className="flex items-baseline gap-2">
                     <span
                       className={cn(
@@ -223,7 +222,7 @@ export function ProgressView({ data }: { data: ProgressPageData }) {
           )}
         </Section>
 
-        <Section title={PROGRESS_COPY.achievements.title} icon={AwardIcon}>
+        <Section title={PROGRESS_COPY.achievements.title}>
           <ul className="flex flex-col gap-2">
             {data.achievements.map((row) => (
               <li key={row.definition.key} className="flex items-start gap-2">
@@ -258,7 +257,6 @@ export function ProgressView({ data }: { data: ProgressPageData }) {
 
         <Section
           title={PROGRESS_COPY.cosmetics.title}
-          icon={SparklesIcon}
           description={PROGRESS_COPY.cosmetics.description}
         >
           <ul className="flex flex-col gap-2">
@@ -317,7 +315,7 @@ export function ProgressView({ data }: { data: ProgressPageData }) {
           </ul>
         </Section>
 
-        <Section title={PROGRESS_COPY.history.title} icon={SparklesIcon}>
+        <Section title={PROGRESS_COPY.history.title}>
           {data.recent.length === 0 ? (
             <EmptyState
               compact
@@ -368,7 +366,7 @@ function LevelPanel({ data }: { data: ProgressPageData }) {
   const { badge } = data;
 
   return (
-    <section className="flex flex-wrap items-center gap-x-6 gap-y-3 rounded-(--radius) border px-4 py-3">
+    <section className="flex flex-wrap items-center gap-x-6 gap-y-3 rounded-lg border border-border bg-card px-4 py-3">
       <div className="flex min-w-48 flex-1 flex-col gap-1.5">
         <div className="flex items-baseline justify-between gap-3">
           <span className="text-sm font-medium">{PROGRESS_COPY.level.label(badge.level)}</span>
@@ -419,16 +417,15 @@ function CapsPanel({ data }: { data: ProgressPageData }) {
   );
 }
 
+/** The section label is the product-wide one: uppercase, muted, no leading icon (see `TodaySection`). */
 function Section({
   title,
   description,
-  icon: Icon,
   action,
   children,
 }: {
   title: string;
   description?: string;
-  icon: React.ComponentType<{ className?: string }>;
   action?: React.ReactNode;
   children: React.ReactNode;
 }) {
@@ -437,7 +434,6 @@ function Section({
   return (
     <section aria-labelledby={headingId} className="flex min-w-0 flex-col gap-2">
       <div className="flex items-center gap-2">
-        <Icon aria-hidden="true" className="size-3.5 text-muted-foreground" />
         <h2
           id={headingId}
           className="flex-1 text-xs font-medium tracking-wide text-muted-foreground uppercase"

@@ -1,14 +1,6 @@
 "use client";
 
-import {
-  Area,
-  AreaChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 import type { DayValue } from "@momentum/core/analytics";
 
@@ -27,7 +19,7 @@ import {
 } from "@/features/analytics/components/charts/chart-theme";
 import { ANALYTICS_COPY, dayLabel } from "@/features/analytics/copy";
 
-/** An area, read for its shape rather than any single day. The y-axis is whole tasks, so ticks are integers. */
+/** Bars, like focus-by-day: a day's count is a whole number and a day with none is a real zero, not a point to curve through. */
 export function CompletionTrendChart({ data }: { data: readonly DayValue[] }) {
   const columns: ChartTableColumn<DayValue>[] = [
     { header: ANALYTICS_COPY.columns.date, cell: (row) => dayLabel(row.date) },
@@ -47,7 +39,7 @@ export function CompletionTrendChart({ data }: { data: readonly DayValue[] }) {
       rowKey={(row) => row.date}
     >
       <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={data.map((point) => ({ ...point, label: dayLabel(point.date) }))}>
+        <BarChart data={data.map((point) => ({ ...point, label: dayLabel(point.date) }))}>
           <CartesianGrid vertical={false} stroke={CHART_COLORS.grid} />
           <XAxis
             dataKey="label"
@@ -65,21 +57,14 @@ export function CompletionTrendChart({ data }: { data: readonly DayValue[] }) {
             domain={[0, Math.max(1, peak)]}
           />
           <Tooltip
-            cursor={{ stroke: CHART_COLORS.grid }}
+            cursor={{ fill: CHART_COLORS.grid, fillOpacity: 0.4 }}
             contentStyle={TOOLTIP_STYLE}
             labelStyle={TOOLTIP_LABEL_STYLE}
             itemStyle={TOOLTIP_ITEM_STYLE}
             formatter={(value: unknown) => [numericValue(value), ANALYTICS_COPY.columns.tasks]}
           />
-          <Area
-            type="monotone"
-            dataKey="value"
-            stroke={CHART_COLORS.primary}
-            strokeWidth={2}
-            fill={CHART_COLORS.primary}
-            fillOpacity={0.16}
-          />
-        </AreaChart>
+          <Bar dataKey="value" fill={CHART_COLORS.primary} radius={[2, 2, 0, 0]} />
+        </BarChart>
       </ResponsiveContainer>
     </ChartFigure>
   );

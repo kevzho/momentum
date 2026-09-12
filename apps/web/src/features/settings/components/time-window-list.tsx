@@ -113,8 +113,8 @@ export function TimeWindowList({
             disabled={disabled}
             onCommit={(next) => onChange(windows.map((item, at) => (at === index ? next : item)))}
             onRemove={() => onChange(windows.filter((_, at) => at !== index))}
+            trailing={index === windows.length - 1 ? addButton : null}
           />
-          {index === windows.length - 1 ? addButton : null}
         </li>
       ))}
     </ul>
@@ -134,6 +134,7 @@ function WindowRow({
   disabled,
   onCommit,
   onRemove,
+  trailing = null,
 }: {
   id: string;
   label: string;
@@ -142,6 +143,8 @@ function WindowRow({
   disabled: boolean;
   onCommit: (window: TimeWindow) => void;
   onRemove: () => void;
+  /** Rendered beside the remove button, so the two wrap together. */
+  trailing?: React.ReactNode;
 }) {
   const [start, setStart] = React.useState<string>(window.start);
   const [end, setEnd] = React.useState<string>(window.end);
@@ -192,52 +195,59 @@ function WindowRow({
 
   // Wide enough for "09:00 AM" beside Chrome's picker glyph (`w-28` clips the
   // meridiem), narrow enough for a weekday row to fit `max-w-md` on one line.
-  const fieldClass = "w-30 tabular-nums";
+  // Below `md` the input is `text-base`, so it needs one more step.
+  const fieldClass = "w-34 tabular-nums md:w-30";
 
   return (
     <>
-      <Input
-        id={`${id}-start`}
-        type="time"
-        step={STEP_SECONDS}
-        value={start}
-        disabled={disabled}
-        aria-label={`${label} window ${ordinal} start`}
-        className={fieldClass}
-        onChange={(event) => setStart(event.target.value)}
-        onFocus={onFocus}
-        onBlur={commit}
-        onKeyDown={onKeyDown}
-      />
-      <span aria-hidden="true" className="text-muted-foreground">
-        –
+      {/* Start, dash and end are one unit: when the row wraps, the buttons wrap, never the dash. */}
+      <span className="flex items-center gap-2">
+        <Input
+          id={`${id}-start`}
+          type="time"
+          step={STEP_SECONDS}
+          value={start}
+          disabled={disabled}
+          aria-label={`${label} window ${ordinal} start`}
+          className={fieldClass}
+          onChange={(event) => setStart(event.target.value)}
+          onFocus={onFocus}
+          onBlur={commit}
+          onKeyDown={onKeyDown}
+        />
+        <span aria-hidden="true" className="text-muted-foreground">
+          –
+        </span>
+        <Input
+          id={`${id}-end`}
+          type="time"
+          step={STEP_SECONDS}
+          value={end}
+          disabled={disabled}
+          aria-label={`${label} window ${ordinal} end`}
+          aria-invalid={backwards || undefined}
+          aria-describedby={backwards ? `${id}-end-error` : undefined}
+          className={fieldClass}
+          onChange={(event) => setEnd(event.target.value)}
+          onFocus={onFocus}
+          onBlur={commit}
+          onKeyDown={onKeyDown}
+        />
       </span>
-      <Input
-        id={`${id}-end`}
-        type="time"
-        step={STEP_SECONDS}
-        value={end}
-        disabled={disabled}
-        aria-label={`${label} window ${ordinal} end`}
-        aria-invalid={backwards || undefined}
-        aria-describedby={backwards ? `${id}-end-error` : undefined}
-        className={fieldClass}
-        onChange={(event) => setEnd(event.target.value)}
-        onFocus={onFocus}
-        onBlur={commit}
-        onKeyDown={onKeyDown}
-      />
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-sm"
-        aria-label={`Remove ${label} window ${ordinal}`}
-        title="Remove window"
-        disabled={disabled}
-        onClick={onRemove}
-      >
-        <XIcon />
-      </Button>
+      <span className="flex items-center gap-2">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          aria-label={`Remove ${label} window ${ordinal}`}
+          title="Remove window"
+          disabled={disabled}
+          onClick={onRemove}
+        >
+          <XIcon />
+        </Button>
+        {trailing}
+      </span>
       {backwards ? (
         <span id={`${id}-end-error`} className="text-xs text-destructive">
           Has to end after it starts.

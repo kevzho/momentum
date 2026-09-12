@@ -13,8 +13,8 @@ import { Skeleton } from "@momentum/ui/components/skeleton";
 /** Mirrors `PageHeader`, whose title is visually hidden below `md`. */
 export function PageHeaderSkeleton({ hasActions = true }: { hasActions?: boolean }) {
   return (
-    <div className="flex items-start justify-between gap-3 md:min-h-8">
-      <div>
+    <div className="flex items-start md:min-h-8 md:justify-between md:gap-3">
+      <div className="flex-none md:flex-1">
         <Skeleton className="hidden h-7 w-32 md:block" />
         <Skeleton className="mt-0.5 hidden h-4 w-56 md:block" />
       </div>

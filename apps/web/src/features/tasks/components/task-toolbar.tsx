@@ -63,7 +63,7 @@ export function TaskToolbar({
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <div className="relative min-w-0 flex-1 sm:max-w-64">
+      <div className="relative min-w-0 flex-1 max-sm:basis-full sm:max-w-64">
         <SearchIcon
           aria-hidden="true"
           className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
@@ -79,7 +79,7 @@ export function TaskToolbar({
 
       <Popover>
         <PopoverTrigger asChild>
-          <Button variant={active ? "secondary" : "outline"} size="sm">
+          <Button variant={active ? "secondary" : "outline"}>
             <FilterIcon aria-hidden="true" />
             Filter
             {active ? (
@@ -193,7 +193,7 @@ export function TaskToolbar({
 
         <Button
           variant="outline"
-          size="icon-sm"
+          size="icon"
           onClick={() => onDirectionChange(direction === "asc" ? "desc" : "asc")}
         >
           {direction === "asc" ? (

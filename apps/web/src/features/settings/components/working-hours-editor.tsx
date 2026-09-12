@@ -26,8 +26,8 @@ export function WorkingHoursEditor({
   return (
     <div role="group" aria-label="Working hours" className="flex flex-col gap-3">
       {weekdaysFrom(weekStart).map((day) => (
-        <div key={day} className="flex items-start gap-3">
-          <span className="w-24 shrink-0 pt-1.5 text-sm font-medium">{WEEKDAY_NAMES[day]}</span>
+        <div key={day} className="flex items-start gap-3 max-sm:flex-col max-sm:gap-1.5">
+          <span className="w-24 shrink-0 text-sm font-medium sm:pt-1.5">{WEEKDAY_NAMES[day]}</span>
           <TimeWindowList
             id={`working-hours-${day}`}
             label={WEEKDAY_NAMES[day]}

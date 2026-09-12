@@ -25,11 +25,11 @@ export function QuestList({
   pendingIds: ReadonlySet<string>;
 }) {
   return (
-    <ul className="flex flex-col gap-2">
+    <ul className="flex flex-col gap-3">
       {quests.map((quest) => {
         const done = quest.completedAt !== null;
         return (
-          <li key={quest.assignmentId} className="flex flex-col gap-1.5">
+          <li key={quest.assignmentId} className="flex flex-col gap-1">
             <div className="flex items-baseline gap-2">
               <span
                 className={cn("min-w-0 flex-1 truncate text-sm", done && "text-muted-foreground")}

@@ -4,7 +4,12 @@
 Every phase updates it before declaring completion. A fresh context reads
 `CLAUDE.md` → this file → the relevant spec, and knows exactly what to do.
 
-Last updated: 2026-09-09, later the same day (post-audit fix pass — see "What exists after the
+Last updated: 2026-09-12 (UI polish pass — see "What exists after the UI polish pass": page
+header actions anchor left on phones, every control shares the control radius, the level bar
+is drawn once per width, the chrome's capture button no longer competes with the page's
+primary, and the completion trend is bars.)
+
+Previously: 2026-09-09, later the same day (post-audit fix pass — see "What exists after the
 post-audit fix pass": archived tasks are listable and restorable, projects can be created,
 renamed, recoloured and archived, the inert bell is gone and one real focus-end notification
 exists, quests stay visible across a timezone change, every user-owned table exports as JSON,
@@ -67,6 +72,49 @@ Everything else is post-MVP. Ship the MVP before starting Phase 5.
 Integration audits run after Phase 5 and again before Phase 13. All prompts: `docs/PROMPTS.md`.
 
 ---
+
+## What exists after the UI polish pass (2026-09-12)
+
+A rendered audit — 134 headless captures at 375/768/1280/1536 in both themes, populated and
+sparse accounts, dialogs, sheet, palette, drawer, day view, login error, keyboard focus — found
+no Critical issue, no console error and no horizontal overflow, and a handful of coherence
+defects a launch review would catch. All are fixed; nothing behind the data boundary changed.
+
+- **`PageHeader` below `md`.** The title is visually hidden there, but the header kept
+  `justify-between` around a zero-width title column, so Tasks, Habits, Calendar and Analytics
+  opened on a control cluster floating at the far right of an empty row (on Tasks, a lone
+  "New task" primary 40px below the top bar's "+"). The actions are now a left-anchored row at
+  the gutter (`flex-none md:flex-1` on the title column, `md:justify-between md:gap-3` on the
+  header); `PageHeaderSkeleton` mirrors it.
+- **One radius per role, in the primitives.** `docs/DESIGN_SYSTEM.md` assigns `rounded-md` to
+  controls and `rounded-lg` to surfaces, but the vendored radix-nova sources used `rounded-lg`
+  on default-size `Button`, `Input`, `Textarea`, `SelectTrigger`, `Toggle`, `ToggleGroup` and
+  `InputGroup` (and `rounded-md` only at `sm`/`xs`), so an input sat beside a small button with
+  different corners in every toolbar and form. Default sizes now use the control role; the
+  surfaces are untouched. The redundant per-size `rounded-md` classes are gone.
+- **Tasks toolbar.** Filter (`size="sm"`, 28px) and the sort-direction button (`icon-sm`) sat
+  in a row of 32px controls; both are default size now. At `< sm` the search input takes its
+  own row (`max-sm:basis-full`) instead of shrinking to "Filte".
+- **The level bar exists once at every width.** Today's `DayProgress` drew a full-width bar
+  90px under the top bar's `XPBar` for the same numbers (1000px wide at 1536). The bar is now
+  `sm:hidden` — exactly where the top bar hides its own — and from `sm` up the row is a meta
+  line: level · XP into level · today's delta. The `progressbar` role and copy are unchanged.
+- **One primary per view.** The top bar's quick-add was a filled primary next to every page's
+  own primary ("New task", "Start focus", "Start 25 minutes"). It is an `outline` icon button
+  now; Q and the button still open Quick Add.
+- **Completion trend is bars.** It was a `monotone` area over 0/1 daily counts, a sine wave
+  implying fractional completions. It uses the same bar treatment as focus-by-day.
+- **Progress.** Section labels drop their leading icons (the only route that had them);
+  the level panel uses the surface role (`rounded-lg border bg-card`, matching Next Up) instead
+  of a hand-spelled `rounded-(--radius)`; quest and goal rows are `gap-1` inside, `gap-3`
+  between, so a quest's progress line no longer reads as the next quest's label.
+- **Settings at 375.** Working-hours rows stack the day label above its windows below `sm`,
+  and start–dash–end are one flex unit, so the dash can no longer orphan at a line end.
+
+Verified by fresh captures at all four widths in both themes through `ui-critic` (Ship), then
+typecheck, lint and the unit suites for the touched features. Noted, not changed: the week
+grid at 375 shows ~3.5 days and scrolls (whether phones should default to Day view is a product
+call); `PageContainer` has no maximum content width, so Today's panels run 1250px wide at 1536.
 
 ## What exists after Phase 0
 
@@ -1639,6 +1687,10 @@ the audit record.
 
 ## Current known issues
 
+- **Today's panels run the full content width on wide screens.** _(UI polish pass, noted)_
+  `PageContainer` sets no maximum measure, so at 1536px the At Risk and Next Up panels are
+  ~1250px wide around three short lines. Dense-desktop-first says leave it; if a cap is added it
+  belongs on `PageContainer` (not `fill`) as one token, never per page.
 - **Archived projects cannot be restored from the UI.** _(fix pass, open)_ An archived project
   leaves every list; restoring it means clearing `archived_at` in the database. A task whose
   project is archived shows no project name in its row and an empty Project select in the

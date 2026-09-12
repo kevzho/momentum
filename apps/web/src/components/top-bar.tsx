@@ -70,7 +70,8 @@ export function TopBar({
 
       <div className="flex-1" />
 
-      {/* The palette's pointer route; the keyboard route is ⌘K. */}
+      {/* The palette's pointer route; the keyboard route is ⌘K. Both chrome controls stay
+          quiet so each page's own action is the one primary in view. */}
       <Button
         variant="ghost"
         size="sm"
@@ -85,7 +86,7 @@ export function TopBar({
 
       <Tooltip>
         <TooltipTrigger asChild>
-          <Button size="icon-sm" onClick={() => quickAdd.open()}>
+          <Button variant="outline" size="icon-sm" onClick={() => quickAdd.open()}>
             <PlusIcon aria-hidden="true" />
             <span className="sr-only">Quick add</span>
           </Button>
