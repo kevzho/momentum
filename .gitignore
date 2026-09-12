@@ -61,3 +61,6 @@ pnpm-debug.log*
 
 # Internal engineering docs: kept locally, not published (repository is public).
 docs/
+
+# Private issue notes and assessments.
+issues-solve/
