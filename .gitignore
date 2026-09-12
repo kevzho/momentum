@@ -58,3 +58,6 @@ pnpm-debug.log*
 
 # vitest
 .vitest/
+
+# Internal engineering docs: kept locally, not published (repository is public).
+docs/
