@@ -2,6 +2,7 @@ import type { GridSpec } from "@momentum/core/calendar";
 import type { HabitProgress } from "@momentum/core/habits";
 import type {
   BlockKind,
+  EventBlock,
   Habit,
   IanaTimeZone,
   Instant,
@@ -9,6 +10,7 @@ import type {
   Minutes,
   ProjectColor,
   QuestMetric,
+  RecurrenceRule,
   SnapMinutes,
   TaskPriority,
   TimeWindow,
@@ -139,6 +141,8 @@ export interface CalendarWeekData {
   /** "Today" in the profile timezone, computed once per request on the server. */
   today: LocalDate;
   items: readonly CalendarItem[];
+  /** The series rows behind the range's occurrences, so an occurrence can open its series. */
+  series: readonly EventBlock[];
   plan: PlanningData;
 }
 
@@ -180,7 +184,10 @@ export interface DaySpan {
 }
 
 export type BlockDraft =
-  { mode: "create"; span: DaySpan } | { mode: "edit"; item: CalendarItem; span: DaySpan };
+  | { mode: "create"; span: DaySpan }
+  | { mode: "edit"; item: CalendarItem; span: DaySpan }
+  /** The series behind an occurrence: content, rule and the first occurrence's span, for every occurrence at once. */
+  | { mode: "series"; series: EventBlock; span: DaySpan };
 
 /** The settings the whole surface resolves dates and geometry against. */
 export interface CalendarSettings {
@@ -243,6 +250,10 @@ export interface BlockEditorProps {
   onSubmit: (draft: BlockDraft, values: BlockEditorValues) => void;
   onDelete: (item: CalendarItem) => void;
   onToggleComplete: (item: CalendarItem) => void;
+  /** The range's series rows, so an occurrence draft can show its rule and open its series. */
+  series: readonly EventBlock[];
+  onEditSeries: (series: EventBlock) => void;
+  onDeleteSeries: (series: EventBlock) => void;
   pending: boolean;
 }
 
@@ -254,6 +265,8 @@ export interface BlockEditorValues {
   startMinutes: Minutes;
   endMinutes: Minutes;
   color: ProjectColor | null;
+  /** Null: does not repeat. Read only for an event draft; ignored for work, habit and single-occurrence drafts. */
+  recurrence: RecurrenceRule | null;
 }
 
 /*

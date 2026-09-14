@@ -1,5 +1,6 @@
 import { addDays } from "@momentum/core/time";
 import {
+  type Recurrence,
   PROJECT_COLORS,
   type BlockKind,
   type CalendarBlock,
@@ -10,7 +11,11 @@ import {
   type Uuid,
 } from "@momentum/core/types";
 
-import { rowToCalendarBlock, rowToEventBlock } from "../mappers/calendar-block";
+import {
+  rowToCalendarBlock,
+  rowToEventBlock,
+  serializeRecurrence,
+} from "../mappers/calendar-block";
 import { oneOf } from "../mappers/scalars";
 import type { InsertRow, MomentumClient, UpdateRow } from "../types";
 
@@ -281,6 +286,8 @@ export interface NewBlock {
   seriesId?: Uuid | null;
   occurrenceDate?: LocalDate | null;
   cancelled?: boolean;
+  /** Makes the row a series; `recurrence_until` is mirrored by trigger. Events only. */
+  recurrence?: Recurrence | null;
 }
 
 /** The columns a client may change. `completed_at` is guarded and absent on purpose. */
@@ -292,6 +299,8 @@ export interface BlockPatch {
   allDay?: boolean;
   color?: ProjectColor | null;
   cancelled?: boolean;
+  /** Null stops a series repeating; a rule on a non-series event starts one. */
+  recurrence?: Recurrence | null;
 }
 
 export async function insert(client: MomentumClient, block: NewBlock): Promise<CalendarBlock> {
@@ -310,6 +319,9 @@ export async function insert(client: MomentumClient, block: NewBlock): Promise<C
     ...(block.seriesId === undefined ? {} : { series_id: block.seriesId }),
     ...(block.occurrenceDate === undefined ? {} : { occurrence_date: block.occurrenceDate }),
     ...(block.cancelled === undefined ? {} : { cancelled: block.cancelled }),
+    ...(block.recurrence === undefined || block.recurrence === null
+      ? {}
+      : { recurrence: serializeRecurrence(block.recurrence) }),
   };
 
   const { data, error } = await client.from("calendar_blocks").insert(row).select("*").single();
@@ -331,6 +343,9 @@ export async function update(
     ...(patch.allDay === undefined ? {} : { all_day: patch.allDay }),
     ...(patch.color === undefined ? {} : { color: patch.color }),
     ...(patch.cancelled === undefined ? {} : { cancelled: patch.cancelled }),
+    ...(patch.recurrence === undefined
+      ? {}
+      : { recurrence: patch.recurrence === null ? null : serializeRecurrence(patch.recurrence) }),
   };
 
   const { data, error } = await client

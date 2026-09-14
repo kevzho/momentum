@@ -89,6 +89,19 @@ export function deletedMessage(title: string): string {
   return `${title} deleted.`;
 }
 
+/** `rule` is `describeRecurrence`'s sentence. */
+export function addedSeriesMessage(title: string, rule: string): string {
+  return `${title} added. ${rule}.`;
+}
+
+export function seriesSavedMessage(title: string): string {
+  return `${title} saved for every occurrence.`;
+}
+
+export function seriesDeletedMessage(title: string): string {
+  return `${title} deleted, with every occurrence.`;
+}
+
 /** Undo put a deleted block back, and it is on the board again. */
 export function restoredMessage(title: string): string {
   return `${title} restored.`;

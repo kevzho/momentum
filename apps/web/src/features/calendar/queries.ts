@@ -139,6 +139,8 @@ export async function getCalendarWeek(params: CalendarWeekParams): Promise<Calen
     days,
     today,
     items,
+    // The rows behind the occurrences, so an occurrence can open its series.
+    series: rows.series,
     plan: buildPlan(
       sections,
       goalRows,

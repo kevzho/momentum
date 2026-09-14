@@ -18,11 +18,19 @@ import {
   formatMinutesOfDay,
   isLocalDate,
   localDate,
+  localDateOf,
   minutesOfLocalTimeValue,
 } from "@momentum/core/time";
+import { describeRecurrence } from "@momentum/core/recurrence";
 import { durationMinutes } from "@momentum/core/time";
 import { PROJECT_COLORS } from "@momentum/core/types";
-import type { BlockKind, Minutes, ProjectColor } from "@momentum/core/types";
+import type {
+  BlockKind,
+  EventBlock,
+  Minutes,
+  ProjectColor,
+  RecurrenceRule,
+} from "@momentum/core/types";
 
 import { useAnnounce } from "@momentum/ui/components/announcer";
 import { Button } from "@momentum/ui/components/button";
@@ -33,6 +41,12 @@ import { SideSheet } from "@momentum/ui/components/side-sheet";
 import { Textarea } from "@momentum/ui/components/textarea";
 import { ToggleGroup, ToggleGroupItem } from "@momentum/ui/components/toggle-group";
 
+import {
+  RecurrenceFields,
+  fieldsFromRule,
+  ruleFromFields,
+  type RecurrenceFieldsValue,
+} from "@/features/calendar/components/recurrence-fields";
 import { completionLabel } from "@/features/calendar/projection";
 import { useOpenerFocus } from "@/lib/use-opener-focus";
 import type {
@@ -40,6 +54,7 @@ import type {
   BlockEditorProps,
   BlockEditorValues,
   CalendarItem,
+  CalendarSettings,
 } from "@/features/calendar/types";
 
 /**
@@ -76,21 +91,35 @@ const OWNER_ICON: Record<BlockKind, LucideIcon> = {
 // Only a plain event owns its title: work and habit blocks display their
 // parent's, and an editable field would write a copy that stops tracking it.
 function isTitleEditable(draft: BlockDraft): boolean {
-  if (draft.mode === "create") return true;
+  if (draft.mode !== "edit") return true;
   return draft.item.kind === "event" && draft.item.occurrence === null;
 }
 
 // An occurrence has times of its own and nothing else; a field that accepts
 // what will not be saved is a silent discard.
 function isContentEditable(draft: BlockDraft): boolean {
-  return draft.mode === "create" || draft.item.occurrence === null;
+  return draft.mode !== "edit" || draft.item.occurrence === null;
+}
+
+// A rule belongs to a plain event or a series (Domain Rule 16): never to a
+// work or habit block, and never to one occurrence, which has only its times.
+function isRuleEditable(draft: BlockDraft): boolean {
+  if (draft.mode !== "edit") return true;
+  return draft.item.kind === "event" && draft.item.occurrence === null;
+}
+
+/** The rule as the editor holds it: the series' own, minus the timezone the server fixed. */
+function ruleOf(series: EventBlock | null): RecurrenceRule | null {
+  if (series === null || series.recurrence === null) return null;
+  const { freq, interval, byWeekday, until, count } = series.recurrence;
+  return { freq, interval, byWeekday, until, count };
 }
 
 /** Remounts the form when the editor is pointed at a different draft. */
 function draftKey(draft: BlockDraft): string {
-  return draft.mode === "create"
-    ? `create:${draft.span.date}:${draft.span.startMinutes}`
-    : `edit:${draft.item.id}`;
+  if (draft.mode === "create") return `create:${draft.span.date}:${draft.span.startMinutes}`;
+  if (draft.mode === "series") return `series:${draft.series.id}`;
+  return `edit:${draft.item.id}`;
 }
 
 function asProjectColor(value: string): ProjectColor | null {
@@ -101,19 +130,25 @@ function colorLabel(color: ProjectColor): string {
   return `${color.charAt(0).toUpperCase()}${color.slice(1)}`;
 }
 
-// `settings` is deliberately unused: the editor works in wall-clock minutes
-// and the board converts them to instants.
+// The editor works in wall-clock minutes and the board converts them to
+// instants; `settings` supplies only the week's first day and the timezone a
+// series' first date is read in.
 export function BlockEditor({
   draft,
+  settings,
   onClose,
   onSubmit,
   onDelete,
   onToggleComplete,
+  series,
+  onEditSeries,
+  onDeleteSeries,
   pending,
 }: BlockEditorProps) {
   // The Save button lives in the sheet's footer, outside the form, and is associated by id.
   const formId = React.useId();
   const item = draft?.mode === "edit" ? draft.item : null;
+  const seriesRow = draft?.mode === "series" ? draft.series : null;
   // The sheet animates out; the next key must find the block, not the gap
   // before Radix would have restored focus (see `useOpenerFocus`).
   const openerFocus = useOpenerFocus(draft !== null);
@@ -126,9 +161,27 @@ export function BlockEditor({
       }}
       onOpenAutoFocus={openerFocus.onOpenAutoFocus}
       onCloseAutoFocus={openerFocus.onCloseAutoFocus}
-      title={draft === null || draft.mode === "create" ? "New block" : KIND_LABEL[draft.item.kind]}
+      title={
+        draft === null || draft.mode === "create"
+          ? "New block"
+          : draft.mode === "series"
+            ? "Repeating event"
+            : KIND_LABEL[draft.item.kind]
+      }
       footer={
         <div className="flex w-full items-center gap-2">
+          {seriesRow === null ? null : (
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              disabled={pending}
+              onClick={() => onDeleteSeries(seriesRow)}
+            >
+              <Trash2Icon aria-hidden="true" />
+              Delete series
+            </Button>
+          )}
           {item === null ? null : (
             <Button
               type="button"
@@ -172,7 +225,15 @@ export function BlockEditor({
       }
     >
       {draft === null ? null : (
-        <BlockEditorForm key={draftKey(draft)} formId={formId} draft={draft} onSubmit={onSubmit} />
+        <BlockEditorForm
+          key={draftKey(draft)}
+          formId={formId}
+          draft={draft}
+          settings={settings}
+          series={series}
+          onSubmit={onSubmit}
+          onEditSeries={onEditSeries}
+        />
       )}
     </SideSheet>
   );
@@ -183,7 +244,7 @@ function focusMinutes(item: CalendarItem): Minutes {
   return Math.min(240, Math.max(1, durationMinutes(item.startAt, item.endAt)));
 }
 
-type ErrorField = "title" | "date";
+type ErrorField = "title" | "date" | "recurrence";
 
 interface FieldError {
   field: ErrorField;
@@ -193,11 +254,17 @@ interface FieldError {
 function BlockEditorForm({
   formId,
   draft,
+  settings,
+  series,
   onSubmit,
+  onEditSeries,
 }: {
   formId: string;
   draft: BlockDraft;
+  settings: CalendarSettings;
+  series: readonly EventBlock[];
   onSubmit: (draft: BlockDraft, values: BlockEditorValues) => void;
+  onEditSeries: (series: EventBlock) => void;
 }) {
   const announce = useAnnounce();
   const ids = React.useId();
@@ -205,11 +272,20 @@ function BlockEditorForm({
   const dateRef = React.useRef<HTMLInputElement>(null);
 
   const item = draft.mode === "edit" ? draft.item : null;
+  const seriesRow = draft.mode === "series" ? draft.series : null;
   const titleEditable = isTitleEditable(draft);
   const contentEditable = isContentEditable(draft);
+  const ruleEditable = isRuleEditable(draft);
+  // The series an occurrence came from, for its read-only rule and the way to the series itself.
+  const parent = React.useMemo(() => {
+    const ref = item?.occurrence ?? null;
+    return ref === null ? null : (series.find((row) => row.id === ref.seriesId) ?? null);
+  }, [item, series]);
 
-  const [title, setTitle] = React.useState(item?.title ?? "");
-  const [description, setDescription] = React.useState(item?.description ?? "");
+  const [title, setTitle] = React.useState(item?.title ?? seriesRow?.title ?? "");
+  const [description, setDescription] = React.useState(
+    item?.description ?? seriesRow?.description ?? "",
+  );
   const [date, setDate] = React.useState<string>(draft.span.date);
   // The end is held as a clock reading: an end past 1440 fits no
   // `<input type="time">`, so `resolveEnd` reads the day off the two fields.
@@ -218,7 +294,13 @@ function BlockEditorForm({
   const endMinutes = resolveEnd(startMinutes, endClock);
   // `ownColor`, not `color`: preselecting the resolved colour would write an
   // explicit value onto a block that was following its project.
-  const [color, setColor] = React.useState<ProjectColor | null>(item?.ownColor ?? null);
+  const [color, setColor] = React.useState<ProjectColor | null>(
+    item?.ownColor ?? seriesRow?.color ?? null,
+  );
+  const repeatRef = React.useRef<HTMLButtonElement>(null);
+  const [fields, setFields] = React.useState<RecurrenceFieldsValue>(() =>
+    fieldsFromRule(ruleOf(seriesRow), draft.span.date),
+  );
   const [error, setError] = React.useState<FieldError | null>(null);
 
   function fail(field: ErrorField, message: string, node: HTMLElement | null) {
@@ -240,6 +322,16 @@ function BlockEditorForm({
       return;
     }
 
+    let recurrence: RecurrenceRule | null = null;
+    if (ruleEditable) {
+      const resolved = ruleFromFields(fields, localDate(date));
+      if (resolved.error !== null) {
+        fail("recurrence", resolved.error, repeatRef.current);
+        return;
+      }
+      recurrence = resolved.rule;
+    }
+
     setError(null);
     const trimmedDescription = description.trim();
     onSubmit(draft, {
@@ -249,6 +341,7 @@ function BlockEditorForm({
       startMinutes,
       endMinutes,
       color,
+      recurrence,
     });
   }
 
@@ -347,7 +440,42 @@ function BlockEditorForm({
           {formatLocalDate(localDate(date), "medium")} · {formatMinutesOfDay(startMinutes)} –{" "}
           {formatMinutesOfDay(endMinutes)}
           {crossesMidnight ? " next day" : ""} · {formatDuration(endMinutes - startMinutes)}
+          {seriesRow === null ? "" : " · first occurrence"}
         </p>
+      ) : null}
+
+      {ruleEditable ? (
+        <RecurrenceFields
+          ids={ids}
+          ref={repeatRef}
+          value={fields}
+          onChange={(next) => {
+            setFields(next);
+            if (error?.field === "recurrence") setError(null);
+          }}
+          firstDate={valid ? localDate(date) : null}
+          weekStart={settings.weekStart}
+          error={error?.field === "recurrence" ? error.message : null}
+        />
+      ) : parent !== null && parent.recurrence !== null ? (
+        <div className="flex flex-col gap-1.5">
+          <span className="text-sm leading-none font-medium">Series</span>
+          <p className="text-sm">
+            {describeRecurrence(parent.recurrence, localDateOf(parent.startAt, settings.timezone))}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Changes here apply to this occurrence only.
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="self-start"
+            onClick={() => onEditSeries(parent)}
+          >
+            Edit series
+          </Button>
+        </div>
       ) : null}
 
       {contentEditable ? (

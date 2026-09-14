@@ -43,7 +43,7 @@ export async function createBlock(input: unknown): Promise<ActionResult<Calendar
   const parsed = createBlockInput.safeParse(input);
   if (!parsed.success) return validationError(parsed.error.issues);
 
-  const { id, title, description, color, date, startMinutes, endMinutes } = parsed.data;
+  const { id, title, description, color, date, startMinutes, endMinutes, recurrence } = parsed.data;
   const { supabase, userId, profile } = await requireSession();
   const span = spanInstants(date, startMinutes, endMinutes, profile.timezone);
 
@@ -56,6 +56,8 @@ export async function createBlock(input: unknown): Promise<ActionResult<Calendar
       description,
       color,
       ...span,
+      // The schedule is defined in the profile's zone from now on (Domain Rule 16).
+      ...(recurrence === null ? {} : { recurrence: { ...recurrence, timezone: profile.timezone } }),
     }),
   );
 }
@@ -65,10 +67,25 @@ export async function updateBlock(input: unknown): Promise<ActionResult<Calendar
   const parsed = updateBlockInput.safeParse(input);
   if (!parsed.success) return validationError(parsed.error.issues);
 
-  const { id, title, description, color } = parsed.data;
-  const { supabase } = await requireSession();
+  const { id, title, description, color, recurrence } = parsed.data;
+  const { supabase, profile } = await requireSession();
 
-  return attempt(() => blocks.update(supabase, id, { title, description, color }));
+  return attempt(async () => {
+    if (recurrence === undefined) return blocks.update(supabase, id, { title, description, color });
+    // A series keeps the timezone it was defined in; a plain event starting to
+    // repeat takes the profile's. The database refuses a rule on anything else.
+    const existing = await blocks.findById(supabase, id);
+    const timezone =
+      existing?.kind === "event" && existing.recurrence !== null
+        ? existing.recurrence.timezone
+        : profile.timezone;
+    return blocks.update(supabase, id, {
+      title,
+      description,
+      color,
+      recurrence: recurrence === null ? null : { ...recurrence, timezone },
+    });
+  });
 }
 
 /** Move and resize, in one row write. */

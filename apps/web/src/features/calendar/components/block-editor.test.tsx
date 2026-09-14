@@ -6,6 +6,7 @@ import { DEFAULT_GRID_SPEC } from "@momentum/core/calendar";
 import { ianaTimeZone, instant, localDate } from "@momentum/core/time";
 
 import { BlockEditor } from "@/features/calendar/components/block-editor";
+import type { EventBlock } from "@momentum/core/types";
 import type {
   BlockDraft,
   BlockEditorProps,
@@ -76,6 +77,9 @@ function renderEditor(overrides: Partial<BlockEditorProps> = {}) {
     onSubmit: vi.fn(),
     onDelete: vi.fn(),
     onToggleComplete: vi.fn(),
+    series: [],
+    onEditSeries: vi.fn(),
+    onDeleteSeries: vi.fn(),
     pending: false,
     ...overrides,
   };
@@ -152,6 +156,7 @@ describe("BlockEditor", () => {
       startMinutes: 960,
       endMinutes: 1050,
       color: "amber",
+      recurrence: null,
     });
   });
 
@@ -174,6 +179,9 @@ describe("BlockEditor", () => {
         onSubmit={vi.fn()}
         onDelete={vi.fn()}
         onToggleComplete={vi.fn()}
+        series={[]}
+        onEditSeries={vi.fn()}
+        onDeleteSeries={vi.fn()}
         pending={false}
       />,
     );
@@ -276,6 +284,9 @@ describe("BlockEditor", () => {
         onSubmit={vi.fn()}
         onDelete={vi.fn()}
         onToggleComplete={vi.fn()}
+        series={[]}
+        onEditSeries={vi.fn()}
+        onDeleteSeries={vi.fn()}
         pending={false}
       />,
     );
@@ -326,6 +337,9 @@ describe("BlockEditor", () => {
             onSubmit={onSubmit}
             onDelete={vi.fn()}
             onToggleComplete={vi.fn()}
+            series={[]}
+            onEditSeries={vi.fn()}
+            onDeleteSeries={vi.fn()}
             pending={false}
           />
         </>
@@ -362,6 +376,9 @@ describe("BlockEditor", () => {
             onSubmit={vi.fn()}
             onDelete={vi.fn()}
             onToggleComplete={vi.fn()}
+            series={[]}
+            onEditSeries={vi.fn()}
+            onDeleteSeries={vi.fn()}
             pending={false}
           />
         </>
@@ -424,5 +441,188 @@ describe("Start focus, from a work block", () => {
     });
 
     expect(screen.queryByRole("link", { name: "Start focus" })).toBeNull();
+  });
+});
+
+const NEW_YORK = ianaTimeZone("America/New_York");
+
+function seriesRow(overrides: Partial<EventBlock> = {}): EventBlock {
+  return {
+    id: "series-1",
+    userId: "u",
+    kind: "event",
+    taskId: null,
+    habitId: null,
+    title: "Statistics lecture",
+    description: null,
+    // Monday 7 Sep 2026, 09:00 New York.
+    startAt: instant("2026-09-07T13:00:00.000Z"),
+    endAt: instant("2026-09-07T14:00:00.000Z"),
+    allDay: false,
+    color: "blue",
+    completedAt: null,
+    recurrence: {
+      freq: "weekly",
+      interval: 1,
+      byWeekday: [1, 3],
+      until: null,
+      count: null,
+      timezone: NEW_YORK,
+    },
+    seriesId: null,
+    occurrenceDate: null,
+    cancelled: false,
+    createdAt: instant("2026-09-01T00:00:00.000Z"),
+    updatedAt: instant("2026-09-01T00:00:00.000Z"),
+    ...overrides,
+  };
+}
+
+function occurrenceItem(): CalendarItem {
+  return {
+    id: "series-1:2026-09-09",
+    blockId: null,
+    kind: "event",
+    title: "Statistics lecture",
+    description: null,
+    startAt: instant("2026-09-09T13:00:00.000Z"),
+    endAt: instant("2026-09-09T14:00:00.000Z"),
+    allDay: false,
+    ownColor: "blue",
+    color: "blue",
+    completedAt: null,
+    occurrence: { seriesId: "series-1", occurrenceDate: localDate("2026-09-09") },
+    work: null,
+    habitId: null,
+    habitRecordable: false,
+  };
+}
+
+async function choose(comboboxName: string, optionName: string) {
+  fireEvent.click(screen.getByRole("combobox", { name: comboboxName }));
+  fireEvent.click(await screen.findByRole("option", { name: optionName }));
+}
+
+describe("repeat rules", () => {
+  it("submits no rule by default", () => {
+    const props = renderEditor();
+    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Statistics lecture" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(props.onSubmit).toHaveBeenCalledWith(
+      CREATE_DRAFT,
+      expect.objectContaining({ recurrence: null }),
+    );
+  });
+
+  it("submits a weekly rule once chosen, and says what it means", async () => {
+    const props = renderEditor();
+    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Statistics lecture" } });
+    await choose("Repeats", "Every week");
+    // SPAN is Tuesday 8 Sep 2026; a preset repeats on the first occurrence's day.
+    expect(screen.getByText("Repeats every week on Tue")).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(props.onSubmit).toHaveBeenCalledWith(
+      CREATE_DRAFT,
+      expect.objectContaining({
+        recurrence: { freq: "weekly", interval: 1, byWeekday: null, until: null, count: null },
+      }),
+    );
+  });
+
+  it("refuses a custom weekly rule with no day and lands focus on Repeats", async () => {
+    const props = renderEditor();
+    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Statistics lecture" } });
+    await choose("Repeats", "Custom…");
+    // The first occurrence's weekday starts selected; clearing it leaves nothing.
+    fireEvent.click(screen.getByRole("button", { name: "Tue", pressed: true }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(props.onSubmit).not.toHaveBeenCalled();
+    expect(screen.getByText("Pick at least one day.")).toBeDefined();
+    expect(document.activeElement).toBe(screen.getByRole("combobox", { name: "Repeats" }));
+  });
+
+  it("ends a rule on a date, and refuses one before the first occurrence", async () => {
+    const props = renderEditor();
+    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Statistics lecture" } });
+    await choose("Repeats", "Every 2 weeks");
+    await choose("Ends", "On a date");
+    fireEvent.change(screen.getByLabelText("End date"), { target: { value: "2026-09-01" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(props.onSubmit).not.toHaveBeenCalled();
+    expect(screen.getByText("The end date is before the first occurrence.")).toBeDefined();
+
+    fireEvent.change(screen.getByLabelText("End date"), { target: { value: "2026-12-11" } });
+    expect(screen.getByText("Repeats every 2 weeks on Tue until Dec 11, 2026")).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(props.onSubmit).toHaveBeenCalledWith(
+      CREATE_DRAFT,
+      expect.objectContaining({
+        recurrence: {
+          freq: "weekly",
+          interval: 2,
+          byWeekday: null,
+          until: localDate("2026-12-11"),
+          count: null,
+        },
+      }),
+    );
+  });
+
+  it("offers a work block no rule", () => {
+    renderEditor({ draft: { mode: "edit", item: workItem(), span: SPAN } });
+    expect(screen.queryByRole("combobox", { name: "Repeats" })).toBeNull();
+  });
+
+  it("shows an occurrence its series' rule and a way to the series, not the rule controls", () => {
+    const series = seriesRow();
+    const props = renderEditor({
+      draft: { mode: "edit", item: occurrenceItem(), span: SPAN },
+      series: [series],
+    });
+    expect(screen.queryByRole("combobox", { name: "Repeats" })).toBeNull();
+    expect(screen.getByText("Repeats every week on Mon and Wed")).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "Edit series" }));
+    expect(props.onEditSeries).toHaveBeenCalledWith(series);
+  });
+
+  it("edits a series: prefilled content and rule, saved for every occurrence, deletable as one", () => {
+    const series = seriesRow({
+      recurrence: {
+        freq: "weekly",
+        interval: 1,
+        byWeekday: null,
+        until: null,
+        count: 12,
+        timezone: NEW_YORK,
+      },
+    });
+    const draft: BlockDraft = {
+      mode: "series",
+      series,
+      span: { date: localDate("2026-09-07"), startMinutes: 9 * 60, endMinutes: 10 * 60 },
+    };
+    const props = renderEditor({ draft, series: [series] });
+
+    expect(screen.getByRole("heading", { name: "Repeating event" })).toBeDefined();
+    expect(screen.getByLabelText("Title")).toHaveProperty("value", "Statistics lecture");
+    expect(screen.getByRole("combobox", { name: "Repeats" }).textContent).toContain("Every week");
+    expect(screen.getByRole("combobox", { name: "Ends" }).textContent).toContain(
+      "After a number of times",
+    );
+    expect(screen.getByLabelText("Times")).toHaveProperty("value", "12");
+    expect(screen.getByText(/first occurrence$/)).toBeDefined();
+
+    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Stats" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(props.onSubmit).toHaveBeenCalledWith(
+      draft,
+      expect.objectContaining({
+        title: "Stats",
+        recurrence: { freq: "weekly", interval: 1, byWeekday: null, until: null, count: 12 },
+      }),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete series" }));
+    expect(props.onDeleteSeries).toHaveBeenCalledWith(series);
   });
 });

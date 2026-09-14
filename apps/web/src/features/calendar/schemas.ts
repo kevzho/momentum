@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { isLocalDate, localDate } from "@momentum/core/time";
-import { PROJECT_COLORS } from "@momentum/core/types";
+import { PROJECT_COLORS, RECURRENCE_FREQUENCIES, WEEKDAYS } from "@momentum/core/types";
 
 /**
  * What the calendar's server actions accept. Actions take wall-clock spans,
@@ -62,20 +62,60 @@ function orderedSpan<T extends { startMinutes: number; endMinutes: number }>(sch
   });
 }
 
+const weekday = z.literal([...WEEKDAYS]);
+
+/**
+ * The rule a user can set on an event. The server adds the series timezone
+ * (Domain Rule 16); `validate_recurrence` re-checks the shape on write.
+ */
+export const recurrenceInput = z
+  .object({
+    freq: z.enum(RECURRENCE_FREQUENCIES),
+    interval: z
+      .number()
+      .int("Every how many is a whole number.")
+      .min(1, "Repeat at least every 1.")
+      .max(52, "Repeat at most every 52."),
+    byWeekday: z.array(weekday).min(1, "Pick at least one day.").max(7).nullable(),
+    until: localDateField.nullable(),
+    count: z.number().int().min(1, "At least once.").max(365, "At most 365 times.").nullable(),
+  })
+  .refine((rule) => rule.until === null || rule.count === null, {
+    message: "A rule ends on a date or after a number of times, not both.",
+    path: ["count"],
+  })
+  .refine((rule) => rule.freq === "weekly" || rule.byWeekday === null, {
+    message: "Days of the week apply to a weekly rule.",
+    path: ["byWeekday"],
+  })
+  .transform((rule) => ({
+    ...rule,
+    byWeekday: rule.byWeekday === null ? null : [...new Set(rule.byWeekday)].sort((a, b) => a - b),
+  }));
+
 /**
  * Only events are created from the grid; work blocks come from `scheduleTask`
  * and habit blocks are generated. `kind` is a literal so a crafted request
  * cannot ask for a shape with no parent.
  */
 export const createBlockInput = orderedSpan(
-  z.object({
-    id: uuid,
-    kind: z.literal("event"),
-    title,
-    description,
-    color,
-    ...span,
-  }),
+  z
+    .object({
+      id: uuid,
+      kind: z.literal("event"),
+      title,
+      description,
+      color,
+      ...span,
+      recurrence: recurrenceInput.nullable().default(null),
+    })
+    .refine(
+      (value) =>
+        value.recurrence === null ||
+        value.recurrence.until === null ||
+        value.recurrence.until >= value.date,
+      { message: "The rule ends before the event starts.", path: ["recurrence", "until"] },
+    ),
 );
 
 /**
@@ -88,6 +128,8 @@ export const updateBlockInput = z.object({
   title: title.optional(),
   description,
   color,
+  /** Omitted: untouched. Null: stops repeating. Only an event series row may carry one. */
+  recurrence: recurrenceInput.nullable().optional(),
 });
 
 /** Move and resize are one write, so a block never shows as moved but not yet resized. */
@@ -130,6 +172,7 @@ export const deleteOccurrenceInput = z.object({
   occurrenceDate: localDateField,
 });
 
+export type RecurrenceInput = z.infer<typeof recurrenceInput>;
 export type CreateBlockInput = z.infer<typeof createBlockInput>;
 export type UpdateBlockInput = z.infer<typeof updateBlockInput>;
 export type RescheduleBlockInput = z.infer<typeof rescheduleBlockInput>;

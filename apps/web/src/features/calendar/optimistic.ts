@@ -23,6 +23,10 @@ export type CalendarPatch =
       color: ProjectColor | null;
     }
   | { kind: "delete"; id: string }
+  /** Every occurrence of a series leaves together. */
+  | { kind: "delete-series"; seriesId: Uuid }
+  /** A write with no overlay: the series' new expansion arrives with the refresh. */
+  | { kind: "none" }
   | { kind: "completion"; id: string; completed: boolean; alsoTask: boolean };
 
 export function applyPatch(
@@ -59,6 +63,12 @@ export function applyPatch(
 
     case "delete":
       return items.filter((item) => item.id !== patch.id);
+
+    case "delete-series":
+      return items.filter((item) => item.occurrence?.seriesId !== patch.seriesId);
+
+    case "none":
+      return [...items];
 
     case "completion": {
       // One instant for the whole patch, so siblings agree on when the task changed.

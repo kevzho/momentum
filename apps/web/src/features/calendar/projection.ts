@@ -221,7 +221,10 @@ export function completionLabel(item: CalendarItem): string {
  * `startMinutes + durationMinutes(...)`: elapsed and wall-clock minutes differ
  * by an hour on DST days, and callers hand these back to `fromLocal`.
  */
-export function spanOf(item: CalendarItem, timezone: IanaTimeZone): DaySpan {
+export function spanOf(
+  item: Pick<CalendarItem, "startAt" | "endAt">,
+  timezone: IanaTimeZone,
+): DaySpan {
   const parts = splitByLocalDay(item.startAt, item.endAt, timezone);
   const first = parts[0];
   const last = parts[parts.length - 1];
@@ -245,7 +248,8 @@ export function itemLabel(item: CalendarItem, timezone: IanaTimeZone): string {
   const when = item.allDay
     ? `all day ${formatLocalDate(localDateOf(item.startAt, timezone), "medium")}`
     : formatTimeRange(item.startAt, item.endAt, timezone);
-  return `${item.title}, ${kind}, ${when}${stateOf(item)}`;
+  const repeats = item.occurrence === null ? "" : ", repeats";
+  return `${item.title}, ${kind}, ${when}${repeats}${stateOf(item)}`;
 }
 
 // A block of a completed task is de-emphasised on screen; its accessible name must say so too.

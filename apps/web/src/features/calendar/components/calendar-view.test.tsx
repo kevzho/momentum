@@ -122,6 +122,7 @@ const PARAMS: CalendarParams = { anchor: TODAY, view: "week" };
 function renderBoard(items: readonly CalendarItem[], newEvent = false) {
   const data: CalendarWeekData = {
     rangeStart: DAYS[0]!,
+    series: [],
     days: DAYS,
     today: TODAY,
     items,

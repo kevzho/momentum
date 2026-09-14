@@ -26,6 +26,9 @@ export interface Recurrence {
   timezone: IanaTimeZone;
 }
 
+/** What a user chooses in the editor; the server fixes the series timezone at creation. */
+export type RecurrenceRule = Omit<Recurrence, "timezone">;
+
 interface BlockBase {
   id: Uuid;
   userId: Uuid;

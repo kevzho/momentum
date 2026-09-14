@@ -121,4 +121,47 @@ test.describe("Calendar", () => {
     await expect(page.getByText("Unscheduled", { exact: true })).toBeVisible();
     await expect(page.getByText("Capacity", { exact: true })).toBeVisible();
   });
+
+  test("repeats an event weekly, finds it next week, and deletes the series", async ({ page }) => {
+    test.setTimeout(120_000);
+
+    const title = uniqueName("class");
+    const today = localDay(TZ);
+    const block = () =>
+      page.getByRole("group", { name: new RegExp(`^${escapeRegExp(title)},.*repeats`) });
+
+    await test.step("create it with a weekly rule", async () => {
+      await page.goto("/calendar?new=event");
+      const editor = page.getByRole("dialog", { name: "New block" });
+      await editor.getByLabel("Title").fill(title);
+      await editor.getByLabel("Date").fill(today.iso);
+      await editor.getByLabel("Start").fill("13:00");
+      await editor.getByLabel("End").fill("14:00");
+      await editor.getByRole("combobox", { name: "Repeats" }).click();
+      await page.getByRole("option", { name: "Every week" }).click();
+      await expect(editor.getByText(/^Repeats every week on/)).toBeVisible();
+      await committed(page, () => editor.getByRole("button", { name: "Save" }).click());
+      // The optimistic row is a plain event; the expanded occurrence arrives with the refresh.
+      await expect(block()).toHaveCount(1);
+    });
+
+    await test.step("it is on the same weekday next week", async () => {
+      await page.getByRole("link", { name: "Next week" }).click();
+      await expect(block()).toHaveCount(1);
+    });
+
+    await test.step("an occurrence shows its rule; the series deletes every occurrence", async () => {
+      await block().focus();
+      await page.keyboard.press("Enter");
+      const occurrence = page.getByRole("dialog", { name: "Event" });
+      await expect(occurrence.getByText(/^Repeats every week on/)).toBeVisible();
+      await occurrence.getByRole("button", { name: "Edit series" }).click();
+      const series = page.getByRole("dialog", { name: "Repeating event" });
+      await expect(series.getByRole("combobox", { name: "Repeats" })).toHaveText("Every week");
+      await committed(page, () => series.getByRole("button", { name: "Delete series" }).click());
+      await expect(block()).toHaveCount(0);
+      await page.getByRole("link", { name: "Previous week" }).click();
+      await expect(block()).toHaveCount(0);
+    });
+  });
 });

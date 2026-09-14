@@ -7,6 +7,7 @@ import { DndContext } from "@dnd-kit/core";
 import { ChevronLeftIcon, ChevronRightIcon, PanelRightIcon } from "lucide-react";
 
 import { DEFAULT_GRID_SPEC } from "@momentum/core/calendar";
+import { describeRecurrence } from "@momentum/core/recurrence";
 import {
   durationMinutes,
   formatDuration,
@@ -14,7 +15,7 @@ import {
   minutesFromMidnight,
 } from "@momentum/core/time";
 import type { GridSpec } from "@momentum/core/calendar";
-import type { IanaTimeZone, Instant, LocalDate, Uuid } from "@momentum/core/types";
+import type { EventBlock, IanaTimeZone, Instant, LocalDate, Uuid } from "@momentum/core/types";
 import { useAnnounce } from "@momentum/ui/components/announcer";
 import { Button } from "@momentum/ui/components/button";
 import { PageContainer } from "@momentum/ui/components/page-container";
@@ -50,12 +51,15 @@ import {
 } from "@/features/calendar/navigation";
 import {
   addedMessage,
+  addedSeriesMessage,
   completionMessage,
   habitCompletionMessage,
   deletedMessage,
   occurrenceRemovedMessage,
   restoredMessage,
   savedMessage,
+  seriesDeletedMessage,
+  seriesSavedMessage,
 } from "@/features/calendar/announcements";
 import {
   applyPatch,
@@ -198,6 +202,12 @@ export function CalendarView({
 
   const openItem = React.useCallback(
     (item: CalendarItem) => setDraft({ mode: "edit", item, span: spanOf(item, timezone) }),
+    [timezone],
+  );
+
+  // The series behind an occurrence, opened from that occurrence's editor.
+  const openSeries = React.useCallback(
+    (series: EventBlock) => setDraft({ mode: "series", series, span: spanOf(series, timezone) }),
     [timezone],
   );
 
@@ -439,8 +449,39 @@ export function CalendarView({
               description: values.description,
               color: values.color,
               ...span,
+              recurrence: values.recurrence,
             }),
-          announcement: addedMessage(values.title),
+          announcement:
+            values.recurrence === null
+              ? addedMessage(values.title)
+              : addedSeriesMessage(values.title, describeRecurrence(values.recurrence, span.date)),
+        });
+        return;
+      }
+
+      // Every occurrence at once. Not optimistic: the new expansion is the
+      // server's to compute and arrives with the refresh. Content and rule are
+      // one write; a moved first occurrence is a second.
+      if (current.mode === "series") {
+        const series = current.series;
+        setDraft(null);
+        const moved = !sameSpan(current.span, span);
+        mutate({
+          patch: { kind: "none" },
+          itemId: series.id,
+          taskId: null,
+          announcement: seriesSavedMessage(values.title),
+          run: async () => {
+            const content = await updateBlock({
+              id: series.id,
+              title: values.title,
+              description: values.description,
+              color: values.color,
+              recurrence: values.recurrence,
+            });
+            if (!content.ok || !moved) return content;
+            return rescheduleBlock({ id: series.id, ...span });
+          },
         });
         return;
       }
@@ -475,7 +516,9 @@ export function CalendarView({
             // Only an event owns its title. For a work or habit block
             // `values.title` is the parent's name; sending it would freeze a
             // copy into the column and stop the block tracking renames.
-            ...(item.kind === "event" ? { title: values.title } : {}),
+            ...(item.kind === "event"
+              ? { title: values.title, recurrence: values.recurrence }
+              : {}),
             description: values.description,
             color: values.color,
           }),
@@ -484,6 +527,21 @@ export function CalendarView({
       if (moved) reschedule(item, span);
     },
     [mutate, reschedule, timezone],
+  );
+
+  // The row and, by cascade, every override; no undo, since the occurrences were never rows.
+  const deleteSeries = React.useCallback(
+    (series: EventBlock) => {
+      setDraft(null);
+      mutate({
+        patch: { kind: "delete-series", seriesId: series.id },
+        itemId: series.id,
+        taskId: null,
+        announcement: seriesDeletedMessage(series.title),
+        run: () => deleteBlock({ id: series.id }),
+      });
+    },
+    [mutate],
   );
 
   const callbacks = React.useMemo<CalendarCallbacks>(
@@ -628,6 +686,9 @@ export function CalendarView({
         onSubmit={submitDraft}
         onDelete={remove}
         onToggleComplete={toggleComplete}
+        series={data.series}
+        onEditSeries={openSeries}
+        onDeleteSeries={deleteSeries}
         pending={pending}
       />
     </PageContainer>

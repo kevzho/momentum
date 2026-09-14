@@ -41,6 +41,18 @@ export function parseRecurrence(value: Json): Recurrence | null {
   };
 }
 
+/** The inverse of `parseRecurrence`: the JSON the column stores and `validate_recurrence` checks. */
+export function serializeRecurrence(rule: Recurrence): Json {
+  return {
+    freq: rule.freq,
+    interval: rule.interval,
+    byWeekday: rule.byWeekday === null ? null : [...rule.byWeekday],
+    until: rule.until,
+    count: rule.count,
+    timezone: rule.timezone,
+  };
+}
+
 function base(row: Row<"calendar_blocks">) {
   return {
     id: row.id,

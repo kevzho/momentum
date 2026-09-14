@@ -240,3 +240,105 @@ function fieldsOf(result: {
 }) {
   return (result.error?.issues ?? []).map((issue) => issue.path.map(String).join("."));
 }
+
+describe("recurrence", () => {
+  const event = {
+    id: ID,
+    kind: "event",
+    title: "Statistics lecture",
+    description: null,
+    color: null,
+  };
+
+  it("accepts a weekly rule, deduplicating and sorting its days, and brands its end date", () => {
+    const parsed = createBlockInput.safeParse({
+      ...event,
+      ...span(),
+      recurrence: {
+        freq: "weekly",
+        interval: 2,
+        byWeekday: [3, 1, 1],
+        until: "2026-12-11",
+        count: null,
+      },
+    });
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+    expect(parsed.data.recurrence).toEqual({
+      freq: "weekly",
+      interval: 2,
+      byWeekday: [1, 3],
+      until: "2026-12-11",
+      count: null,
+    });
+  });
+
+  it("defaults to no rule", () => {
+    const parsed = createBlockInput.safeParse({ ...event, ...span() });
+    expect(parsed.success && parsed.data.recurrence).toBeNull();
+  });
+
+  it("refuses a rule that ends before the event starts", () => {
+    const parsed = createBlockInput.safeParse({
+      ...event,
+      ...span(),
+      recurrence: { freq: "daily", interval: 1, byWeekday: null, until: "2026-09-01", count: null },
+    });
+    expect(parsed.success).toBe(false);
+  });
+
+  it("refuses both an end date and a count, and weekdays on a daily rule", () => {
+    expect(
+      createBlockInput.safeParse({
+        ...event,
+        ...span(),
+        recurrence: { freq: "daily", interval: 1, byWeekday: null, until: "2026-12-11", count: 3 },
+      }).success,
+    ).toBe(false);
+    expect(
+      createBlockInput.safeParse({
+        ...event,
+        ...span(),
+        recurrence: { freq: "daily", interval: 1, byWeekday: [1], until: null, count: null },
+      }).success,
+    ).toBe(false);
+  });
+
+  it("bounds the interval, the count and the day numbers", () => {
+    const rule = { freq: "weekly", interval: 1, byWeekday: null, until: null, count: null };
+    expect(
+      createBlockInput.safeParse({ ...event, ...span(), recurrence: { ...rule, interval: 0 } })
+        .success,
+    ).toBe(false);
+    expect(
+      createBlockInput.safeParse({ ...event, ...span(), recurrence: { ...rule, interval: 53 } })
+        .success,
+    ).toBe(false);
+    expect(
+      createBlockInput.safeParse({ ...event, ...span(), recurrence: { ...rule, count: 366 } })
+        .success,
+    ).toBe(false);
+    expect(
+      createBlockInput.safeParse({ ...event, ...span(), recurrence: { ...rule, byWeekday: [7] } })
+        .success,
+    ).toBe(false);
+    expect(
+      createBlockInput.safeParse({ ...event, ...span(), recurrence: { ...rule, byWeekday: [] } })
+        .success,
+    ).toBe(false);
+  });
+
+  it("lets an update leave the rule alone, clear it, or set it", () => {
+    const base = { id: ID, description: null, color: null };
+    expect(
+      updateBlockInput.safeParse(base).success && "recurrence" in updateBlockInput.parse(base),
+    ).toBe(false);
+    expect(updateBlockInput.parse({ ...base, recurrence: null }).recurrence).toBeNull();
+    expect(
+      updateBlockInput.parse({
+        ...base,
+        recurrence: { freq: "daily", interval: 3, byWeekday: null, until: null, count: 4 },
+      }).recurrence,
+    ).toEqual({ freq: "daily", interval: 3, byWeekday: null, until: null, count: 4 });
+  });
+});
