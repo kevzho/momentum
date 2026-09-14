@@ -22,11 +22,25 @@ import { focusFirstAvailable } from "@/lib/use-opener-focus";
 // Not optimistic: the list is server props read by the layout. Failures show
 // inside the dialog while it is open (a toast behind a modal is unreachable).
 
-type Editing = { project: ProjectSummary | null; id: Uuid };
+// `onCreated` is kept with the opening, so a Retry of the same form still
+// resolves to whoever asked for it.
+type Editing = {
+  project: ProjectSummary | null;
+  id: Uuid;
+  onCreated?: (project: Project) => void;
+};
 
 export interface ProjectManager {
   pending: boolean;
-  createProject: () => void;
+  /**
+   * The `projects` input, followed by any project created during this mount
+   * that the input does not hold yet: the server's list only arrives with the
+   * action's `refresh()`, and until then a picker must still list and select
+   * the new project.
+   */
+  projects: readonly ProjectSummary[];
+  /** A per-call `onCreated` stands in for the hook-level one for that opening only. */
+  createProject: (options?: { onCreated?: (project: Project) => void }) => void;
   renameProject: (project: ProjectSummary) => void;
   /** Asks first only when the project still has open tasks. */
   archiveProject: (project: ProjectSummaryWithCount) => void;
@@ -42,7 +56,7 @@ export function useProjectManager({
   /** A change in this list is when an archived row has left. */
   projects: readonly ProjectSummary[];
   onCreated?: (project: Project) => void;
-  /** Where focus lands when the archived row's menu has gone with it. */
+  /** Where focus lands when the control that opened a dialog has gone with the action. */
   fallbackFocus?: () => HTMLElement | null;
 }): ProjectManager {
   const announce = useAnnounce();
@@ -50,6 +64,23 @@ export function useProjectManager({
   const [editing, setEditing] = React.useState<Editing | null>(null);
   const [confirming, setConfirming] = React.useState<ProjectSummaryWithCount | null>(null);
   const [error, setError] = React.useState<ProjectFormError | null>(null);
+  const [created, setCreated] = React.useState<readonly ProjectSummary[]>([]);
+
+  // A created entry stands in only until the server's list carries the
+  // project; kept longer, it would come back after an archive removed it.
+  React.useEffect(() => {
+    const known = new Set(projects.map((project) => project.id));
+    setCreated((current) =>
+      current.some((project) => known.has(project.id))
+        ? current.filter((project) => !known.has(project.id))
+        : current,
+    );
+  }, [projects]);
+
+  const merged = React.useMemo(() => {
+    const known = new Set(projects.map((project) => project.id));
+    return [...projects, ...created.filter((project) => !known.has(project.id))];
+  }, [created, projects]);
 
   const run = React.useCallback(
     (
@@ -77,7 +108,7 @@ export function useProjectManager({
   const submit = React.useCallback(
     (values: ProjectFormValues) => {
       if (editing === null) return;
-      const { id, project } = editing;
+      const { id, project, onCreated: onCreatedOnce } = editing;
       setError(null);
 
       const action = () =>
@@ -94,23 +125,35 @@ export function useProjectManager({
         }
         setEditing(null);
         announce(project === null ? `${values.name} created` : `${values.name} saved`);
-        if (project === null) onCreated?.(result.data);
+        if (project === null) {
+          const { id: createdId, name, color } = result.data;
+          setCreated((current) => [...current, { id: createdId, name, color }]);
+          (onCreatedOnce ?? onCreated)?.(result.data);
+          // The callback may unmount the dialog's opener (the bulk bar moves
+          // its selection and leaves), so the rescue below is armed here too.
+          handOff.current = true;
+        }
       });
     },
     [announce, editing, onCreated, run],
   );
 
   // Archiving removes the row whose menu was just used, in a later commit when
-  // the layout re-renders; focus is rescued when `projects` changes.
+  // the layout re-renders; a create's callback may remove the dialog's opener
+  // at once. Either way focus is rescued when the list changes, after the
+  // dialog's own restore has had its turn. Focus still inside the closed
+  // dialog counts as dropped: `Presence` removes it in the commit after this.
   const handOff = React.useRef(false);
   const fallback = React.useRef(fallbackFocus);
   fallback.current = fallbackFocus;
   React.useEffect(() => {
     if (!handOff.current) return;
     handOff.current = false;
-    const dropped = document.activeElement === null || document.activeElement === document.body;
+    const active = document.activeElement;
+    const dropped =
+      active === null || active === document.body || active.closest(CLOSED_DIALOG) !== null;
     if (dropped) focusFirstAvailable([fallback.current?.() ?? null]);
-  }, [projects]);
+  }, [merged]);
 
   const archive = React.useCallback(
     // Named, so Retry re-runs the same attempt.
@@ -167,8 +210,10 @@ export function useProjectManager({
 
   return {
     pending,
+    projects: merged,
     // Minted when the form opens, not per submit, so a retry sends the same id.
-    createProject: () => setEditing({ project: null, id: crypto.randomUUID() }),
+    createProject: (options) =>
+      setEditing({ project: null, id: crypto.randomUUID(), onCreated: options?.onCreated }),
     renameProject: (project) => setEditing({ project, id: project.id }),
     archiveProject: (project) => {
       if (project.openTasks > 0) setConfirming(project);
@@ -177,6 +222,8 @@ export function useProjectManager({
     dialogs,
   };
 }
+
+const CLOSED_DIALOG = '[role="dialog"][data-state="closed"]';
 
 export function describeArchive(openTasks: number): string {
   const tasks =

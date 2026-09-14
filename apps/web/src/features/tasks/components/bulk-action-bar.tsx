@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { CheckIcon, FolderInputIcon, TrashIcon, XIcon } from "lucide-react";
+import { CheckIcon, FolderInputIcon, FolderPlusIcon, TrashIcon, XIcon } from "lucide-react";
 
 import type { Uuid } from "@momentum/core/types";
 
@@ -14,6 +14,7 @@ import {
   DropdownMenuTrigger,
 } from "@momentum/ui/components/dropdown-menu";
 import { Kbd } from "@momentum/ui/components/kbd";
+import { ProjectDot } from "@momentum/ui/components/project-dot";
 
 import {
   ConfirmDeleteDialog,
@@ -33,6 +34,7 @@ export function BulkActionBar({
   returnFocusTo,
   onComplete,
   onMoveToProject,
+  onCreateProject,
   onDelete,
   onClear,
 }: {
@@ -47,6 +49,8 @@ export function BulkActionBar({
   returnFocusTo?: React.RefObject<HTMLElement | null>;
   onComplete: (completed: boolean) => void;
   onMoveToProject: (projectId: Uuid | null) => void;
+  /** Opens the new-project dialog; `onCreated` receives the id once it is saved. */
+  onCreateProject: (onCreated: (projectId: Uuid) => void) => void;
   onDelete: () => void;
   onClear: () => void;
 }) {
@@ -55,6 +59,10 @@ export function BulkActionBar({
   // Whether the menu is closing because an item was chosen (which unmounts the
   // bar) rather than by Escape or a click away (where Radix's restore is right).
   const menuActed = React.useRef(false);
+  // "New project…" keeps the bar: it runs from `onCloseAutoFocus` with focus
+  // back on the trigger, so the dialog records the trigger as its opener.
+  const createChosen = React.useRef(false);
+  const moveTrigger = React.useRef<HTMLButtonElement>(null);
   const [confirmingDelete, setConfirmingDelete] = React.useState(false);
 
   function handOffFocus(): boolean {
@@ -101,7 +109,7 @@ export function BulkActionBar({
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button size="sm" variant="ghost" disabled={pending}>
+          <Button ref={moveTrigger} size="sm" variant="ghost" disabled={pending}>
             <FolderInputIcon aria-hidden="true" />
             Move to project
           </Button>
@@ -112,6 +120,15 @@ export function BulkActionBar({
           // Cannot use `act`: an open menu traps focus, and Radix's restore aims
           // at a trigger inside the bar that has just unmounted.
           onCloseAutoFocus={(event) => {
+            if (createChosen.current) {
+              createChosen.current = false;
+              event.preventDefault();
+              moveTrigger.current?.focus();
+              // The move takes the bar, and the dialog's opener, with it; the
+              // dialog's owner rescues focus to its own fallback.
+              onCreateProject((projectId) => act(() => onMoveToProject(projectId)));
+              return;
+            }
             if (!menuActed.current) return;
             menuActed.current = false;
             if (handOffFocus()) event.preventDefault();
@@ -121,9 +138,19 @@ export function BulkActionBar({
           {projects.length > 0 ? <DropdownMenuSeparator /> : null}
           {projects.map((project) => (
             <DropdownMenuItem key={project.id} onSelect={() => moveToProject(project.id)}>
+              <ProjectDot color={project.color} />
               {project.name}
             </DropdownMenuItem>
           ))}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            onSelect={() => {
+              createChosen.current = true;
+            }}
+          >
+            <FolderPlusIcon aria-hidden="true" />
+            New project…
+          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
 

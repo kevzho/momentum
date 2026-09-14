@@ -7,13 +7,15 @@ import { localDate } from "@momentum/core/time";
 
 import type { ActionResult } from "@/lib/actions/result";
 
-const { createTaskMock, errorToast, successToast, pushMock, reportError } = vi.hoisted(() => ({
-  createTaskMock: vi.fn(),
-  errorToast: vi.fn(),
-  successToast: vi.fn(),
-  pushMock: vi.fn(),
-  reportError: vi.fn(),
-}));
+const { createTaskMock, createProjectMock, errorToast, successToast, pushMock, reportError } =
+  vi.hoisted(() => ({
+    createTaskMock: vi.fn(),
+    createProjectMock: vi.fn(),
+    errorToast: vi.fn(),
+    successToast: vi.fn(),
+    pushMock: vi.fn(),
+    reportError: vi.fn(),
+  }));
 
 vi.mock("@momentum/ui/components/toast", () => ({
   toast: {
@@ -33,6 +35,11 @@ vi.mock("next/navigation", async (importOriginal) => ({
 }));
 
 vi.mock("@/features/tasks/actions", () => ({ createTask: createTaskMock }));
+vi.mock("@/features/projects/actions", () => ({
+  createProject: createProjectMock,
+  updateProject: vi.fn(),
+  archiveProject: vi.fn(),
+}));
 
 vi.mock("@/lib/report-error", () => ({ reportError }));
 
@@ -410,6 +417,51 @@ describe("what survives a dismissal", () => {
 
     fireEvent.click(opener);
     expect((await screen.findByLabelText<HTMLInputElement>("Task title")).value).toBe("");
+  });
+});
+
+describe("creating a project from the picker", () => {
+  it("opens the project dialog, then selects what it saved and files the task there", async () => {
+    createTaskMock.mockResolvedValue({ ok: true, data: null } as ActionResult<unknown>);
+    createProjectMock.mockImplementation((input: { id: string; name: string; color: string }) =>
+      Promise.resolve({
+        ok: true,
+        data: {
+          id: input.id,
+          userId: "u",
+          name: input.name,
+          description: null,
+          color: input.color,
+          icon: null,
+          archivedAt: null,
+          createdAt: "2026-09-07T12:00:00.000Z",
+          updatedAt: "2026-09-07T12:00:00.000Z",
+        },
+      }),
+    );
+
+    const field = await openAndType(renderShellWithProjects(), "Finish essay");
+    const picker = screen.getByRole("combobox", { name: "Project" });
+    expect(picker.textContent).toContain("No project");
+
+    fireEvent.click(picker);
+    fireEvent.click(await screen.findByRole("option", { name: "New project…" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "New project" });
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Thesis" } });
+    fireEvent.submit(dialog.querySelector("form") as HTMLFormElement);
+
+    await waitFor(() => expect(createProjectMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "New project" })).toBeNull());
+    // Listed before the server's list has caught up: the shell still passes `[SCHOOL]`.
+    await waitFor(() => expect(picker.textContent).toContain("Thesis"));
+
+    await act(async () => {
+      fireEvent.keyDown(field, { key: "Enter" });
+    });
+
+    const projectId = (createProjectMock.mock.calls[0]?.[0] as { id: string }).id;
+    expect(created()).toMatchObject({ title: "Finish essay", projectId });
   });
 });
 

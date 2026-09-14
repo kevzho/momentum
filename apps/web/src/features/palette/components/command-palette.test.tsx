@@ -30,6 +30,13 @@ vi.mock("@/features/tasks/actions", () => ({
   createTask: createTaskMock,
 }));
 
+// QuickAddProvider now reaches the project actions (server-only) through useProjectManager.
+vi.mock("@/features/projects/actions", () => ({
+  createProject: vi.fn(),
+  updateProject: vi.fn(),
+  archiveProject: vi.fn(),
+}));
+
 const { AnnouncerProvider } = await import("@momentum/ui/components/announcer");
 const { PaletteProvider, usePalette } =
   await import("@/features/palette/components/palette-provider");

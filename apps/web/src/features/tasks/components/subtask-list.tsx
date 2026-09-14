@@ -71,6 +71,7 @@ export function SubtaskList({
                 )}
               >
                 <Checkbox
+                  shape="round"
                   checked={completed}
                   aria-disabled={disabled || undefined}
                   onCheckedChange={(next) => {

@@ -51,6 +51,7 @@ function sheetProps(overrides: Partial<SheetProps> = {}): SheetProps {
     onRemoveBlock: vi.fn(),
     onAddSubtask: vi.fn(),
     onMoveSubtask: vi.fn(),
+    onCreateProject: vi.fn(),
     ...overrides,
   };
 }
@@ -136,6 +137,7 @@ describe("closing the sheet", () => {
             onRemoveBlock={vi.fn()}
             onAddSubtask={vi.fn()}
             onMoveSubtask={vi.fn()}
+            onCreateProject={vi.fn()}
           />
         </>
       );
@@ -150,6 +152,25 @@ describe("closing the sheet", () => {
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
 
     await waitFor(() => expect(document.activeElement).toBe(row));
+  });
+});
+
+describe("the project picker", () => {
+  it("asks for a new project, and files the task in it once it exists", async () => {
+    const onCreateProject = vi.fn();
+    const onPatch = renderSheet({ onCreateProject });
+
+    fireEvent.click(screen.getByLabelText("Project"));
+    fireEvent.click(await screen.findByRole("option", { name: "New project…" }));
+
+    await waitFor(() => expect(onCreateProject).toHaveBeenCalledTimes(1));
+    expect(onPatch).not.toHaveBeenCalled();
+
+    const onCreated = onCreateProject.mock.calls[0]?.[0] as (projectId: string) => void;
+    onCreated("22222222-2222-4222-8222-222222222222");
+    expect(onPatch).toHaveBeenCalledWith(TASK.id, {
+      projectId: "22222222-2222-4222-8222-222222222222",
+    });
   });
 });
 

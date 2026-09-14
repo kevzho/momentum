@@ -43,6 +43,20 @@ export function SidebarNav({
     fallbackFocus: () => newProjectRef.current,
   });
 
+  // The manager's list already holds a project created here that the layout's
+  // refresh has yet to return; the server has counted nothing for it.
+  const rows = React.useMemo<ProjectSummaryWithCount[]>(() => {
+    const counted = new Map(projects.map((project) => [project.id, project]));
+    return manager.projects.map(
+      (project) => counted.get(project.id) ?? { ...project, openTasks: 0 },
+    );
+  }, [manager.projects, projects]);
+
+  // An empty list offers one "New project" row in the header button's place.
+  // The ref follows whichever is mounted, so archiving the last project still
+  // has somewhere to send focus.
+  const emptyRow = rows.length === 0 && !collapsed;
+
   const newProject = (
     <Button
       ref={newProjectRef}
@@ -50,7 +64,7 @@ export function SidebarNav({
       size="icon-sm"
       className="text-muted-foreground"
       title={collapsed ? undefined : "New project"}
-      onClick={manager.createProject}
+      onClick={() => manager.createProject()}
     >
       <FolderPlusIcon aria-hidden="true" />
       <span className="sr-only">New project</span>
@@ -101,7 +115,7 @@ export function SidebarNav({
           >
             Projects
           </h2>
-          {collapsed ? (
+          {emptyRow ? null : collapsed ? (
             <Tooltip>
               <TooltipTrigger asChild>{newProject}</TooltipTrigger>
               <TooltipContent side="right">New project</TooltipContent>
@@ -111,7 +125,7 @@ export function SidebarNav({
           )}
         </div>
         <ul className="flex flex-col gap-0.5">
-          {projects.map((project) => {
+          {rows.map((project) => {
             const row = (
               <Link
                 // The per-project view: the only one not reachable from the task page's own tabs.
@@ -156,8 +170,18 @@ export function SidebarNav({
               </li>
             );
           })}
-          {projects.length === 0 && !collapsed ? (
-            <li className="px-2 py-1 text-xs text-muted-foreground">No projects yet.</li>
+          {emptyRow ? (
+            <li>
+              <button
+                ref={newProjectRef}
+                type="button"
+                onClick={() => manager.createProject()}
+                className={cn(ITEM_CLASS, "w-full text-muted-foreground")}
+              >
+                <FolderPlusIcon className="size-4 shrink-0" aria-hidden="true" />
+                <span className="truncate">New project</span>
+              </button>
+            </li>
           ) : null}
           <li>
             <button

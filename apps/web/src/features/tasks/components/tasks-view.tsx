@@ -34,7 +34,7 @@ import { TaskToolbar } from "@/features/tasks/components/task-toolbar";
 import { useQuickAdd } from "@/features/tasks/components/quick-add";
 import { useListPreferences } from "@/features/tasks/list-preferences";
 import { useTaskMutations } from "@/features/tasks/use-task-mutations";
-import type { TasksPageData } from "@/features/tasks/types";
+import type { ProjectSummary, TasksPageData } from "@/features/tasks/types";
 import { TAB_VIEWS, VIEW_LABELS, taskHref, type TaskParams } from "@/features/tasks/view-params";
 import { useUserSettings } from "@/lib/time/user-settings";
 
@@ -53,13 +53,21 @@ export function TasksView({ data, params }: { data: TasksPageData; params: TaskP
 
   const { view, projectId } = params;
 
+  // Where focus goes when the bulk bar unmounts itself: the key hint is
+  // rendered whatever the list holds, so it is the anchor.
+  const listHint = React.useRef<HTMLParagraphElement>(null);
+
   // `?new=project` from the palette: the dialog opens once and the intent
   // leaves the URL so reload or back does not reopen it.
   const projectManager = useProjectManager({
     projects: state.projects,
     onCreated: (project) =>
       router.replace(taskHref({ view: "project", projectId: project.id }), { scroll: false }),
+    // A project created from the bulk bar takes the bar, and the dialog's opener, with it.
+    fallbackFocus: () => listHint.current,
   });
+  // Includes what was created here and the server has yet to send back.
+  const projects = projectManager.projects;
   const handledNewProject = React.useRef(false);
   const newTaskButton = React.useRef<HTMLButtonElement>(null);
   const openNewProject = projectManager.createProject;
@@ -113,14 +121,14 @@ export function TasksView({ data, params }: { data: TasksPageData; params: TaskP
 
         return {
           task,
-          project: state.projects.find((p) => p.id === task.projectId) ?? null,
+          project: projects.find((p) => p.id === task.projectId) ?? null,
           coverage: coverageOf(task.estimatedMinutes, scheduledMinutesOf(blocks)),
           blockCount: blocks.length,
           subtaskCount: subtasks.length,
           completedSubtaskCount: subtasks.filter((t) => t.status === "completed").length,
         };
       }),
-    [visible, state.workBlocks, state.tasks, state.projects],
+    [visible, state.workBlocks, state.tasks, projects],
   );
 
   // Per-tab counts, before the toolbar's filters narrow them.
@@ -191,10 +199,6 @@ export function TasksView({ data, params }: { data: TasksPageData; params: TaskP
     [cascadeOf, visibleSelectedIds],
   );
 
-  // Where focus goes when the bulk bar unmounts itself: the key hint is
-  // rendered whatever the list holds, so it is the anchor.
-  const listHint = React.useRef<HTMLParagraphElement>(null);
-
   // A drop and Alt+↑/↓ arrive here as the same call. Announced only when a
   // write was issued.
   function moveTask(taskId: Uuid, toIndex: number): void {
@@ -219,7 +223,7 @@ export function TasksView({ data, params }: { data: TasksPageData; params: TaskP
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
   );
 
-  const title = view === "project" ? projectNameOf(state, projectId) : VIEW_LABELS[view];
+  const title = view === "project" ? projectNameOf(projects, projectId) : VIEW_LABELS[view];
 
   return (
     <PageContainer>
@@ -258,7 +262,7 @@ export function TasksView({ data, params }: { data: TasksPageData; params: TaskP
           sort={preferences.sort}
           direction={preferences.direction}
           filter={preferences.filter}
-          projects={state.projects}
+          projects={projects}
           matchCount={rows.length}
           totalCount={counts[view]}
           onSortChange={(sort) => setPreferences({ sort })}
@@ -271,7 +275,7 @@ export function TasksView({ data, params }: { data: TasksPageData; params: TaskP
           allCompleted={
             selectedTasks.length > 0 && selectedTasks.every((task) => task.status === "completed")
           }
-          projects={state.projects}
+          projects={projects}
           cascade={selectionCascade}
           pending={pending}
           returnFocusTo={listHint}
@@ -287,6 +291,9 @@ export function TasksView({ data, params }: { data: TasksPageData; params: TaskP
             announce(`${taskCount(ids.length)} moved`);
             clearSelection();
           }}
+          onCreateProject={(onCreated) =>
+            projectManager.createProject({ onCreated: (project) => onCreated(project.id) })
+          }
           onDelete={() => {
             const ids = [...visibleSelectedIds];
             mutate.bulkDelete(ids);
@@ -336,7 +343,7 @@ export function TasksView({ data, params }: { data: TasksPageData; params: TaskP
         task={openTask}
         subtasks={openSubtasks}
         workBlocks={openTask === null ? [] : (state.workBlocks[openTask.id] ?? [])}
-        projects={state.projects}
+        projects={projects}
         today={state.today}
         weekStart={settings.weekStart}
         pending={pending}
@@ -372,6 +379,9 @@ export function TasksView({ data, params }: { data: TasksPageData; params: TaskP
           const ordered = openSubtasks;
           mutate.reorder(id, ordered, toIndex);
         }}
+        onCreateProject={(onCreated) =>
+          projectManager.createProject({ onCreated: (project) => onCreated(project.id) })
+        }
       />
 
       {projectManager.dialogs}
@@ -393,9 +403,9 @@ function taskCount(count: number): string {
   return `${count} ${count === 1 ? "task" : "tasks"}`;
 }
 
-function projectNameOf(state: TasksPageData, projectId: Uuid | null): string {
+function projectNameOf(projects: readonly ProjectSummary[], projectId: Uuid | null): string {
   if (projectId === null) return "Project";
-  return state.projects.find((project) => project.id === projectId)?.name ?? "Project";
+  return projects.find((project) => project.id === projectId)?.name ?? "Project";
 }
 
 export type { Task };

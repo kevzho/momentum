@@ -15,17 +15,11 @@ import { DurationInput } from "@momentum/ui/components/duration-input";
 import { Input } from "@momentum/ui/components/input";
 import { Label } from "@momentum/ui/components/label";
 import { PrioritySelect } from "@momentum/ui/components/priority-select";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@momentum/ui/components/select";
 import { Separator } from "@momentum/ui/components/separator";
 import { SideSheet } from "@momentum/ui/components/side-sheet";
 import { Textarea } from "@momentum/ui/components/textarea";
 
+import { ProjectSelect } from "@/features/projects/components/project-select";
 import {
   ConfirmDeleteDialog,
   describeDeleteCascade,
@@ -40,8 +34,6 @@ import { useOpenerFocus } from "@/lib/use-opener-focus";
 
 /** The length of a new work block when nothing else says. */
 const FALLBACK_BLOCK_MINUTES: Minutes = 60;
-
-const NO_PROJECT = "__none__";
 
 // Every field saves on its own as it is committed (blur for text, change for
 // pickers); there is no Save button. Due date and work blocks are deliberately
@@ -68,6 +60,7 @@ export function TaskDetailSheet({
   onRemoveBlock,
   onAddSubtask,
   onMoveSubtask,
+  onCreateProject,
 }: {
   task: Task | null;
   subtasks: readonly Task[];
@@ -92,6 +85,8 @@ export function TaskDetailSheet({
   onRemoveBlock: (taskId: Uuid, blockId: Uuid) => void;
   onAddSubtask: (parentId: Uuid, title: string) => void;
   onMoveSubtask: (id: Uuid, toIndex: number) => void;
+  /** Opens the new-project dialog; `onCreated` receives the id once it is saved. */
+  onCreateProject: (onCreated: (projectId: Uuid) => void) => void;
 }) {
   const open = task !== null;
   const project = task?.projectId ? (projects.find((p) => p.id === task.projectId) ?? null) : null;
@@ -247,24 +242,13 @@ export function TaskDetailSheet({
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="task-project">Project</Label>
-              <Select
-                value={task.projectId ?? NO_PROJECT}
-                onValueChange={(value) =>
-                  onPatch(task.id, { projectId: value === NO_PROJECT ? null : value })
-                }
-              >
-                <SelectTrigger id="task-project" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NO_PROJECT}>No project</SelectItem>
-                  {projects.map((option) => (
-                    <SelectItem key={option.id} value={option.id}>
-                      {option.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <ProjectSelect
+                id="task-project"
+                value={task.projectId}
+                projects={projects}
+                onValueChange={(projectId) => onPatch(task.id, { projectId })}
+                onCreate={() => onCreateProject((projectId) => onPatch(task.id, { projectId }))}
+              />
             </div>
 
             <div className="flex flex-col gap-1.5">

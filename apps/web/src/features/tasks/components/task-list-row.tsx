@@ -194,6 +194,7 @@ export function TaskListRow({
           </Button>
         ) : (
           <Checkbox
+            shape="round"
             checked={completed}
             aria-disabled={pending || undefined}
             onCheckedChange={(next) => {

@@ -20,23 +20,16 @@ import { DurationInput } from "@momentum/ui/components/duration-input";
 import { Input } from "@momentum/ui/components/input";
 import { Kbd } from "@momentum/ui/components/kbd";
 import { PrioritySelect } from "@momentum/ui/components/priority-select";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@momentum/ui/components/select";
 import { toast } from "@momentum/ui/components/toast";
 import { cn } from "@momentum/ui/lib/utils";
 
+import { useProjectManager } from "@/features/projects/components/project-manager";
+import { ProjectSelect } from "@/features/projects/components/project-select";
 import { createTask } from "@/features/tasks/actions";
 import type { ProjectSummary } from "@/features/tasks/types";
 import { failure, type ActionError, type ActionResult } from "@/lib/actions/result";
 import { reportError } from "@/lib/report-error";
 import { useOpenerFocus } from "@/lib/use-opener-focus";
-
-const NO_PROJECT = "__none__";
 
 // Quick Add, mounted once in the shell. The title runs through
 // `@momentum/core/parser` on every keystroke; recognised tokens show as chips.
@@ -186,10 +179,17 @@ function QuickAddDialog({
   // Shown inside the dialog: a toast behind a modal is outside its focus trap.
   const [error, setError] = React.useState<(ActionError & { retry?: () => void }) | null>(null);
 
+  // Runs once the create has settled, so `takeOver` (below) sees a parse that
+  // already includes the manager's list.
+  const manager = useProjectManager({
+    projects,
+    onCreated: (project) => takeOver("project", () => setProjectId(project.id)),
+  });
+
   // A pure function of the string: no effect, no debounce, no state to drift.
   const parsed = React.useMemo(
-    () => parseQuickAdd(title, { today, projects, dismissed }),
-    [dismissed, projects, title, today],
+    () => parseQuickAdd(title, { today, projects: manager.projects, dismissed }),
+    [dismissed, manager.projects, title, today],
   );
 
   const effective = {
@@ -377,25 +377,15 @@ function QuickAddDialog({
           ) : null}
 
           <div className="grid grid-cols-2 gap-2">
-            <Select
-              value={effective.projectId ?? NO_PROJECT}
+            <ProjectSelect
+              aria-label="Project"
+              className="w-full"
+              value={effective.projectId}
+              projects={manager.projects}
               disabled={pending}
-              onValueChange={(value) =>
-                takeOver("project", () => setProjectId(value === NO_PROJECT ? null : value))
-              }
-            >
-              <SelectTrigger aria-label="Project" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NO_PROJECT}>No project</SelectItem>
-                {projects.map((project) => (
-                  <SelectItem key={project.id} value={project.id}>
-                    {project.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              onValueChange={(id) => takeOver("project", () => setProjectId(id))}
+              onCreate={manager.createProject}
+            />
 
             <PrioritySelect
               value={effective.priority}
@@ -446,6 +436,8 @@ function QuickAddDialog({
             </Button>
           </div>
         </div>
+
+        {manager.dialogs}
       </DialogContent>
     </Dialog>
   );

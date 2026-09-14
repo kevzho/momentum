@@ -56,6 +56,7 @@ export function TodayHabits({
                 )}
               >
                 <Checkbox
+                  shape="round"
                   checked={done}
                   aria-label={`${row.habit.name} — ${DAY_STATE_LABELS[row.day.state]}`}
                   onCheckedChange={(next) => onToggle(row, next === true)}

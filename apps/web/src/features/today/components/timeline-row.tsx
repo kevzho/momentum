@@ -102,6 +102,7 @@ export function TimelineRow({
       {isCompletable(item) && item.blockId !== null ? (
         <span className="flex shrink-0 items-center pl-1">
           <Checkbox
+            shape="round"
             checked={completed}
             aria-label={completionLabel(item)}
             onCheckedChange={(next) => onToggle(entry, next === true)}

@@ -71,6 +71,7 @@ function TaskRow({
       {...props}
     >
       <Checkbox
+        shape="round"
         checked={completed}
         onCheckedChange={(next) => onToggle?.(next === true)}
         aria-label={completed ? `Mark "${title}" as open` : `Complete "${title}"`}
