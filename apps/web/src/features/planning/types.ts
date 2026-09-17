@@ -8,6 +8,7 @@ import type {
   DaySpan,
   PlanningData,
 } from "@/features/calendar/types";
+import type { OnboardingState } from "@/features/onboarding/types";
 
 /**
  * The planning drawer's props. It owns no server data and performs no
@@ -42,4 +43,9 @@ export interface PlanningDrawerProps {
   pendingTaskIds: ReadonlySet<Uuid>;
   /** Habits whose "Add to week" is in flight. */
   pendingHabitIds: ReadonlySet<Uuid>;
+  /**
+   * The first-run checklist's facts, rendered at the top of the panel until
+   * the account has finished or skipped it. Null (the default) renders nothing.
+   */
+  onboarding?: OnboardingState | null;
 }

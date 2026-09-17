@@ -94,6 +94,8 @@ export async function getTodayPage(): Promise<TodayPageData> {
     focusSessions,
     completedBlocks,
     awardedToday,
+    openTaskCount,
+    hasScheduledWork,
   ] = await Promise.all([
     blocks.listWindow(supabase, {
       start: rangeWindow.start,
@@ -113,6 +115,9 @@ export async function getTodayPage(): Promise<TodayPageData> {
     focus.listStartedBetween(supabase, userId, todayWindow),
     blocks.listCompletedBetween(supabase, userId, todayWindow),
     gamification.xpAwardedBetween(supabase, userId, todayWindow),
+    // For the empty states: what the whole account holds, not just today.
+    tasks.countTopLevelFor(supabase, userId, "open"),
+    blocks.hasWorkBlock(supabase, userId),
   ]);
 
   const occurrences = expandAll(rows.series, rangeWindow, rows.overrides);
@@ -213,6 +218,8 @@ export async function getTodayPage(): Promise<TodayPageData> {
       now: serverNow,
       timezone,
     }),
+    openTaskCount,
+    hasScheduledWork,
   };
 }
 

@@ -91,7 +91,8 @@ export type NextUp =
   | { kind: "block"; entry: TodayItem; inProgress: boolean }
   | { kind: "task"; task: TodayTask; reason: NextUpReason }
   | { kind: "done"; completed: number }
-  | { kind: "empty" };
+  /** `openTasks` is the account's open task count, for the empty state's sentence. */
+  | { kind: "empty"; openTasks: number };
 
 /** Which greeting the header opens with, resolved from the profile's clock. */
 export type DayPart = "morning" | "afternoon" | "evening";
@@ -129,4 +130,15 @@ export interface TodayPageData {
   completedTasksToday: number;
   /** Engine warnings narrowed to the two kinds At Risk shows; overdue rows derive from `overdue` on the client. */
   warnings: readonly (InsufficientTimeWarning | OverlapWarning)[];
+  /** Open, unarchived top-level tasks across every date, so an empty day can say what the account is missing. */
+  openTaskCount: number;
+  /** At least one work block exists somewhere, in any week. */
+  hasScheduledWork: boolean;
 }
+
+/**
+ * What an open day points at, decided from the account rather than the day:
+ * capture when there is nothing to schedule, schedule when there is something
+ * and no slot anywhere, and nothing special otherwise.
+ */
+export type TodayGuide = "capture" | "schedule" | null;

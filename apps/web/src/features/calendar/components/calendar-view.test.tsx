@@ -45,6 +45,8 @@ vi.mock("@/features/calendar/actions", () => ({
 
 // A `'use server'` module reaches `server-only` through `requireSession`.
 vi.mock("@/features/habits/actions", () => ({ addHabitToWeek: vi.fn() }));
+vi.mock("@/features/onboarding/actions", () => ({ dismissOnboarding: vi.fn() }));
+vi.mock("@/features/settings/actions", () => ({ updateProfileSettings: vi.fn() }));
 
 const TZ = ianaTimeZone("America/New_York");
 const TODAY = localDate("2026-09-07");

@@ -3,7 +3,9 @@ import { expect, linkTo, mail, test } from "./fixtures";
 // With email confirmations off (the local default) the action signs the new
 // account straight in; with them on, the confirmation link finishes the job.
 test.describe("Sign up", () => {
-  test("creates an account and lands on Today", async ({ page }) => {
+  test("creates an account and lands on the calendar with the first-run checklist", async ({
+    page,
+  }) => {
     const email = `e2e-${Date.now().toString(36)}@momentum.test`;
     await mail.clear();
 
@@ -15,11 +17,11 @@ test.describe("Sign up", () => {
 
     const confirmation = page.getByRole("status");
     await Promise.race([
-      page.waitForURL(/\/today/, { waitUntil: "commit" }),
+      page.waitForURL(/\/calendar/, { waitUntil: "commit" }),
       confirmation.waitFor({ state: "visible" }),
     ]);
 
-    if (/\/today/.test(page.url())) {
+    if (/\/calendar/.test(page.url())) {
       test.info().annotations.push({
         type: "note",
         description: "Email confirmations are off: the sign-up signed straight in.",
@@ -30,10 +32,12 @@ test.describe("Sign up", () => {
       // GoTrue's default confirmation link is PKCE, so it is followed in the
       // browser that signed up.
       await page.goto(linkTo(message, ["/auth/callback", "/auth/v1/verify"]));
-      await page.waitForURL(/\/today/, { waitUntil: "commit" });
+      await page.waitForURL(/\/calendar/, { waitUntil: "commit" });
     }
 
-    await expect(page.getByRole("heading", { level: 1 })).toContainText("E2E Signup");
+    // A new account lands on the week, with the checklist open in the plan panel.
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Calendar");
+    await expect(page.getByRole("region", { name: "Set up your week" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Account menu" })).toBeVisible();
   });
 });

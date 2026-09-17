@@ -493,4 +493,35 @@ describe("what the page underneath seeds", () => {
 
     expect(created()).toMatchObject({ projectId: SCHOOL.id, sortOrder: -7 });
   });
+
+  it("shows an example placeholder for one opening only, never as a value", async () => {
+    function Page() {
+      const quickAdd = useQuickAdd();
+      return (
+        <>
+          <button type="button" onClick={() => quickAdd.open({ placeholder: "e.g. Read ch. 4" })}>
+            Guided
+          </button>
+          <button type="button" onClick={() => quickAdd.open()}>
+            Plain
+          </button>
+        </>
+      );
+    }
+    render(
+      <QuickAddProvider projects={[]} today={TODAY} weekStart={1}>
+        <Page />
+      </QuickAddProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Guided" }));
+    let field = await screen.findByLabelText<HTMLInputElement>("Task title");
+    expect(field.placeholder).toBe("e.g. Read ch. 4");
+    expect(field.value).toBe("");
+
+    fireEvent.keyDown(field, { key: "Escape" });
+    fireEvent.click(screen.getByRole("button", { name: "Plain" }));
+    field = await screen.findByLabelText<HTMLInputElement>("Task title");
+    expect(field.placeholder).toBe("What needs doing?");
+  });
 });

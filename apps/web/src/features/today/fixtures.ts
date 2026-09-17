@@ -180,6 +180,9 @@ export function todayPage(overrides: Partial<TodayPageData> = {}): TodayPageData
     quests: [],
     completedTasksToday: 0,
     warnings: [],
+    // An account that has scheduled before: the plain empty states.
+    openTaskCount: 4,
+    hasScheduledWork: true,
     ...overrides,
   };
 }

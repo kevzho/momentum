@@ -405,11 +405,13 @@ export type Database = {
           focus_windows: Json;
           id: string;
           level: number;
+          onboarding_dismissed_at: string | null;
           snap_minutes: number;
           timezone: string;
           updated_at: string;
           week_start: number;
           working_hours: Json;
+          working_hours_set_at: string | null;
           xp: number;
         };
         Insert: {
@@ -419,11 +421,13 @@ export type Database = {
           focus_windows?: Json;
           id: string;
           level?: number;
+          onboarding_dismissed_at?: string | null;
           snap_minutes?: number;
           timezone?: string;
           updated_at?: string;
           week_start?: number;
           working_hours?: Json;
+          working_hours_set_at?: string | null;
           xp?: number;
         };
         Update: {
@@ -433,11 +437,13 @@ export type Database = {
           focus_windows?: Json;
           id?: string;
           level?: number;
+          onboarding_dismissed_at?: string | null;
           snap_minutes?: number;
           timezone?: string;
           updated_at?: string;
           week_start?: number;
           working_hours?: Json;
+          working_hours_set_at?: string | null;
           xp?: number;
         };
         Relationships: [];
@@ -1204,11 +1210,13 @@ export type Database = {
           focus_windows: Json;
           id: string;
           level: number;
+          onboarding_dismissed_at: string | null;
           snap_minutes: number;
           timezone: string;
           updated_at: string;
           week_start: number;
           working_hours: Json;
+          working_hours_set_at: string | null;
           xp: number;
         };
         SetofOptions: {

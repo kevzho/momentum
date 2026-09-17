@@ -140,6 +140,19 @@ export async function findOverride(
   return data === null ? null : rowToEventBlock(data);
 }
 
+/** Whether the user has ever scheduled a task: one work block anywhere, any week. */
+export async function hasWorkBlock(client: MomentumClient, userId: Uuid): Promise<boolean> {
+  const { count, error } = await client
+    .from("calendar_blocks")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .eq("kind", "work")
+    .limit(1);
+
+  if (error) throw error;
+  return (count ?? 0) > 0;
+}
+
 /** Every work block for a set of tasks, oldest first, unbounded by any window. */
 export async function listForTasks(
   client: MomentumClient,

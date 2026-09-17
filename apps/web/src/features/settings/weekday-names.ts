@@ -11,6 +11,17 @@ export const WEEKDAY_NAMES: Record<Weekday, string> = {
   6: "Saturday",
 };
 
+/** Three-letter forms of the same table, for summaries such as "Mon–Fri". */
+export const WEEKDAY_SHORT_NAMES: Record<Weekday, string> = {
+  0: "Sun",
+  1: "Mon",
+  2: "Tue",
+  3: "Wed",
+  4: "Thu",
+  5: "Fri",
+  6: "Sat",
+};
+
 /** The seven weekdays starting from `weekStart`, in the order the user's week runs. */
 export function weekdaysFrom(weekStart: Weekday): Weekday[] {
   return [...WEEKDAYS.slice(weekStart), ...WEEKDAYS.slice(0, weekStart)];

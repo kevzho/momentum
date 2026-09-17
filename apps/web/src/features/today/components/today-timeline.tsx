@@ -10,16 +10,19 @@ import { timelineStateOf } from "@/features/today/agenda";
 import { TODAY_COPY } from "@/features/today/copy";
 import { TimelineRow } from "@/features/today/components/timeline-row";
 import { TodaySection } from "@/features/today/components/today-section";
-import type { TodayItem } from "@/features/today/types";
+import type { TodayGuide, TodayItem } from "@/features/today/types";
 
 /** Today's timeline. Row state is derived from `now` on every tick, never stored. */
 export function TodayTimeline({
   entries,
+  guide,
   now,
   pendingIds,
   onToggle,
 }: {
   entries: readonly TodayItem[];
+  /** For the empty state: an account with nothing to schedule is pointed at capture. */
+  guide: TodayGuide;
   now: Instant;
   pendingIds: ReadonlySet<string>;
   onToggle: (entry: TodayItem, completed: boolean) => void;
@@ -35,11 +38,18 @@ export function TodayTimeline({
         <EmptyState
           icon={CalendarDaysIcon}
           title={TODAY_COPY.timeline.emptyTitle}
-          description={TODAY_COPY.timeline.emptyDescription}
+          description={
+            guide === "capture"
+              ? TODAY_COPY.timeline.captureDescription
+              : TODAY_COPY.timeline.emptyDescription
+          }
+          // Next Up, just above, already carries the one "Add a task" for a new account.
           action={
-            <Button variant="outline" size="sm" asChild>
-              <Link href="/calendar">{TODAY_COPY.timeline.openCalendar}</Link>
-            </Button>
+            guide === "capture" ? null : (
+              <Button variant="outline" size="sm" asChild>
+                <Link href="/calendar">{TODAY_COPY.timeline.openCalendar}</Link>
+              </Button>
+            )
           }
         />
       ) : (

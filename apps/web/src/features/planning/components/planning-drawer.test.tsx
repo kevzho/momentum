@@ -57,6 +57,10 @@ vi.mock("@momentum/core/scheduling", async (importOriginal) => {
   };
 });
 
+// The checklist inside the drawer reaches `server-only` through its actions.
+vi.mock("@/features/onboarding/actions", () => ({ dismissOnboarding: vi.fn() }));
+vi.mock("@/features/settings/actions", () => ({ updateProfileSettings: vi.fn() }));
+
 const DAYS: readonly LocalDate[] = [
   "2026-09-07",
   "2026-09-08",
@@ -306,6 +310,28 @@ describe("PlanningDrawer", () => {
       ["Overdue", "Due this week", "Unscheduled", "Habits", "Weekly goals"].includes(text ?? ""),
     );
     expect(sections).toEqual(["Overdue", "Due this week", "Unscheduled", "Habits", "Weekly goals"]);
+  });
+
+  it("renders the first-run checklist above capacity, and its last step opens Find Time for the first row without a slot", () => {
+    renderDrawer({
+      onboarding: { workingHoursSet: true, taskCount: 3, hasWorkBlock: false },
+    });
+
+    const checklist = screen.getByRole("region", { name: "Set up your week" });
+    expect(checklist.compareDocumentPosition(sectionFor("Capacity"))).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    expect(within(checklist).getByText("2 of 3 done")).toBeDefined();
+
+    fireEvent.click(within(checklist).getByRole("button", { name: "Find time" }));
+
+    const dialog = screen.getByRole("dialog", { name: "Find time" });
+    expect(dialog.textContent).toContain(HOMEWORK.title);
+  });
+
+  it("renders no checklist by default", () => {
+    renderDrawer();
+    expect(screen.queryByRole("region", { name: "Set up your week" })).toBeNull();
   });
 
   it("renders nothing while closed", () => {
@@ -673,6 +699,28 @@ describe("PlanningDrawer", () => {
       expect(within(sheet).getByRole("button", { name: /statistics homework/ })).toBeDefined();
       expect(within(sheet).getByText(/Drag a task onto the week/)).toBeDefined();
       expect(sheet.querySelector('[data-slot="side-panel"]')).toBeNull();
+    });
+
+    it("renders the first-run checklist above capacity, and its last step opens Find Time for the first row without a slot", () => {
+      renderDrawer({
+        onboarding: { workingHoursSet: true, taskCount: 3, hasWorkBlock: false },
+      });
+
+      const checklist = screen.getByRole("region", { name: "Set up your week" });
+      expect(checklist.compareDocumentPosition(sectionFor("Capacity"))).toBe(
+        Node.DOCUMENT_POSITION_FOLLOWING,
+      );
+      expect(within(checklist).getByText("2 of 3 done")).toBeDefined();
+
+      fireEvent.click(within(checklist).getByRole("button", { name: "Find time" }));
+
+      const dialog = screen.getByRole("dialog", { name: "Find time" });
+      expect(dialog.textContent).toContain(HOMEWORK.title);
+    });
+
+    it("renders no checklist by default", () => {
+      renderDrawer();
+      expect(screen.queryByRole("region", { name: "Set up your week" })).toBeNull();
     });
 
     it("renders nothing while closed", () => {

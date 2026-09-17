@@ -81,6 +81,8 @@ const PROFILE: Profile = {
   level: 1,
   xp: 0,
   coins: 0,
+  workingHoursSetAt: null,
+  onboardingDismissedAt: null,
   createdAt: instant("2026-09-01T00:00:00.000Z"),
   updatedAt: instant("2026-09-01T00:00:00.000Z"),
 };

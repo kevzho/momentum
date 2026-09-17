@@ -15,6 +15,7 @@ import type {
   NextUp,
   NextUpReason,
   TimelineState,
+  TodayGuide,
   TodayHabit,
   TodayItem,
   TodayPageData,
@@ -41,6 +42,19 @@ export function dayPartOf(minutesFromMidnight: Minutes): DayPart {
   if (minutesFromMidnight < 12 * 60) return "morning";
   if (minutesFromMidnight < 18 * 60) return "afternoon";
   return "evening";
+}
+
+/**
+ * The next action for an account with an open day. A brand-new account is
+ * pointed at capture; one with tasks and no slot anywhere at scheduling.
+ * Once anything has ever been scheduled the empty states say only that
+ * today is open.
+ */
+export function todayGuide(
+  data: Pick<TodayPageData, "openTaskCount" | "hasScheduledWork">,
+): TodayGuide {
+  if (data.hasScheduledWork) return null;
+  return data.openTaskCount === 0 ? "capture" : "schedule";
 }
 
 /** A calendar item together with the project context Today shows beside it. */
@@ -157,7 +171,9 @@ export function selectNextUp(page: TodayPageData, now: Instant): NextUp {
   }
 
   const completed = page.completedTasksToday + completedBlockCount(page.timeline);
-  return completed > 0 ? { kind: "done", completed } : { kind: "empty" };
+  return completed > 0
+    ? { kind: "done", completed }
+    : { kind: "empty", openTasks: page.openTaskCount };
 }
 
 /** Why this task and not another: a statement about its deadline. */

@@ -26,6 +26,11 @@ import { cn } from "@momentum/ui/lib/utils";
 import { useProjectManager } from "@/features/projects/components/project-manager";
 import { ProjectSelect } from "@/features/projects/components/project-select";
 import { createTask } from "@/features/tasks/actions";
+import {
+  QuickAddContext,
+  type QuickAddContextValue,
+  type QuickAddDefaults,
+} from "@/features/tasks/components/quick-add-context";
 import type { ProjectSummary } from "@/features/tasks/types";
 import { failure, type ActionError, type ActionResult } from "@/lib/actions/result";
 import { reportError } from "@/lib/report-error";
@@ -35,28 +40,17 @@ import { useOpenerFocus } from "@/lib/use-opener-focus";
 // `@momentum/core/parser` on every keystroke; recognised tokens show as chips.
 // Whichever of the chip or the control below most recently expressed the
 // intent owns the value, and nothing the user typed is ever discarded.
-export interface QuickAddContextValue {
-  open: (defaults?: QuickAddDefaults) => void;
-  /** Page-level defaults for a capture; values passed to `open` win over these. */
-  setDefaults: (defaults: QuickAddDefaults) => void;
-}
-
-export interface QuickAddDefaults {
-  projectId?: Uuid | null;
-  dueDate?: LocalDate | null;
-}
-
-const QuickAddContext = React.createContext<QuickAddContextValue | null>(null);
-
-/** A no-op outside the shell, never a thrown error. */
-export function useQuickAdd(): QuickAddContextValue {
-  return React.useContext(QuickAddContext) ?? { open: noop, setDefaults: noop };
-}
-
-function noop() {}
+// The handle (`useQuickAdd`) lives in `quick-add-context.ts`.
+export {
+  useQuickAdd,
+  type QuickAddContextValue,
+  type QuickAddDefaults,
+} from "@/features/tasks/components/quick-add-context";
 
 /** Mirrors `createTaskInput`. */
 const TITLE_MAX_LENGTH = 500;
+
+const DEFAULT_PLACEHOLDER = "What needs doing?";
 
 export function QuickAddProvider({
   projects,
@@ -311,7 +305,7 @@ function QuickAddDialog({
             // `readOnly`, never `disabled`: the browser blurs a disabled element,
             // and this is the element that pressed Enter.
             readOnly={pending}
-            placeholder="What needs doing?"
+            placeholder={defaults.placeholder ?? DEFAULT_PLACEHOLDER}
             aria-label="Task title"
             aria-invalid={titleError === null ? undefined : true}
             aria-describedby={titleError === null ? undefined : "quick-add-title-error"}

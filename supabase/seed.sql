@@ -77,7 +77,10 @@ where u.email in ('demo@momentum.test', 'second@momentum.test');
 update public.profiles
    set week_start = 1,
        snap_minutes = 15,
-       focus_windows = '[{"start":"09:00","end":"12:00"},{"start":"14:00","end":"17:00"}]'::jsonb
+       focus_windows = '[{"start":"09:00","end":"12:00"},{"start":"14:00","end":"17:00"}]'::jsonb,
+       -- The populated account is past first-run; the sparse one below still sees the checklist.
+       working_hours_set_at = now(),
+       onboarding_dismissed_at = now()
  where id = '11111111-1111-4111-8111-111111111111';
 
 update public.profiles

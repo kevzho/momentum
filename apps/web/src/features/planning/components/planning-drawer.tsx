@@ -18,6 +18,8 @@ import { SidePanel } from "@momentum/ui/components/side-panel";
 import { SideSheet } from "@momentum/ui/components/side-sheet";
 
 import type { PlanTask } from "@/features/calendar/types";
+import { OnboardingChecklist } from "@/features/onboarding/components/onboarding-checklist";
+import { SCHEDULE_STEP } from "@/features/onboarding/copy";
 import { CapacitySummary } from "@/features/planning/components/capacity-summary";
 import { FindTimeDialog } from "@/features/planning/components/find-time-dialog";
 import { PlanningHabitRow } from "@/features/planning/components/planning-habit-row";
@@ -59,6 +61,7 @@ export function PlanningDrawer(props: PlanningDrawerProps) {
     onAddHabitToWeek,
     pendingTaskIds,
     pendingHabitIds,
+    onboarding = null,
   } = props;
   const { commitments, context, sections, capacity, warnings } = useWeekPlan(props);
 
@@ -87,9 +90,26 @@ export function PlanningDrawer(props: PlanningDrawerProps) {
     </p>
   );
 
+  // The checklist's last step places a task; the first row without a slot is
+  // the one Find Time opens for.
+  const firstUnscheduled = sections.unscheduled[0] ?? null;
+
   const body = (
     <>
       <div className="flex flex-col gap-4">
+        {onboarding === null ? null : (
+          <OnboardingChecklist
+            state={onboarding}
+            workingHours={plan.workingHours}
+            weekStart={settings.weekStart}
+            liveHasWorkBlock={commitments.some((commitment) => commitment.kind === "work")}
+            schedule={
+              firstUnscheduled === null
+                ? null
+                : { label: SCHEDULE_STEP.findTime, onActivate: () => setFinding(firstUnscheduled) }
+            }
+          />
+        )}
         <CapacitySummary capacity={capacity} />
         <WorkloadBars days={days} workloads={capacity.days} today={today} />
         <WarningsList warnings={warnings} />

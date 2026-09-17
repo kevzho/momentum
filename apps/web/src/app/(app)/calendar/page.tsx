@@ -5,6 +5,7 @@ import { nowInstant, todayIn } from "@momentum/core/time";
 import { CalendarView } from "@/features/calendar/components/calendar-view";
 import { displayedDays, parseCalendarParams, wantsNewEvent } from "@/features/calendar/navigation";
 import { getCalendarWeek } from "@/features/calendar/queries";
+import { getOnboarding } from "@/features/onboarding/queries";
 import { requireSession } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Calendar" };
@@ -19,9 +20,16 @@ export default async function CalendarPage(props: PageProps<"/calendar">) {
   const today = todayIn(profile.timezone, nowInstant());
   const params = parseCalendarParams(searchParams, today);
   const days = displayedDays(params, profile.weekStart);
-  const data = await getCalendarWeek({ days });
+  const [data, onboarding] = await Promise.all([getCalendarWeek({ days }), getOnboarding()]);
 
   // `?new=event` is the command palette's "Add event": the island opens one
   // draft and drops it from the URL.
-  return <CalendarView data={data} params={params} newEvent={wantsNewEvent(searchParams)} />;
+  return (
+    <CalendarView
+      data={data}
+      params={params}
+      newEvent={wantsNewEvent(searchParams)}
+      onboarding={onboarding}
+    />
+  );
 }

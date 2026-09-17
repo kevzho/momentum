@@ -25,6 +25,8 @@ const PROFILE_ROW: Row<"profiles"> = {
   level: 4,
   xp: 1240,
   coins: 31,
+  working_hours_set_at: null,
+  onboarding_dismissed_at: "2026-07-12T09:05:00+00:00",
   created_at: "2026-07-12T09:00:00+00:00",
   updated_at: "2026-09-06T11:22:33.456789+00:00",
 };
@@ -82,6 +84,8 @@ describe("rowToProfile", () => {
     expect(profile.focusWindows).toEqual([{ start: "09:00", end: "12:00" }]);
     // Microseconds are truncated to milliseconds, always with a trailing Z.
     expect(profile.updatedAt).toBe("2026-09-06T11:22:33.456Z");
+    expect(profile.workingHoursSetAt).toBeNull();
+    expect(profile.onboardingDismissedAt).toBe("2026-07-12T09:05:00.000Z");
   });
 
   it("returns a window list for all seven days even when the column is a fragment", () => {

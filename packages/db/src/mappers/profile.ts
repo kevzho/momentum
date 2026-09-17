@@ -10,7 +10,7 @@ import {
 } from "@momentum/core/types";
 
 import type { Json, Row, UpdateRow } from "../types";
-import { isJsonArray, isJsonObject, oneOf, toInstant } from "./scalars";
+import { isJsonArray, isJsonObject, oneOf, toInstant, toInstantOrNull } from "./scalars";
 
 /** `working_hours` and `focus_windows` are loosely typed jsonb; malformed entries are dropped, never passed on. */
 
@@ -65,6 +65,8 @@ export function rowToProfile(row: Row<"profiles">): Profile {
     level: row.level,
     xp: row.xp,
     coins: row.coins,
+    workingHoursSetAt: toInstantOrNull(row.working_hours_set_at),
+    onboardingDismissedAt: toInstantOrNull(row.onboarding_dismissed_at),
     createdAt: toInstant(row.created_at),
     updatedAt: toInstant(row.updated_at),
   };

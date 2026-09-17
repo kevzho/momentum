@@ -47,6 +47,7 @@ const { TodayView } = await import("@/features/today/components/today-view");
 const { ErrorBoundary } = await import("@/components/error-boundary");
 const { AnnouncerProvider } = await import("@momentum/ui/components/announcer");
 const { UserSettingsProvider } = await import("@/lib/time/user-settings");
+const { QuickAddContext } = await import("@/features/tasks/components/quick-add-context");
 const {
   TODAY,
   TZ,
@@ -331,6 +332,45 @@ describe("next up", () => {
   it("says the day is open when it holds nothing at all", () => {
     renderPage(todayPage());
     expect(screen.getByText(TODAY_COPY.nextUp.emptyTitle)).toBeDefined();
+  });
+
+  it("points a brand-new account at capture, and the button opens Quick Add", () => {
+    const open = vi.fn();
+    render(
+      <AnnouncerProvider>
+        <UserSettingsProvider settings={{ timezone: TZ, weekStart: 1, snapMinutes: 15 }}>
+          <QuickAddContext value={{ open, setDefaults: vi.fn() }}>
+            <TodayView data={todayPage({ openTaskCount: 0, hasScheduledWork: false })} />
+          </QuickAddContext>
+        </UserSettingsProvider>
+      </AnnouncerProvider>,
+    );
+
+    const panel = nextUpPanel();
+    expect(within(panel).getByText(TODAY_COPY.nextUp.captureTitle)).toBeDefined();
+    expect(within(panel).queryByRole("link", { name: TODAY_COPY.nextUp.planWeek })).toBeNull();
+    fireEvent.click(within(panel).getByRole("button", { name: TODAY_COPY.nextUp.addTask }));
+    expect(open).toHaveBeenCalledTimes(1);
+
+    // The timeline's empty state agrees, and carries no second button: Next Up has the one.
+    expect(screen.getByText(TODAY_COPY.timeline.captureDescription)).toBeDefined();
+    expect(screen.queryByRole("link", { name: TODAY_COPY.timeline.openCalendar })).toBeNull();
+    expect(screen.getAllByRole("button", { name: TODAY_COPY.nextUp.addTask })).toHaveLength(1);
+  });
+
+  it("points an account with tasks and no slot anywhere at scheduling one", () => {
+    renderPage(todayPage({ openTaskCount: 3, hasScheduledWork: false }));
+
+    const panel = nextUpPanel();
+    expect(within(panel).getByText(TODAY_COPY.nextUp.scheduleTitle)).toBeDefined();
+    expect(panel.textContent).toContain("3 open tasks have no time reserved");
+    expect(within(panel).getByRole("link", { name: TODAY_COPY.nextUp.planWeek })).toBeDefined();
+    expect(screen.getByRole("link", { name: TODAY_COPY.timeline.openCalendar })).toBeDefined();
+  });
+
+  it("uses the singular for one open task", () => {
+    renderPage(todayPage({ openTaskCount: 1, hasScheduledWork: false }));
+    expect(nextUpPanel().textContent).toContain("One open task has no time reserved");
   });
 });
 

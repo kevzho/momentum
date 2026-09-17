@@ -18,6 +18,28 @@ import type { InsertRow, MomentumClient, UpdateRow } from "../types";
  * query against `calendar_blocks`, never a column here.
  */
 
+/**
+ * How many top-level tasks the user has captured: every status, archived
+ * included, because the question is "have they added tasks", not "are any left".
+ * `open` narrows to unarchived open tasks, the count Today's empty state names.
+ */
+export async function countTopLevelFor(
+  client: MomentumClient,
+  userId: Uuid,
+  filter: "all" | "open" = "all",
+): Promise<number> {
+  let query = client
+    .from("tasks")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .is("parent_task_id", null);
+  if (filter === "open") query = query.eq("status", "open").is("archived_at", null);
+
+  const { count, error } = await query;
+  if (error) throw error;
+  return count ?? 0;
+}
+
 export async function listByIds(client: MomentumClient, ids: readonly Uuid[]): Promise<Task[]> {
   if (ids.length === 0) return [];
 

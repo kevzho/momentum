@@ -48,12 +48,23 @@ export const TODAY_COPY = {
     emptyDescription: "Nothing is scheduled and nothing is due. Plan the week when you want to.",
     planWeek: "Plan the week",
     addTask: "Add a task",
+    /** A brand-new account: nothing to schedule yet. */
+    captureTitle: "Capture what is on your mind",
+    captureDescription: "Add the tasks you are carrying around. Giving them time comes after.",
+    /** Tasks exist and none has ever had a slot. */
+    scheduleTitle: "Give one a slot",
+    scheduleDescription: (openTasks: number) =>
+      openTasks === 1
+        ? "One open task has no time reserved. Drag it onto the week, or let Find time pick a slot."
+        : `${openTasks} open tasks have no time reserved. Drag one onto the week, or let Find time pick a slot.`,
   },
 
   timeline: {
     title: "Today",
     emptyTitle: "No time reserved today",
     emptyDescription: "Drag work onto the calendar to give it a slot.",
+    /** A brand-new account: there is nothing to drag yet. */
+    captureDescription: "Tasks you capture can be given time here.",
     openCalendar: "Open the calendar",
     allDay: "All day",
     /** A block that began yesterday, or runs into tomorrow. */

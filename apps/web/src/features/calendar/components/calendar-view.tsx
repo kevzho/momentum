@@ -86,6 +86,9 @@ import type {
   PlanTask,
 } from "@/features/calendar/types";
 import { useCalendarDnd } from "@/features/calendar/use-calendar-dnd";
+import { OnboardingChecklist } from "@/features/onboarding/components/onboarding-checklist";
+import { SCHEDULE_STEP } from "@/features/onboarding/copy";
+import type { OnboardingState } from "@/features/onboarding/types";
 import { PlanningDrawer } from "@/features/planning/components/planning-drawer";
 import { useWideViewport } from "@/features/planning/use-wide-viewport";
 import type { ActionResult } from "@/lib/actions/result";
@@ -117,11 +120,14 @@ export function CalendarView({
   data,
   params,
   newEvent = false,
+  onboarding = null,
 }: {
   data: CalendarWeekData;
   params: CalendarParams;
   /** The palette's "Add event" intent, honoured once. */
   newEvent?: boolean;
+  /** The first-run checklist, until the account finishes or skips it. */
+  onboarding?: OnboardingState | null;
 }) {
   const router = useRouter();
   const announce = useAnnounce();
@@ -640,7 +646,21 @@ export function CalendarView({
         onDragCancel={dnd.onDragCancel}
       >
         <CalendarInteractionProvider controller={dnd}>
-          <div className="flex min-h-0 flex-1 gap-4 pb-4 md:pb-5">
+          <div className="flex min-h-0 flex-1 flex-col gap-4 pb-4 md:pb-5 lg:flex-row">
+            {/* Below `lg` the panel is a closed sheet, so the checklist sits above the
+                grid instead; its last step opens the sheet, where the rows with Find time are. */}
+            {onboarding === null || wide ? null : (
+              <OnboardingChecklist
+                state={onboarding}
+                workingHours={data.plan.workingHours}
+                weekStart={weekStart}
+                liveHasWorkBlock={items.some((item) => item.kind === "work")}
+                schedule={{
+                  label: SCHEDULE_STEP.openPlan,
+                  onActivate: () => setPlanSheetOpen(true),
+                }}
+              />
+            )}
             <WeekGrid
               key={rangeKey}
               days={days}
@@ -668,6 +688,7 @@ export function CalendarView({
               onAddHabitToWeek={addHabitToWeekAt}
               pendingTaskIds={touched.tasks}
               pendingHabitIds={pendingHabits}
+              onboarding={wide ? onboarding : null}
             />
           </div>
 

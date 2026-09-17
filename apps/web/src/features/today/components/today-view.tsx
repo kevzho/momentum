@@ -11,7 +11,8 @@ import { toast } from "@momentum/ui/components/toast";
 import type { DaySpan } from "@/features/calendar/types";
 import { spanOf } from "@/features/calendar/projection";
 import { claimQuest } from "@/features/gamification/actions";
-import { buildRisks, selectNextUp } from "@/features/today/agenda";
+import { useQuickAdd } from "@/features/tasks/components/quick-add-context";
+import { buildRisks, selectNextUp, todayGuide } from "@/features/today/agenda";
 import { AtRiskPanel } from "@/features/today/components/at-risk-panel";
 import { DayProgress } from "@/features/today/components/day-progress";
 import { NextUpPanel } from "@/features/today/components/next-up-panel";
@@ -51,6 +52,9 @@ export function TodayView({ data }: { data: TodayPageData }) {
 
   const nextUp = selectNextUp(state, now);
   const risks = buildRisks(state);
+  const guide = todayGuide(state);
+  const quickAdd = useQuickAdd();
+  const addTask = React.useCallback(() => quickAdd.open(), [quickAdd]);
 
   const completeBlock = React.useCallback(
     (entry: TodayItem, completed: boolean) => {
@@ -130,6 +134,7 @@ export function TodayView({ data }: { data: TodayPageData }) {
       {/* Next Up first at every width. */}
       <NextUpPanel
         nextUp={nextUp}
+        guide={guide}
         timezone={state.timezone}
         pendingIds={pendingIds}
         onCompleteBlock={completeBlock}
@@ -138,12 +143,14 @@ export function TodayView({ data }: { data: TodayPageData }) {
           announce(completed ? `${task.title} completed.` : `${task.title} reopened.`);
         }}
         onReschedule={setRescheduling}
+        onAddTask={addTask}
       />
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <div className="flex min-w-0 flex-col gap-6">
           <TodayTimeline
             entries={state.timeline}
+            guide={guide}
             now={now}
             pendingIds={pendingIds}
             onToggle={completeBlock}

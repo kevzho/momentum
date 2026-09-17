@@ -27,6 +27,14 @@ export interface Profile {
   level: number;
   xp: number;
   coins: number;
+  /**
+   * When the user last saved working hours. The stored hours default to
+   * Mon–Fri 09:00–17:00, so "has this person set their hours" cannot be read
+   * off the hours themselves. Null until the first save.
+   */
+  workingHoursSetAt: Instant | null;
+  /** When the first-run checklist finished or was skipped. Null shows it; once set, it never returns. */
+  onboardingDismissedAt: Instant | null;
   createdAt: Instant;
   updatedAt: Instant;
 }

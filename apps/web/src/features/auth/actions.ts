@@ -18,6 +18,8 @@ import {
 export type AuthResult = ActionResult<{ message: string | null }>;
 
 const SIGNED_IN_HOME = "/today";
+/** A new account lands on the week with the first-run checklist open, not on an empty Today. */
+const FIRST_RUN_HOME = "/calendar";
 
 function safeNext(value: FormDataEntryValue | null) {
   return returnableRoute(typeof value === "string" ? value : null);
@@ -76,7 +78,8 @@ export async function signUp(
         ...(displayName ? { display_name: displayName } : {}),
         ...(timezone ? { timezone } : {}),
       },
-      emailRedirectTo: `${env().NEXT_PUBLIC_APP_URL}/auth/callback`,
+      // With confirmations on, the link brings the new account to the same first-run landing.
+      emailRedirectTo: `${env().NEXT_PUBLIC_APP_URL}/auth/callback?next=${FIRST_RUN_HOME}`,
     },
   });
 
@@ -99,7 +102,7 @@ export async function signUp(
     });
   }
 
-  redirect(SIGNED_IN_HOME);
+  redirect(FIRST_RUN_HOME);
 }
 
 export async function signOut(): Promise<void> {

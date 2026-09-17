@@ -265,7 +265,10 @@ describe("selectNextUp", () => {
   });
 
   it("reports an open day when the day held nothing at all", () => {
-    expect(selectNextUp(todayPage(), at("2026-09-08", 10))).toEqual({ kind: "empty" });
+    expect(selectNextUp(todayPage(), at("2026-09-08", 10))).toEqual({
+      kind: "empty",
+      openTasks: 4,
+    });
   });
 });
 
