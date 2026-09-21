@@ -4,37 +4,52 @@ import Link from "next/link";
 import { PlusIcon } from "lucide-react";
 
 import { formatLocalDate } from "@momentum/core/time";
-import type { LocalDate, Task } from "@momentum/core/types";
+import type { CourseItem, CourseItemKind, LocalDate, Task } from "@momentum/core/types";
 
 import { Button } from "@momentum/ui/components/button";
 import { cn } from "@momentum/ui/lib/utils";
 
 import { CommittedInput, CommittedTextarea } from "@/components/committed-field";
-import type { CourseWeekView } from "@/features/courses/types";
+import { WeekChecklist } from "@/features/courses/components/week-checklist";
+import type { CourseWeekView, NewCourseItemDraft } from "@/features/courses/types";
 import { taskHref } from "@/features/tasks/view-params";
 
 /**
- * One week of the term: its dates, a topic, the material to cover, and the
- * assignments due inside it. Topic and material commit on blur; assignments
- * are the project's tasks and open in the task sheet.
+ * One week of the term: its dates, a topic, the checklist of readings, links
+ * and exercises (each plannable for a day of the week), the assignments due
+ * inside it, and free notes. Topic and notes commit on blur; assignments are
+ * the project's tasks and open in the task sheet.
  */
+export interface CourseWeekRowProps {
+  view: CourseWeekView;
+  today: LocalDate;
+  pending: boolean;
+  onCommit: (patch: { topic: string | null; materials: string | null }) => void;
+  onAddAssignment: (view: CourseWeekView) => void;
+  onAddItem: (draft: NewCourseItemDraft) => void;
+  onToggleItem: (item: CourseItem, done: boolean) => void;
+  onPlanItem: (item: CourseItem, plannedOn: LocalDate | null) => void;
+  onItemKind: (item: CourseItem, kind: CourseItemKind) => void;
+  onRemoveItem: (item: CourseItem) => void;
+}
+
 export function CourseWeekRow({
   view,
   today,
   pending,
   onCommit,
   onAddAssignment,
-}: {
-  view: CourseWeekView;
-  today: LocalDate;
-  pending: boolean;
-  onCommit: (patch: { topic: string | null; materials: string | null }) => void;
-  onAddAssignment: (view: CourseWeekView) => void;
-}) {
-  const { span, week, assignments, isCurrent } = view;
+  onAddItem,
+  onToggleItem,
+  onPlanItem,
+  onItemKind,
+  onRemoveItem,
+}: CourseWeekRowProps) {
+  const { span, week, assignments, items, isCurrent } = view;
   const topic = week?.topic ?? "";
   const materials = week?.materials ?? "";
   const ids = `course-week-${span.number}`;
+  const done = items.filter((item) => item.completedAt !== null).length;
 
   return (
     <section
@@ -52,6 +67,11 @@ export function CourseWeekRow({
               This week
             </span>
           ) : null}
+          {items.length === 0 ? null : (
+            <span data-slot="numeric" className="text-xs font-normal text-muted-foreground">
+              {done}/{items.length}
+            </span>
+          )}
         </h3>
         <Button
           type="button"
@@ -68,7 +88,7 @@ export function CourseWeekRow({
         </Button>
       </div>
 
-      <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+      <div className="grid gap-3 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <div className="flex flex-col gap-2">
           <CommittedInput
             aria-label={`Week ${span.number} topic`}
@@ -79,10 +99,21 @@ export function CourseWeekRow({
               onCommit({ topic: emptyToNull(next), materials: emptyToNull(materials) })
             }
           />
+          <WeekChecklist
+            span={span}
+            items={items}
+            today={today}
+            pending={pending}
+            onAdd={onAddItem}
+            onToggle={onToggleItem}
+            onPlan={onPlanItem}
+            onKind={onItemKind}
+            onRemove={onRemoveItem}
+          />
           <CommittedTextarea
-            aria-label={`Week ${span.number} material`}
-            placeholder="Readings, links, what to cover"
-            rows={2}
+            aria-label={`Week ${span.number} notes`}
+            placeholder="Notes"
+            rows={1}
             className="min-h-0"
             value={materials}
             onCommit={(next) =>
@@ -91,16 +122,21 @@ export function CourseWeekRow({
           />
         </div>
 
-        <ul
-          aria-label={`Week ${span.number} assignments`}
-          className="flex flex-col gap-0.5 text-sm"
-        >
-          {assignments.length === 0 ? (
-            <li className="text-xs text-muted-foreground">Nothing due this week.</li>
-          ) : (
-            assignments.map((task) => <AssignmentRow key={task.id} task={task} today={today} />)
-          )}
-        </ul>
+        <div className="flex flex-col gap-1">
+          <span className="text-2xs font-medium tracking-wide text-muted-foreground uppercase">
+            Assignments
+          </span>
+          <ul
+            aria-label={`Week ${span.number} assignments`}
+            className="flex flex-col gap-0.5 text-sm"
+          >
+            {assignments.length === 0 ? (
+              <li className="text-xs text-muted-foreground">Nothing due this week.</li>
+            ) : (
+              assignments.map((task) => <AssignmentRow key={task.id} task={task} today={today} />)
+            )}
+          </ul>
+        </div>
       </div>
     </section>
   );

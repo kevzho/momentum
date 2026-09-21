@@ -1,6 +1,14 @@
-import type { Course, CourseWeek, LocalDate, Uuid } from "@momentum/core/types";
+import type {
+  Course,
+  CourseItem,
+  CourseItemKind,
+  CourseWeek,
+  Instant,
+  LocalDate,
+  Uuid,
+} from "@momentum/core/types";
 
-import { rowToCourse, rowToCourseWeek } from "../mappers/course";
+import { rowToCourse, rowToCourseItem, rowToCourseWeek } from "../mappers/course";
 import type { InsertRow, MomentumClient, UpdateRow } from "../types";
 
 /**
@@ -46,6 +54,8 @@ export interface CoursePatch {
   instructor?: string | null;
   location?: string | null;
   syllabus?: string | null;
+  /** Both or neither, as `courses_syllabus_file_chk` requires. */
+  syllabusFile?: { path: string; fileName: string } | null;
   termStart?: LocalDate;
   termEnd?: LocalDate;
 }
@@ -79,6 +89,12 @@ export async function update(
     ...(patch.instructor === undefined ? {} : { instructor: patch.instructor }),
     ...(patch.location === undefined ? {} : { location: patch.location }),
     ...(patch.syllabus === undefined ? {} : { syllabus: patch.syllabus }),
+    ...(patch.syllabusFile === undefined
+      ? {}
+      : {
+          syllabus_path: patch.syllabusFile?.path ?? null,
+          syllabus_file_name: patch.syllabusFile?.fileName ?? null,
+        }),
     ...(patch.termStart === undefined ? {} : { term_start: patch.termStart }),
     ...(patch.termEnd === undefined ? {} : { term_end: patch.termEnd }),
   };
@@ -141,4 +157,115 @@ export async function upsertWeek(
 
   if (error) throw error;
   return rowToCourseWeek(data);
+}
+
+// ---- Checklist items ---------------------------------------------------------
+
+/** Every item of one course, in week and list order. */
+export async function listItemsFor(client: MomentumClient, courseId: Uuid): Promise<CourseItem[]> {
+  const { data, error } = await client
+    .from("course_items")
+    .select("*")
+    .eq("course_id", courseId)
+    .order("week_number", { ascending: true })
+    .order("sort_order", { ascending: true })
+    .order("created_at", { ascending: true });
+
+  if (error) throw error;
+  return data.map(rowToCourseItem);
+}
+
+/** Items planned for one date across every course of the user — Today's read. */
+export async function listItemsPlannedOn(
+  client: MomentumClient,
+  userId: Uuid,
+  date: LocalDate,
+): Promise<CourseItem[]> {
+  const { data, error } = await client
+    .from("course_items")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("planned_on", date)
+    .order("sort_order", { ascending: true })
+    .order("created_at", { ascending: true });
+
+  if (error) throw error;
+  return data.map(rowToCourseItem);
+}
+
+export async function findItemById(client: MomentumClient, id: Uuid): Promise<CourseItem | null> {
+  const { data, error } = await client.from("course_items").select("*").eq("id", id).maybeSingle();
+
+  if (error) throw error;
+  return data === null ? null : rowToCourseItem(data);
+}
+
+export interface NewCourseItem {
+  id?: Uuid;
+  userId: Uuid;
+  courseId: Uuid;
+  weekNumber: number;
+  kind: CourseItemKind;
+  title: string;
+  url: string | null;
+  plannedOn: LocalDate | null;
+  sortOrder: number;
+}
+
+export interface CourseItemPatch {
+  kind?: CourseItemKind;
+  title?: string;
+  url?: string | null;
+  plannedOn?: LocalDate | null;
+  completedAt?: Instant | null;
+  sortOrder?: number;
+}
+
+export async function insertItem(client: MomentumClient, item: NewCourseItem): Promise<CourseItem> {
+  const row: InsertRow<"course_items"> = {
+    user_id: item.userId,
+    course_id: item.courseId,
+    week_number: item.weekNumber,
+    kind: item.kind,
+    title: item.title,
+    url: item.url,
+    planned_on: item.plannedOn,
+    sort_order: item.sortOrder,
+    ...(item.id === undefined ? {} : { id: item.id }),
+  };
+
+  const { data, error } = await client.from("course_items").insert(row).select("*").single();
+
+  if (error) throw error;
+  return rowToCourseItem(data);
+}
+
+export async function updateItem(
+  client: MomentumClient,
+  id: Uuid,
+  patch: CourseItemPatch,
+): Promise<CourseItem> {
+  const row: UpdateRow<"course_items"> = {
+    ...(patch.kind === undefined ? {} : { kind: patch.kind }),
+    ...(patch.title === undefined ? {} : { title: patch.title }),
+    ...(patch.url === undefined ? {} : { url: patch.url }),
+    ...(patch.plannedOn === undefined ? {} : { planned_on: patch.plannedOn }),
+    ...(patch.completedAt === undefined ? {} : { completed_at: patch.completedAt }),
+    ...(patch.sortOrder === undefined ? {} : { sort_order: patch.sortOrder }),
+  };
+
+  const { data, error } = await client
+    .from("course_items")
+    .update(row)
+    .eq("id", id)
+    .select("*")
+    .single();
+
+  if (error) throw error;
+  return rowToCourseItem(data);
+}
+
+export async function removeItem(client: MomentumClient, id: Uuid): Promise<void> {
+  const { error } = await client.from("course_items").delete().eq("id", id);
+  if (error) throw error;
 }

@@ -3,13 +3,22 @@
 import { refresh, revalidatePath } from "next/cache";
 
 import { courses, projects } from "@momentum/db";
-import type { Course, CourseWeek } from "@momentum/core/types";
+import { courseWeekSpans, isInSpan } from "@momentum/core/courses";
+import { nowInstant } from "@momentum/core/time";
+import type { Course, CourseItem, CourseWeek, LocalDate, Uuid } from "@momentum/core/types";
 
 import {
+  beginSyllabusUploadInput,
   createCourseInput,
+  createCourseItemInput,
   deleteCourseInput,
+  deleteCourseItemInput,
+  finishSyllabusUploadInput,
+  removeSyllabusFileInput,
+  setCourseItemDoneInput,
   setCourseWeekInput,
   updateCourseInput,
+  updateCourseItemInput,
   updateSyllabusInput,
 } from "@/features/courses/schemas";
 import {
@@ -107,6 +116,183 @@ export async function setCourseWeek(input: unknown): Promise<ActionResult<Course
   return attempt(() => courses.upsertWeek(supabase, { userId, ...parsed.data }));
 }
 
+// ---- Checklist items ---------------------------------------------------------
+
+/** A reading, link or exercise on one week; `plannedOn` must lie inside that week. */
+export async function createCourseItem(input: unknown): Promise<ActionResult<CourseItem>> {
+  const parsed = createCourseItemInput.safeParse(input);
+  if (!parsed.success) return validationError(parsed.error.issues);
+
+  const { id, courseId, weekNumber, plannedOn, ...fields } = parsed.data;
+  const { supabase, userId } = await requireSession();
+
+  return attempt(async () => {
+    const course = await courses.findById(supabase, courseId);
+    if (course === null) throw notFound();
+    assertInWeek(course, weekNumber, plannedOn);
+
+    try {
+      return await courses.insertItem(supabase, {
+        id,
+        userId,
+        courseId,
+        weekNumber,
+        plannedOn,
+        ...fields,
+      });
+    } catch (error) {
+      if (!isCode(error, UNIQUE_VIOLATION)) throw error;
+      const existing = await courses.findItemById(supabase, id);
+      if (existing === null) throw error;
+      return existing;
+    }
+  });
+}
+
+export async function updateCourseItem(input: unknown): Promise<ActionResult<CourseItem>> {
+  const parsed = updateCourseItemInput.safeParse(input);
+  if (!parsed.success) return validationError(parsed.error.issues);
+
+  const { id, ...patch } = parsed.data;
+  const { supabase } = await requireSession();
+
+  return attempt(async () => {
+    if (patch.plannedOn !== undefined && patch.plannedOn !== null) {
+      const item = await courses.findItemById(supabase, id);
+      if (item === null) throw notFound();
+      const course = await courses.findById(supabase, item.courseId);
+      if (course === null) throw notFound();
+      assertInWeek(course, item.weekNumber, patch.plannedOn);
+    }
+    return courses.updateItem(supabase, id, patch);
+  });
+}
+
+/** Ticking records the moment on the server's clock; nothing else changes and nothing is earned. */
+export async function setCourseItemDone(input: unknown): Promise<ActionResult<CourseItem>> {
+  const parsed = setCourseItemDoneInput.safeParse(input);
+  if (!parsed.success) return validationError(parsed.error.issues);
+
+  const { id, done } = parsed.data;
+  const { supabase } = await requireSession();
+
+  return attempt(() =>
+    courses.updateItem(supabase, id, { completedAt: done ? nowInstant() : null }),
+  );
+}
+
+export async function deleteCourseItem(input: unknown): Promise<ActionResult<{ id: Uuid }>> {
+  const parsed = deleteCourseItemInput.safeParse(input);
+  if (!parsed.success) return validationError(parsed.error.issues);
+
+  const { id } = parsed.data;
+  const { supabase } = await requireSession();
+
+  return attempt(async () => {
+    await courses.removeItem(supabase, id);
+    return { id };
+  });
+}
+
+/** A planned day outside its week is a validation failure, not a row. */
+function assertInWeek(course: Course, weekNumber: number, plannedOn: LocalDate | null): void {
+  if (plannedOn === null) return;
+  const span = courseWeekSpans(course.termStart, course.termEnd).find(
+    (candidate) => candidate.number === weekNumber,
+  );
+  if (span === undefined || !isInSpan(plannedOn, span)) {
+    throw { code: "23514", message: "course_items_planned_chk" } satisfies DatabaseError;
+  }
+}
+
+// ---- The syllabus file -------------------------------------------------------
+
+const SYLLABI_BUCKET = "syllabi";
+
+export interface SyllabusUploadTicket {
+  /** Where the browser PUTs the bytes; valid for a couple of hours. */
+  signedUrl: string;
+  /** The object path to hand back to `finishSyllabusUpload`. */
+  path: string;
+}
+
+/**
+ * Mints a one-time upload URL for the course's own folder. The browser
+ * uploads straight to storage with it — the file never passes through a
+ * server action, whose body limit is far below a PDF's size.
+ */
+export async function beginSyllabusUpload(
+  input: unknown,
+): Promise<ActionResult<SyllabusUploadTicket>> {
+  const parsed = beginSyllabusUploadInput.safeParse(input);
+  if (!parsed.success) return validationError(parsed.error.issues);
+
+  const { courseId } = parsed.data;
+  const { supabase, userId } = await requireSession();
+
+  return attempt(async () => {
+    const course = await courses.findById(supabase, courseId);
+    if (course === null) throw notFound();
+
+    const path = `${userId}/${courseId}/${crypto.randomUUID()}.pdf`;
+    const { data, error } = await supabase.storage.from(SYLLABI_BUCKET).createSignedUploadUrl(path);
+    if (error) throw storageError(error.message);
+    return { signedUrl: data.signedUrl, path: data.path };
+  });
+}
+
+/** Records the uploaded file on the course and removes the one it replaces. */
+export async function finishSyllabusUpload(input: unknown): Promise<ActionResult<Course>> {
+  const parsed = finishSyllabusUploadInput.safeParse(input);
+  if (!parsed.success) return validationError(parsed.error.issues);
+
+  const { courseId, path, fileName } = parsed.data;
+  const { supabase, userId } = await requireSession();
+
+  return attempt(async () => {
+    const course = await courses.findById(supabase, courseId);
+    if (course === null) throw notFound();
+    // Only a path this account minted for this course is accepted.
+    if (!path.startsWith(`${userId}/${courseId}/`) || !path.endsWith(".pdf")) {
+      throw storageError("That file does not belong to this course.");
+    }
+
+    const { error } = await supabase.storage.from(SYLLABI_BUCKET).info(path);
+    if (error) throw storageError("The upload did not arrive. Try again.");
+
+    const updated = await courses.update(supabase, courseId, {
+      syllabusFile: { path, fileName },
+    });
+    if (course.syllabusPath !== null && course.syllabusPath !== path) {
+      // Best effort: a stray old file costs storage, not correctness.
+      await supabase.storage.from(SYLLABI_BUCKET).remove([course.syllabusPath]);
+    }
+    return updated;
+  });
+}
+
+export async function removeSyllabusFile(input: unknown): Promise<ActionResult<Course>> {
+  const parsed = removeSyllabusFileInput.safeParse(input);
+  if (!parsed.success) return validationError(parsed.error.issues);
+
+  const { courseId } = parsed.data;
+  const { supabase } = await requireSession();
+
+  return attempt(async () => {
+    const course = await courses.findById(supabase, courseId);
+    if (course === null) throw notFound();
+    const updated = await courses.update(supabase, courseId, { syllabusFile: null });
+    if (course.syllabusPath !== null) {
+      await supabase.storage.from(SYLLABI_BUCKET).remove([course.syllabusPath]);
+    }
+    return updated;
+  });
+}
+
+function storageError(message: string): DatabaseError {
+  return { code: "STORAGE", message };
+}
+
 const UNIQUE_VIOLATION = "23505";
 
 interface DatabaseError {
@@ -159,6 +345,8 @@ function describe(error: unknown): { code: ActionErrorCode; message: string } {
       return { code: "not_found", message: "That course no longer exists." };
     case "23514":
       return { code: "validation", message: constraintMessage(error.message) };
+    case "STORAGE":
+      return { code: "unavailable", message: error.message };
     case UNIQUE_VIOLATION:
       return { code: "conflict", message: "That project is already a course." };
     default:
@@ -175,5 +363,8 @@ function constraintMessage(message: string): string {
   if (message.includes("projects_name_chk"))
     return "A course needs a name of at most 100 characters.";
   if (message.includes("courses_code_chk")) return "A course code is at most 20 characters.";
+  if (message.includes("course_items_planned_chk")) return "Pick a day inside that week.";
+  if (message.includes("course_items_title_chk"))
+    return "An item needs a title of at most 300 characters.";
   return message;
 }

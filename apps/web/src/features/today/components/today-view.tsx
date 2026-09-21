@@ -17,6 +17,7 @@ import { AtRiskPanel } from "@/features/today/components/at-risk-panel";
 import { DayProgress } from "@/features/today/components/day-progress";
 import { NextUpPanel } from "@/features/today/components/next-up-panel";
 import { RescheduleDialog } from "@/features/today/components/reschedule-dialog";
+import { TodayCourseItems } from "@/features/today/components/today-course-items";
 import { TodayHabits } from "@/features/today/components/today-habits";
 import { TodayQuests } from "@/features/today/components/today-quests";
 import { TodayTasks } from "@/features/today/components/today-tasks";
@@ -166,6 +167,14 @@ export function TodayView({ data }: { data: TodayPageData }) {
         </div>
 
         <div className="flex min-w-0 flex-col gap-6">
+          <TodayCourseItems
+            rows={state.courseItems}
+            pendingIds={pendingIds}
+            onToggle={(row, done) => {
+              mutate.setCourseItemDone(row, done);
+              announce(done ? `${row.item.title} done.` : `${row.item.title} not done.`);
+            }}
+          />
           <TodayHabits
             habits={state.habits}
             pendingIds={pendingIds}

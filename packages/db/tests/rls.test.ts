@@ -26,6 +26,7 @@ const USER_OWNED_TABLES = [
   "projects",
   "courses",
   "course_weeks",
+  "course_items",
   "tasks",
   "calendar_blocks",
   "habits",

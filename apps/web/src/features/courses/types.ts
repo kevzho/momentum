@@ -1,6 +1,8 @@
 import type { CourseStatus, CourseWeekSpan } from "@momentum/core/courses";
 import type {
   Course,
+  CourseItem,
+  CourseItemKind,
   CourseWeek,
   LocalDate,
   ProjectColor,
@@ -40,7 +42,19 @@ export interface CourseWeekView {
   week: CourseWeek | null;
   /** Top-level tasks in the project due inside the span, soonest first. */
   assignments: readonly Task[];
+  /** The week's checklist, in list order. */
+  items: readonly CourseItem[];
   isCurrent: boolean;
+}
+
+/** A new checklist entry, as the composer collects it. */
+export interface NewCourseItemDraft {
+  id: Uuid;
+  weekNumber: number;
+  kind: CourseItemKind;
+  title: string;
+  url: string | null;
+  plannedOn: LocalDate | null;
 }
 
 /** Everything `/courses/[id]` renders. */

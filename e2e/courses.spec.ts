@@ -79,13 +79,13 @@ test.describe("Courses", () => {
       const topic = page.getByLabel("Week 2 topic");
       await topic.fill("Limits");
       await committed(page, () => topic.press("Enter"));
-      const material = page.getByLabel("Week 2 material");
+      const material = page.getByLabel("Week 2 notes");
       await material.fill("Chapter 2, sections 1–4");
       await committed(page, () => material.blur());
 
       await page.reload();
       await expect(page.getByLabel("Week 2 topic")).toHaveValue("Limits");
-      await expect(page.getByLabel("Week 2 material")).toHaveValue("Chapter 2, sections 1–4");
+      await expect(page.getByLabel("Week 2 notes")).toHaveValue("Chapter 2, sections 1–4");
     });
 
     await test.step("an assignment added from the week lands in it, due on its last day", async () => {
@@ -136,6 +136,108 @@ test.describe("Courses", () => {
       await expect(
         page.getByRole("list", { name: "Tasks" }).getByText(assignment, { exact: true }),
       ).toBeVisible();
+    });
+  });
+
+  test("a week's checklist: an item planned for today shows on Today; a PDF syllabus uploads and opens", async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    const name = uniqueName("check");
+    const item = uniqueName("read");
+    const start = localDay(TZ, -3);
+    const end = localDay(TZ, 24);
+
+    await test.step("create a course whose week 1 holds today", async () => {
+      await page.goto("/courses");
+      await page.getByRole("button", { name: "New course" }).click();
+      const dialog = page.getByRole("dialog", { name: "New course" });
+      await dialog.getByLabel("Name").fill(name);
+      await dialog.getByRole("button", { name: "Term starts" }).click();
+      await page.getByRole("textbox", { name: "Type a date" }).fill(start.iso);
+      await page.getByRole("textbox", { name: "Type a date" }).press("Enter");
+      await expect(page.getByRole("textbox", { name: "Type a date" })).toHaveCount(0);
+      await dialog.getByRole("button", { name: "Term ends" }).click();
+      await page.getByRole("textbox", { name: "Type a date" }).fill(end.iso);
+      await page.getByRole("textbox", { name: "Type a date" }).press("Enter");
+      await dialog.getByRole("button", { name: "Create course" }).click();
+      await expect(page).toHaveURL(/\/courses\/[0-9a-f-]{36}$/);
+    });
+
+    await test.step("add a reading planned for today, and a link", async () => {
+      const composer = page.getByLabel("Add to week 1");
+      await page.getByRole("combobox", { name: "Day" }).first().click();
+      await page.getByRole("option", { name: "Today" }).click();
+      await composer.fill(item);
+      await committed(page, () => composer.press("Enter"));
+
+      await composer.fill("Course site https://example.com/course");
+      await committed(page, () => composer.press("Enter"));
+
+      const list = page.getByRole("list", { name: "Week 1 checklist" });
+      await expect(list.getByRole("checkbox", { name: item })).toBeVisible();
+      await expect(list.getByRole("link", { name: /Course site/ })).toHaveAttribute(
+        "href",
+        "https://example.com/course",
+      );
+      await expect(list.getByRole("combobox", { name: `${item}: day` })).toHaveText("Today");
+      await shot(page, "course-checklist");
+    });
+
+    await test.step("Today lists it and ticks it", async () => {
+      await page.goto("/today");
+      const section = page
+        .getByRole("heading", { name: "From your courses" })
+        .locator("..")
+        .locator("..");
+      const box = section.getByRole("checkbox", { name: item });
+      await expect(box).toBeVisible();
+      await shot(page, "today-course-items");
+      await committed(page, () => box.click());
+      await expect(section.getByRole("checkbox", { name: `${item}, done` })).toBeVisible();
+
+      await page.goBack();
+      await expect(
+        page
+          .getByRole("list", { name: "Week 1 checklist" })
+          .getByRole("checkbox", { name: `${item}, done` }),
+      ).toBeVisible();
+    });
+
+    await test.step("upload a PDF syllabus, open it, remove it", async () => {
+      const pdf = Buffer.from(
+        "%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[]/Count 0>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n",
+      );
+      const chooser = page.waitForEvent("filechooser");
+      await page.getByRole("button", { name: "Upload PDF" }).click();
+      await (
+        await chooser
+      ).setFiles({ name: "syllabus.pdf", mimeType: "application/pdf", buffer: pdf });
+      await expect(toasts(page).getByText("Uploaded syllabus.pdf")).toBeVisible();
+      const link = page.getByRole("link", { name: "syllabus.pdf" });
+      await expect(link).toBeVisible();
+      await shot(page, "course-syllabus-pdf");
+
+      // The route redirects the owner to a signed link that serves the PDF.
+      const href = await link.getAttribute("href");
+      const response = await page.request.get(href ?? "");
+      expect(response.status()).toBe(200);
+      expect(response.headers()["content-type"]).toContain("application/pdf");
+
+      await page.getByRole("button", { name: "Remove syllabus PDF" }).click();
+      await expect(toasts(page).getByText("Syllabus PDF removed")).toBeVisible();
+      await expect(page.getByRole("button", { name: "Upload PDF" })).toBeVisible();
+    });
+
+    await test.step("delete the course", async () => {
+      await page.getByRole("button", { name: "Edit" }).click();
+      await page
+        .getByRole("dialog", { name: "Edit course" })
+        .getByRole("button", { name: "Delete course" })
+        .click();
+      const confirm = page.getByRole("dialog", { name: `Delete “${name}”?` });
+      await committed(page, () => confirm.getByRole("button", { name: "Delete course" }).click());
+      await expect(page).toHaveURL(/\/courses$/);
     });
   });
 });

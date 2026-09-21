@@ -59,9 +59,10 @@ export async function getCoursePage(id: Uuid): Promise<CoursePageData> {
   const course = await courses.findById(supabase, id);
   if (course === null) notFound();
 
-  const [project, weekRows, taskRows] = await Promise.all([
+  const [project, weekRows, itemRows, taskRows] = await Promise.all([
     projects.findById(supabase, course.projectId),
     courses.listWeeksFor(supabase, course.id),
+    courses.listItemsFor(supabase, course.id),
     tasks.listFor(supabase, userId),
   ]);
   if (project === null) notFound();
@@ -78,6 +79,7 @@ export async function getCoursePage(id: Uuid): Promise<CoursePageData> {
         (task) => task.dueDate !== null && task.dueDate >= span.start && task.dueDate <= span.end,
       )
       .sort(byDueThenTitle),
+    items: itemRows.filter((item) => item.weekNumber === span.number),
     isCurrent: span.number === currentWeek,
   }));
 
@@ -127,4 +129,23 @@ function byDueThenTitle(a: Task, b: Task): number {
     return a.dueDate < b.dueDate ? -1 : 1;
   }
   return a.title.localeCompare(b.title);
+}
+
+/** How long a syllabus link stays valid once minted: long enough to open, short enough to be no share link. */
+const SYLLABUS_URL_SECONDS = 60;
+
+/**
+ * A signed URL for the course's PDF, or null when the course has none or is
+ * not the caller's (row-level security hides it either way).
+ */
+export async function getSyllabusFileUrl(courseId: Uuid): Promise<string | null> {
+  const { supabase } = await requireSession();
+  const course = await courses.findById(supabase, courseId);
+  if (course === null || course.syllabusPath === null) return null;
+
+  const { data, error } = await supabase.storage
+    .from("syllabi")
+    .createSignedUrl(course.syllabusPath, SYLLABUS_URL_SECONDS);
+  if (error) return null;
+  return data.signedUrl;
 }

@@ -48,6 +48,18 @@ export function courseWeekOf(
   return Math.floor(diffDays(termStart, date) / 7) + 1;
 }
 
+/** The dates a week covers, first to last, for a "planned on" choice. */
+export function daysOfSpan(span: CourseWeekSpan): LocalDate[] {
+  const days: LocalDate[] = [];
+  for (let date = span.start; date <= span.end; date = addDays(date, 1)) days.push(date);
+  return days;
+}
+
+/** Whether a date lies inside the week; a planned day outside its week is a refused write. */
+export function isInSpan(date: LocalDate, span: CourseWeekSpan): boolean {
+  return date >= span.start && date <= span.end;
+}
+
 export type CourseStatus = "upcoming" | "current" | "past";
 
 /** Where today sits against the term. */

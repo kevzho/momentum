@@ -160,6 +160,17 @@ begin
   ) as w(n, topic, materials)
   where c.project_id = p_course;
 
+  -- This week's checklist on the course, one entry planned for today so Today has something to show.
+  insert into public.course_items (user_id, course_id, week_number, kind, title, url, planned_on, sort_order, created_at)
+  select u, c.id, ((today - c.term_start) / 7) + 1, w.kind::public.course_item_kind, w.title, w.url, w.planned_on, w.sort_order, now() - interval '2 days'
+  from public.courses c
+  cross join (values
+    ('reading',  'Read chapter 4, sections 1–3',            null,                                   today,     1),
+    ('link',     'Sampling distributions walkthrough',       'https://example.com/stat201/week4',    null,      2),
+    ('exercise', 'Problem set 3, questions 1–6',            null,                                   today + 1, 3)
+  ) as w(kind, title, url, planned_on, sort_order)
+  where c.project_id = p_course;
+
   -- Open tasks: every priority, with and without due dates and estimates.
   insert into public.tasks
     (id, user_id, project_id, title, description, priority, estimated_minutes, due_date, sort_order, created_at)
@@ -559,6 +570,10 @@ begin
 
   insert into public.course_weeks (user_id, course_id, week_number, topic, created_at)
   select u, c.id, 1, 'Signal chain', now() - interval '3 weeks'
+  from public.courses c where c.project_id = proj;
+
+  insert into public.course_items (user_id, course_id, week_number, kind, title, created_at)
+  select u, c.id, 1, 'reading', 'Chapter 1: gain staging', now() - interval '3 weeks'
   from public.courses c where c.project_id = proj;
 
   insert into public.tasks

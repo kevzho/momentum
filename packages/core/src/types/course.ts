@@ -14,6 +14,10 @@ export interface Course {
   instructor: string | null;
   location: string | null;
   syllabus: string | null;
+  /** Object path of the uploaded PDF in the `syllabi` bucket; null when none. */
+  syllabusPath: string | null;
+  /** The name the PDF was uploaded under, for display. Set exactly when `syllabusPath` is. */
+  syllabusFileName: string | null;
   /** Week 1 begins here; every week is seven days from it. */
   termStart: LocalDate;
   /** Inclusive. */
@@ -32,6 +36,30 @@ export interface CourseWeek {
   topic: string | null;
   /** Readings, links, what to cover. Free text. */
   materials: string | null;
+  createdAt: Instant;
+  updatedAt: Instant;
+}
+
+export const COURSE_ITEM_KINDS = ["reading", "link", "exercise"] as const;
+export type CourseItemKind = (typeof COURSE_ITEM_KINDS)[number];
+
+/**
+ * One reading, link or exercise of a course week — a checklist entry, not a
+ * task: ticking it records `completedAt` and earns nothing. It may be planned
+ * for one day of its week, which is the day Today lists it on.
+ */
+export interface CourseItem {
+  id: Uuid;
+  userId: Uuid;
+  courseId: Uuid;
+  weekNumber: number;
+  kind: CourseItemKind;
+  title: string;
+  url: string | null;
+  /** A day inside the week, or null for any day. */
+  plannedOn: LocalDate | null;
+  completedAt: Instant | null;
+  sortOrder: number;
   createdAt: Instant;
   updatedAt: Instant;
 }

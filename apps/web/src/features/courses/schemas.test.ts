@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  beginSyllabusUploadInput,
   createCourseInput,
+  createCourseItemInput,
   setCourseWeekInput,
   updateSyllabusInput,
 } from "@/features/courses/schemas";
@@ -79,5 +81,61 @@ describe("updateSyllabusInput", () => {
     expect(updateSyllabusInput.safeParse({ id: ID, syllabus: "x".repeat(20001) }).success).toBe(
       false,
     );
+  });
+});
+
+describe("createCourseItemInput", () => {
+  const item = (overrides: Record<string, unknown> = {}) => ({
+    id: ID,
+    courseId: PROJECT,
+    weekNumber: 3,
+    kind: "reading",
+    title: "  Chapter 4 ",
+    ...overrides,
+  });
+
+  it("trims the title, defaults the link and the day to none", () => {
+    const parsed = createCourseItemInput.safeParse(item());
+    expect(parsed.success && parsed.data.title).toBe("Chapter 4");
+    expect(parsed.success && parsed.data.url).toBeNull();
+    expect(parsed.success && parsed.data.plannedOn).toBeNull();
+  });
+
+  it("takes only an http(s) link, so an href can never run script", () => {
+    expect(createCourseItemInput.safeParse(item({ url: "https://x.test/a" })).success).toBe(true);
+    expect(createCourseItemInput.safeParse(item({ url: "javascript:alert(1)" })).success).toBe(
+      false,
+    );
+    expect(createCourseItemInput.safeParse(item({ url: "x.test/a" })).success).toBe(false);
+  });
+
+  it("refuses an unknown kind, a week outside 1..53, and a blank title", () => {
+    expect(createCourseItemInput.safeParse(item({ kind: "video" })).success).toBe(false);
+    expect(createCourseItemInput.safeParse(item({ weekNumber: 54 })).success).toBe(false);
+    expect(createCourseItemInput.safeParse(item({ title: "  " })).success).toBe(false);
+  });
+});
+
+describe("beginSyllabusUploadInput", () => {
+  it("takes a PDF of at most ten megabytes", () => {
+    expect(
+      beginSyllabusUploadInput.safeParse({ courseId: ID, fileName: "Syllabus.PDF", size: 1024 })
+        .success,
+    ).toBe(true);
+    expect(
+      beginSyllabusUploadInput.safeParse({ courseId: ID, fileName: "syllabus.docx", size: 1024 })
+        .success,
+    ).toBe(false);
+    expect(
+      beginSyllabusUploadInput.safeParse({
+        courseId: ID,
+        fileName: "syllabus.pdf",
+        size: 10 * 1024 * 1024 + 1,
+      }).success,
+    ).toBe(false);
+    expect(
+      beginSyllabusUploadInput.safeParse({ courseId: ID, fileName: "syllabus.pdf", size: 0 })
+        .success,
+    ).toBe(false);
   });
 });

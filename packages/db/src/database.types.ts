@@ -180,6 +180,66 @@ export type Database = {
         };
         Relationships: [];
       };
+      course_items: {
+        Row: {
+          completed_at: string | null;
+          course_id: string;
+          created_at: string;
+          id: string;
+          kind: Database["public"]["Enums"]["course_item_kind"];
+          planned_on: string | null;
+          sort_order: number;
+          title: string;
+          updated_at: string;
+          url: string | null;
+          user_id: string;
+          week_number: number;
+        };
+        Insert: {
+          completed_at?: string | null;
+          course_id: string;
+          created_at?: string;
+          id?: string;
+          kind?: Database["public"]["Enums"]["course_item_kind"];
+          planned_on?: string | null;
+          sort_order?: number;
+          title: string;
+          updated_at?: string;
+          url?: string | null;
+          user_id: string;
+          week_number: number;
+        };
+        Update: {
+          completed_at?: string | null;
+          course_id?: string;
+          created_at?: string;
+          id?: string;
+          kind?: Database["public"]["Enums"]["course_item_kind"];
+          planned_on?: string | null;
+          sort_order?: number;
+          title?: string;
+          updated_at?: string;
+          url?: string | null;
+          user_id?: string;
+          week_number?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "course_items_course_id_fkey";
+            columns: ["course_id"];
+            isOneToOne: false;
+            referencedRelation: "courses";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "course_items_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       course_weeks: {
         Row: {
           course_id: string;
@@ -237,6 +297,8 @@ export type Database = {
           location: string | null;
           project_id: string;
           syllabus: string | null;
+          syllabus_file_name: string | null;
+          syllabus_path: string | null;
           term_end: string;
           term_start: string;
           updated_at: string;
@@ -250,6 +312,8 @@ export type Database = {
           location?: string | null;
           project_id: string;
           syllabus?: string | null;
+          syllabus_file_name?: string | null;
+          syllabus_path?: string | null;
           term_end: string;
           term_start: string;
           updated_at?: string;
@@ -263,6 +327,8 @@ export type Database = {
           location?: string | null;
           project_id?: string;
           syllabus?: string | null;
+          syllabus_file_name?: string | null;
+          syllabus_path?: string | null;
           term_end?: string;
           term_start?: string;
           updated_at?: string;
@@ -1532,6 +1598,7 @@ export type Database = {
     Enums: {
       block_kind: "event" | "work" | "habit";
       cosmetic_kind: "profile_frame" | "theme" | "block_style" | "avatar";
+      course_item_kind: "reading" | "link" | "exercise";
       focus_status: "running" | "paused" | "completed" | "abandoned";
       habit_frequency:
         "daily" | "weekdays" | "times_per_week" | "amount_per_day" | "amount_per_week";
@@ -1686,6 +1753,7 @@ export const Constants = {
     Enums: {
       block_kind: ["event", "work", "habit"],
       cosmetic_kind: ["profile_frame", "theme", "block_style", "avatar"],
+      course_item_kind: ["reading", "link", "exercise"],
       focus_status: ["running", "paused", "completed", "abandoned"],
       habit_frequency: ["daily", "weekdays", "times_per_week", "amount_per_day", "amount_per_week"],
       habit_unit: ["count", "minutes"],

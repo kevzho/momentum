@@ -2,6 +2,7 @@ import type { HabitDay, HabitProgress } from "@momentum/core/habits";
 import type { LevelProgress } from "@momentum/core/gamification";
 import type { PlanningWarning } from "@momentum/core/scheduling";
 import type {
+  CourseItem,
   Habit,
   HabitCompletion,
   IanaTimeZone,
@@ -74,6 +75,15 @@ export interface TodayHabit {
   completions: readonly HabitCompletion[];
 }
 
+/** A course checklist entry planned for today, with the course it belongs to. */
+export interface TodayCourseItem {
+  item: CourseItem;
+  courseId: Uuid;
+  courseName: string;
+  courseCode: string | null;
+  color: ProjectColor;
+}
+
 /** An overdue task, a deadline without enough open time before it, or a calendar conflict. */
 export type TodayRisk =
   | { kind: "overdue"; task: TodayTask; dueDate: LocalDate; daysOverdue: number }
@@ -124,6 +134,8 @@ export interface TodayPageData {
    */
   candidates: readonly TodayTask[];
   habits: readonly TodayHabit[];
+  /** Course readings, links and exercises planned for today, done ones included. */
+  courseItems: readonly TodayCourseItem[];
   /** Today's quests only. The week's belong to /progress. */
   quests: readonly QuestRow[];
   /** Tasks completed today; read only by the everything-done state. */

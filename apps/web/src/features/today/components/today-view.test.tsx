@@ -40,6 +40,8 @@ vi.mock("@/features/calendar/actions", () => ({
 
 vi.mock("@/features/tasks/actions", () => ({ setTaskCompletion: actions.setTaskCompletion }));
 vi.mock("@/features/habits/actions", () => ({ setHabitCompletion: actions.setHabitCompletion }));
+// Today ticks course checklist entries; the action is server-only.
+vi.mock("@/features/courses/actions", () => ({ setCourseItemDone: vi.fn() }));
 vi.mock("@/features/gamification/actions", () => ({ claimQuest: actions.claimQuest }));
 
 const { toast } = await import("@momentum/ui/components/toast");

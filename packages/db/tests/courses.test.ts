@@ -215,4 +215,49 @@ describeDb("courses", () => {
     expect(await projects.findById(owner, projectId)).not.toBeNull();
     expect(await courses.findById(owner, course.id)).toBeNull();
   });
+
+  it("keeps checklist items to the owner's course, and ticking one writes only its stamp", async () => {
+    const projectId = await mintProject(owner, ownerId);
+    const course = await courses.insert(owner, {
+      userId: ownerId,
+      projectId,
+      termStart: TERM_START,
+      termEnd: TERM_END,
+    });
+    courseIds.push(course.id);
+
+    const item = await courses.insertItem(owner, {
+      userId: ownerId,
+      courseId: course.id,
+      weekNumber: 2,
+      kind: "reading",
+      title: "Chapter 2",
+      url: null,
+      plannedOn: localDate("2031-01-14"),
+      sortOrder: 1,
+    });
+    expect(item.completedAt).toBeNull();
+
+    const planted = await neighbour
+      .from("course_items")
+      .insert({ user_id: neighbourId, course_id: course.id, week_number: 1, title: "planted" })
+      .select("id")
+      .maybeSingle();
+    expect(planted.error?.code).toBe(DENIED);
+
+    const ticked = await courses.updateItem(owner, item.id, {
+      completedAt: "2031-01-14T10:00:00.000Z" as typeof item.createdAt,
+    });
+    expect(ticked.completedAt).toBe("2031-01-14T10:00:00.000Z");
+    expect(ticked.title).toBe("Chapter 2");
+
+    const { data: mine } = await neighbour.from("course_items").select("id").eq("id", item.id);
+    expect(mine).toEqual([]);
+
+    // Deleting the course takes its items with it.
+    await courses.remove(owner, course.id);
+    courseIds.splice(courseIds.indexOf(course.id), 1);
+    const { data: left } = await admin.from("course_items").select("id").eq("id", item.id);
+    expect(left).toEqual([]);
+  });
 });

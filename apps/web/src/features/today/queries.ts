@@ -7,6 +7,7 @@ import {
   habits as habitsRepo,
   projects as projectsRepo,
   tasks,
+  courses as coursesRepo,
 } from "@momentum/db";
 import { levelProgress, questFactsFor, questProgress } from "@momentum/core/gamification";
 import { expandAll } from "@momentum/core/recurrence";
@@ -22,6 +23,8 @@ import {
 } from "@momentum/core/time";
 import type {
   CalendarBlock,
+  Course,
+  CourseItem,
   FocusSession,
   IanaTimeZone,
   Instant,
@@ -45,6 +48,7 @@ import { buildTimeline, dayPartOf, habitsForToday } from "@/features/today/agend
 import type {
   InsufficientTimeWarning,
   OverlapWarning,
+  TodayCourseItem,
   TodayItem,
   TodayPageData,
   TodayProject,
@@ -96,6 +100,8 @@ export async function getTodayPage(): Promise<TodayPageData> {
     awardedToday,
     openTaskCount,
     hasScheduledWork,
+    courseRows,
+    plannedItems,
   ] = await Promise.all([
     blocks.listWindow(supabase, {
       start: rangeWindow.start,
@@ -118,6 +124,8 @@ export async function getTodayPage(): Promise<TodayPageData> {
     // For the empty states: what the whole account holds, not just today.
     tasks.countTopLevelFor(supabase, userId, "open"),
     blocks.hasWorkBlock(supabase, userId),
+    coursesRepo.listFor(supabase, userId),
+    coursesRepo.listItemsPlannedOn(supabase, userId, today),
   ]);
 
   const occurrences = expandAll(rows.series, rangeWindow, rows.overrides);
@@ -204,6 +212,7 @@ export async function getTodayPage(): Promise<TodayPageData> {
     // for another day belongs here too: it is still what is due soonest.
     candidates: [...overdue, ...dueTasks.map(todayTask)],
     habits: habitsForToday(habitRows, habitCompletions, week.days, today),
+    courseItems: courseItemsForToday(plannedItems, courseRows, projectRows),
     quests: questRows(assignments, questDefinitions, questFacts),
     completedTasksToday: completedTasks.length,
     warnings: todayWarnings({
@@ -356,4 +365,28 @@ function unique(ids: readonly Uuid[]): Uuid[] {
 
 function byId<T extends { id: Uuid }>(rows: readonly T[]): Map<Uuid, T> {
   return new Map(rows.map((row) => [row.id, row]));
+}
+
+/** Each planned item with its course's name and colour; an item of a vanished course is left out. */
+function courseItemsForToday(
+  items: readonly CourseItem[],
+  courseRows: readonly Course[],
+  projectRows: readonly Project[],
+): TodayCourseItem[] {
+  const byCourse = new Map(courseRows.map((course) => [course.id, course]));
+  const byProject = new Map(projectRows.map((project) => [project.id, project]));
+  const rows: TodayCourseItem[] = [];
+  for (const item of items) {
+    const course = byCourse.get(item.courseId);
+    const project = course === undefined ? undefined : byProject.get(course.projectId);
+    if (course === undefined || project === undefined) continue;
+    rows.push({
+      item,
+      courseId: course.id,
+      courseName: project.name,
+      courseCode: course.code,
+      color: project.color,
+    });
+  }
+  return rows;
 }

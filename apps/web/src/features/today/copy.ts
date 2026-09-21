@@ -87,6 +87,12 @@ export const TODAY_COPY = {
     count: (met: number, total: number) => `${met}/${total}`,
   },
 
+  courses: {
+    title: "From your courses",
+    /** The count beside the heading: how many of today's planned items are done. */
+    count: (done: number, total: number) => `${done}/${total}`,
+  },
+
   quests: {
     title: "Quests",
     emptyTitle: "No quests today",

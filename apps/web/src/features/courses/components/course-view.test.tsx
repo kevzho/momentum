@@ -14,6 +14,13 @@ const { actions, openQuickAdd, pushMock, errorToast, successToast } = vi.hoisted
     updateSyllabus: vi.fn(),
     updateCourse: vi.fn(),
     deleteCourse: vi.fn(),
+    createCourseItem: vi.fn(),
+    updateCourseItem: vi.fn(),
+    setCourseItemDone: vi.fn(),
+    deleteCourseItem: vi.fn(),
+    beginSyllabusUpload: vi.fn(),
+    finishSyllabusUpload: vi.fn(),
+    removeSyllabusFile: vi.fn(),
   },
   openQuickAdd: vi.fn(),
   pushMock: vi.fn(),
@@ -45,6 +52,8 @@ const course: Course = {
   instructor: "Dr. Okafor",
   location: null,
   syllabus: "Grading: problem sets 40%.",
+  syllabusPath: null,
+  syllabusFileName: null,
   termStart: localDate("2026-09-07"),
   termEnd: localDate("2026-09-27"),
   createdAt: instant("2026-09-01T00:00:00.000Z"),
@@ -113,18 +122,36 @@ function data(): CoursePageData {
           updatedAt: instant("2026-09-01T00:00:00.000Z"),
         },
         assignments: [READING],
+        items: [
+          {
+            id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee" as Uuid,
+            userId: USER_ID,
+            courseId: COURSE_ID,
+            weekNumber: 1,
+            kind: "reading",
+            title: "Read chapter 1",
+            url: null,
+            plannedOn: localDate("2026-09-09"),
+            completedAt: null,
+            sortOrder: 1,
+            createdAt: instant("2026-09-01T00:00:00.000Z"),
+            updatedAt: instant("2026-09-01T00:00:00.000Z"),
+          },
+        ],
         isCurrent: false,
       },
       {
         span: { number: 2, start: localDate("2026-09-14"), end: localDate("2026-09-20") },
         week: null,
         assignments: [PS2],
+        items: [],
         isCurrent: true,
       },
       {
         span: { number: 3, start: localDate("2026-09-21"), end: localDate("2026-09-27") },
         week: null,
         assignments: [],
+        items: [],
         isCurrent: false,
       },
     ],
@@ -144,6 +171,10 @@ beforeEach(() => {
   vi.clearAllMocks();
   actions.setCourseWeek.mockResolvedValue({ ok: true, data: null });
   actions.updateSyllabus.mockResolvedValue({ ok: true, data: null });
+  actions.createCourseItem.mockResolvedValue({ ok: true, data: null });
+  actions.updateCourseItem.mockResolvedValue({ ok: true, data: null });
+  actions.setCourseItemDone.mockResolvedValue({ ok: true, data: null });
+  actions.deleteCourseItem.mockResolvedValue({ ok: true, data: null });
 });
 
 describe("the course page", () => {
@@ -171,7 +202,7 @@ describe("the course page", () => {
 
     // Not in a week: no due date, or outside the term.
     expect(screen.getByText("Find a study group")).toBeTruthy();
-    expect(screen.getByRole<HTMLTextAreaElement>("textbox", { name: "Syllabus" }).value).toBe(
+    expect(screen.getByRole<HTMLTextAreaElement>("textbox", { name: "Syllabus notes" }).value).toBe(
       "Grading: problem sets 40%.",
     );
   });
@@ -203,7 +234,7 @@ describe("the course page", () => {
 
   it("keeps the other field's text when one is edited", async () => {
     renderView();
-    const materials = screen.getByLabelText<HTMLTextAreaElement>("Week 1 material");
+    const materials = screen.getByLabelText<HTMLTextAreaElement>("Week 1 notes");
 
     fireEvent.focus(materials);
     fireEvent.change(materials, { target: { value: "Chapter 1, sections 1–3" } });
@@ -252,7 +283,7 @@ describe("the course page", () => {
       error: { code: "unavailable", message: "Could not save." },
     });
     renderView();
-    const syllabus = screen.getByRole<HTMLTextAreaElement>("textbox", { name: "Syllabus" });
+    const syllabus = screen.getByRole<HTMLTextAreaElement>("textbox", { name: "Syllabus notes" });
 
     fireEvent.focus(syllabus);
     fireEvent.change(syllabus, { target: { value: "Office hours Tue." } });
@@ -273,5 +304,71 @@ describe("the course page", () => {
     renderView();
     const link = screen.getByRole("link", { name: /Problem set 2/ });
     expect(link.getAttribute("href")).toBe(`/tasks?task=${PS2.id}`);
+  });
+});
+
+describe("the week checklist", () => {
+  it("adds an entry on Enter, reading a pasted link as the link", async () => {
+    // The write never settles, so the optimistic row stays on screen to be read.
+    actions.createCourseItem.mockReturnValue(new Promise(() => {}));
+    renderView();
+    const field = screen.getByLabelText<HTMLInputElement>("Add to week 2");
+
+    fireEvent.change(field, {
+      target: { value: "Lecture notes https://example.com/stat/notes.pdf" },
+    });
+    await act(async () => {
+      fireEvent.keyDown(field, { key: "Enter" });
+    });
+
+    expect(actions.createCourseItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        courseId: COURSE_ID,
+        weekNumber: 2,
+        kind: "link",
+        title: "Lecture notes",
+        url: "https://example.com/stat/notes.pdf",
+        plannedOn: null,
+      }),
+    );
+    expect(field.value).toBe("");
+    // Shown at once, before the refresh.
+    expect(screen.getByRole("list", { name: "Week 2 checklist" }).textContent).toContain(
+      "Lecture notes",
+    );
+  });
+
+  it("ticks an entry through the done action and strikes it through", async () => {
+    actions.setCourseItemDone.mockReturnValue(new Promise(() => {}));
+    renderView();
+    const box = screen.getByRole("checkbox", { name: "Read chapter 1" });
+
+    await act(async () => {
+      fireEvent.click(box);
+    });
+
+    expect(actions.setCourseItemDone).toHaveBeenCalledWith({
+      id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+      done: true,
+    });
+    expect(screen.getByRole("checkbox", { name: "Read chapter 1, done" })).toBeTruthy();
+  });
+
+  it("removes an entry", async () => {
+    actions.deleteCourseItem.mockReturnValue(new Promise(() => {}));
+    renderView();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Remove Read chapter 1" }));
+    });
+    expect(actions.deleteCourseItem).toHaveBeenCalledWith({
+      id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+    });
+    expect(screen.queryByRole("list", { name: "Week 1 checklist" })).toBeNull();
+  });
+
+  it("offers the week's own days, and names the planned one", () => {
+    renderView();
+    // Week 1 runs Sep 7–13; the entry is planned for Wed 9.
+    expect(screen.getByRole("combobox", { name: "Read chapter 1: day" }).textContent).toBe("Wed 9");
   });
 });

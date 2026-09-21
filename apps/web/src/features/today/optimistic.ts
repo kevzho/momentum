@@ -12,7 +12,15 @@ import type { TodayHabit, TodayItem, TodayPageData, TodayTask } from "@/features
  */
 
 export type TodayPatch =
-  BlockCompletionPatch | TaskCompletionPatch | HabitDayPatch | ReschedulePatch;
+  BlockCompletionPatch | TaskCompletionPatch | HabitDayPatch | ReschedulePatch | CourseItemPatch;
+
+/** Ticking a course checklist entry planned for today. It earns nothing, so XP is untouched. */
+export interface CourseItemPatch {
+  kind: "course-item";
+  itemId: Uuid;
+  done: boolean;
+  now: Instant;
+}
 
 /**
  * A block's completion control. `alsoTask` is the server-decided promise from
@@ -64,6 +72,15 @@ export function applyTodayPatch(page: TodayPageData, patch: TodayPatch): TodayPa
       return applyHabitDay(page, patch);
     case "reschedule":
       return applyReschedule(page, patch);
+    case "course-item":
+      return {
+        ...page,
+        courseItems: page.courseItems.map((row) =>
+          row.item.id === patch.itemId
+            ? { ...row, item: { ...row.item, completedAt: patch.done ? patch.now : null } }
+            : row,
+        ),
+      };
   }
 }
 

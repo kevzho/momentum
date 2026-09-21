@@ -12,10 +12,17 @@ import {
   setBlockCompletion,
 } from "@/features/calendar/actions";
 import type { DaySpan } from "@/features/calendar/types";
+import { setCourseItemDone } from "@/features/courses/actions";
 import { setHabitCompletion } from "@/features/habits/actions";
 import { setTaskCompletion } from "@/features/tasks/actions";
 import { applyTodayPatch, type TodayPatch } from "@/features/today/optimistic";
-import type { TodayHabit, TodayItem, TodayPageData, TodayTask } from "@/features/today/types";
+import type {
+  TodayCourseItem,
+  TodayHabit,
+  TodayItem,
+  TodayPageData,
+  TodayTask,
+} from "@/features/today/types";
 import type { ActionResult } from "@/lib/actions/result";
 import { useOptimisticAction } from "@/lib/actions/use-optimistic-action";
 import { useUserSettings } from "@/lib/time/user-settings";
@@ -42,6 +49,8 @@ export interface TodayMutations {
   setHabitRecorded: (row: TodayHabit, recorded: boolean) => void;
   /** Move a block to another wall-clock span. */
   reschedule: (entry: TodayItem, span: DaySpan) => void;
+  /** Tick or untick a course checklist entry planned for today. */
+  setCourseItemDone: (row: TodayCourseItem, done: boolean) => void;
 }
 
 export function useTodayMutations(serverState: TodayPageData): {
@@ -137,6 +146,14 @@ export function useTodayMutations(serverState: TodayPageData): {
               recorded,
               amount,
             }),
+        });
+      },
+
+      setCourseItemDone: (row, done) => {
+        dispatch({
+          patch: { kind: "course-item", itemId: row.item.id, done, now: nowInstant() },
+          touched: [row.item.id],
+          run: () => setCourseItemDone({ id: row.item.id, done }),
         });
       },
 

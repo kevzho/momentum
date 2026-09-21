@@ -177,6 +177,7 @@ export function todayPage(overrides: Partial<TodayPageData> = {}): TodayPageData
     overdue: [],
     candidates: [],
     habits: [],
+    courseItems: [],
     quests: [],
     completedTasksToday: 0,
     warnings: [],

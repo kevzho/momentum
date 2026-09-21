@@ -5,8 +5,8 @@ import Link from "next/link";
 import { unstable_rethrow, useRouter } from "next/navigation";
 import { ArrowLeftIcon, PencilIcon, PlusIcon } from "lucide-react";
 
-import { formatLocalDate } from "@momentum/core/time";
-import type { CourseWeek } from "@momentum/core/types";
+import { formatLocalDate, nowInstant } from "@momentum/core/time";
+import type { CourseItem, CourseItemKind, CourseWeek, LocalDate, Uuid } from "@momentum/core/types";
 
 import { Button } from "@momentum/ui/components/button";
 import { PageContainer } from "@momentum/ui/components/page-container";
@@ -14,16 +14,20 @@ import { PageHeader } from "@momentum/ui/components/page-header";
 import { ProjectDot } from "@momentum/ui/components/project-dot";
 import { toast } from "@momentum/ui/components/toast";
 
-import { CommittedTextarea } from "@/components/committed-field";
 import {
+  createCourseItem,
   deleteCourse,
+  deleteCourseItem,
+  setCourseItemDone,
   setCourseWeek,
   updateCourse,
+  updateCourseItem,
   updateSyllabus,
 } from "@/features/courses/actions";
 import { CourseFormDialog } from "@/features/courses/components/course-form-dialog";
 import { AssignmentRow, CourseWeekRow } from "@/features/courses/components/course-week-row";
 import { DeleteCourseDialog } from "@/features/courses/components/delete-course-dialog";
+import { SyllabusPanel } from "@/features/courses/components/syllabus-panel";
 import { COURSES_HREF } from "@/features/courses/navigation";
 import type {
   CourseFormValues,
@@ -31,6 +35,7 @@ import type {
   CourseSummary,
   CourseWeekPatch,
   CourseWeekView,
+  NewCourseItemDraft,
 } from "@/features/courses/types";
 import { useQuickAdd } from "@/features/tasks/components/quick-add-context";
 import { failure, type ActionResult } from "@/lib/actions/result";
@@ -38,10 +43,21 @@ import { useOptimisticAction } from "@/lib/actions/use-optimistic-action";
 import { reportError } from "@/lib/report-error";
 
 /**
- * One course: its header, syllabus, and every week of the term with what is
- * written against it and what is due inside it. Week text and the syllabus
- * are optimistic; editing the course and deleting it are round trips.
+ * One course: its header, syllabus, and every week of the term with its
+ * topic, checklist, assignments and notes. Week text, checklist entries and
+ * the syllabus notes are optimistic over one overlay of the weeks; editing
+ * the course, deleting it and the PDF are round trips.
  */
+
+/** Every write to the weeks' overlay, dispatched to its own action. */
+type WeekMutation =
+  | { kind: "text"; patch: CourseWeekPatch }
+  | { kind: "add-item"; draft: NewCourseItemDraft }
+  | { kind: "item-done"; item: CourseItem; done: boolean }
+  | { kind: "item-plan"; item: CourseItem; plannedOn: LocalDate | null }
+  | { kind: "item-kind"; item: CourseItem; itemKind: CourseItemKind }
+  | { kind: "remove-item"; item: CourseItem };
+
 export function CourseView({ data }: { data: CoursePageData }) {
   const router = useRouter();
   const quickAdd = useQuickAdd();
@@ -52,15 +68,10 @@ export function CourseView({ data }: { data: CoursePageData }) {
   const { summary } = data;
   const { course } = summary;
 
-  const weeks = useOptimisticAction<readonly CourseWeekView[], CourseWeekPatch, CourseWeek>({
+  const weeks = useOptimisticAction<readonly CourseWeekView[], WeekMutation, unknown>({
     serverState: data.weeks,
-    action: setCourseWeek,
-    optimistic: (state, patch) =>
-      state.map((view) =>
-        view.span.number === patch.weekNumber
-          ? { ...view, week: overlay(view.week, patch, course.id, course.userId) }
-          : view,
-      ),
+    action: (mutation) => runWeekMutation(mutation, course.id),
+    optimistic: (state, mutation) => applyWeekMutation(state, mutation, course),
   });
 
   const syllabus = useOptimisticAction<string, string, unknown>({
@@ -164,30 +175,30 @@ export function CourseView({ data }: { data: CoursePageData }) {
                 today={data.today}
                 pending={weeks.pending}
                 onCommit={(patch) =>
-                  weeks.run({ courseId: course.id, weekNumber: view.span.number, ...patch })
+                  weeks.run({
+                    kind: "text",
+                    patch: { courseId: course.id, weekNumber: view.span.number, ...patch },
+                  })
                 }
                 onAddAssignment={addAssignment}
+                onAddItem={(draft) => weeks.run({ kind: "add-item", draft })}
+                onToggleItem={(item, done) => weeks.run({ kind: "item-done", item, done })}
+                onPlanItem={(item, plannedOn) => weeks.run({ kind: "item-plan", item, plannedOn })}
+                onItemKind={(item, itemKind) => weeks.run({ kind: "item-kind", item, itemKind })}
+                onRemoveItem={(item) => weeks.run({ kind: "remove-item", item })}
               />
             ))}
           </div>
         </section>
 
         <div className="flex flex-col gap-6">
-          <section aria-labelledby="course-syllabus-heading" className="flex flex-col gap-2">
-            <h2
-              id="course-syllabus-heading"
-              className="text-xs font-medium tracking-wide text-muted-foreground uppercase"
-            >
-              Syllabus
-            </h2>
-            <CommittedTextarea
-              aria-label="Syllabus"
-              placeholder="Grading, office hours, exam dates, policies — anything from the syllabus worth keeping to hand."
-              rows={12}
-              value={syllabus.state}
-              onCommit={(next) => syllabus.run(next)}
-            />
-          </section>
+          <SyllabusPanel
+            courseId={course.id}
+            fileName={course.syllabusFileName}
+            notes={syllabus.state}
+            onNotes={(next) => syllabus.run(next)}
+            onFileChanged={() => router.refresh()}
+          />
 
           {data.unplaced.length === 0 ? null : (
             <section aria-labelledby="course-unplaced-heading" className="flex flex-col gap-2">
@@ -238,13 +249,100 @@ export function CourseView({ data }: { data: CoursePageData }) {
   );
 }
 
+function runWeekMutation(mutation: WeekMutation, courseId: Uuid): Promise<ActionResult<unknown>> {
+  switch (mutation.kind) {
+    case "text":
+      return setCourseWeek(mutation.patch);
+    case "add-item":
+      return createCourseItem({ courseId, ...mutation.draft });
+    case "item-done":
+      return setCourseItemDone({ id: mutation.item.id, done: mutation.done });
+    case "item-plan":
+      return updateCourseItem({ id: mutation.item.id, plannedOn: mutation.plannedOn });
+    case "item-kind":
+      return updateCourseItem({ id: mutation.item.id, kind: mutation.itemKind });
+    case "remove-item":
+      return deleteCourseItem({ id: mutation.item.id });
+  }
+}
+
+/** The weeks as they will read once the write lands. Pure; React discards it on failure. */
+function applyWeekMutation(
+  state: readonly CourseWeekView[],
+  mutation: WeekMutation,
+  course: CourseSummary["course"],
+): readonly CourseWeekView[] {
+  switch (mutation.kind) {
+    case "text":
+      return state.map((view) =>
+        view.span.number === mutation.patch.weekNumber
+          ? { ...view, week: overlayWeek(view.week, mutation.patch, course.id, course.userId) }
+          : view,
+      );
+    case "add-item":
+      return state.map((view) =>
+        view.span.number === mutation.draft.weekNumber
+          ? { ...view, items: [...view.items, overlayItem(mutation.draft, course, view.items)] }
+          : view,
+      );
+    case "item-done":
+      return patchItem(state, mutation.item.id, {
+        completedAt: mutation.done ? nowInstant() : null,
+      });
+    case "item-plan":
+      return patchItem(state, mutation.item.id, { plannedOn: mutation.plannedOn });
+    case "item-kind":
+      return patchItem(state, mutation.item.id, { kind: mutation.itemKind });
+    case "remove-item":
+      return state.map((view) => ({
+        ...view,
+        items: view.items.filter((item) => item.id !== mutation.item.id),
+      }));
+  }
+}
+
+function patchItem(
+  state: readonly CourseWeekView[],
+  id: Uuid,
+  patch: Partial<CourseItem>,
+): readonly CourseWeekView[] {
+  return state.map((view) => ({
+    ...view,
+    items: view.items.map((item) => (item.id === id ? { ...item, ...patch } : item)),
+  }));
+}
+
+/** A new entry as the row will read; stamps are the client's until the refresh replaces them. */
+function overlayItem(
+  draft: NewCourseItemDraft,
+  course: CourseSummary["course"],
+  siblings: readonly CourseItem[],
+): CourseItem {
+  const now = nowInstant();
+  return {
+    id: draft.id,
+    userId: course.userId,
+    courseId: course.id,
+    weekNumber: draft.weekNumber,
+    kind: draft.kind,
+    title: draft.title,
+    url: draft.url,
+    plannedOn: draft.plannedOn,
+    completedAt: null,
+    sortOrder: (siblings.at(-1)?.sortOrder ?? 0) + 1,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
 /** The week row as it will read once the write lands; ids are placeholders until the refresh. */
-function overlay(
+function overlayWeek(
   current: CourseWeek | null,
   patch: CourseWeekPatch,
   courseId: CourseWeek["courseId"],
   userId: CourseWeek["userId"],
 ): CourseWeek {
+  const now = nowInstant();
   return {
     id: current?.id ?? `pending:${patch.weekNumber}`,
     userId,
@@ -252,8 +350,8 @@ function overlay(
     weekNumber: patch.weekNumber,
     topic: patch.topic,
     materials: patch.materials,
-    createdAt: current?.createdAt ?? ("1970-01-01T00:00:00.000Z" as CourseWeek["createdAt"]),
-    updatedAt: current?.updatedAt ?? ("1970-01-01T00:00:00.000Z" as CourseWeek["updatedAt"]),
+    createdAt: current?.createdAt ?? now,
+    updatedAt: now,
   };
 }
 
