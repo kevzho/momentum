@@ -1,6 +1,8 @@
 import { ProgressProvider } from "@/features/gamification/components/progress-provider";
 import type { ProgressBadge } from "@/features/gamification/types";
 import { PaletteProvider } from "@/features/palette/components/palette-provider";
+import { ReminderScheduler } from "@/features/reminders/components/reminder-scheduler";
+import type { ReminderFeed } from "@/features/reminders/types";
 import { QuickAddProvider } from "@/features/tasks/components/quick-add";
 import type { ProjectSummaryWithCount, TaskSummary } from "@/features/tasks/types";
 import { OfflineNotice } from "@/components/offline-notice";
@@ -25,6 +27,7 @@ export function AppShell({
   tasks,
   today,
   newTaskSortOrder,
+  reminders,
   children,
 }: {
   sidebarState: SidebarState;
@@ -41,6 +44,8 @@ export function AppShell({
   // One step below the user's lowest row, so a capture lands first in the Inbox
   // instead of tying with every other capture at 0.
   newTaskSortOrder: number;
+  /** The reminder scheduler's starting feed. */
+  reminders: ReminderFeed;
   children: React.ReactNode;
 }) {
   return (
@@ -56,6 +61,8 @@ export function AppShell({
           {/* Inside Quick Add, because "Add task" is a palette command that opens it. */}
           <PaletteProvider projects={projects} tasks={tasks} today={today}>
             <ProgressProvider badge={progress} />
+            {/* Renders nothing; arms browser notifications while the app is open. */}
+            <ReminderScheduler initialFeed={reminders} />
             {/* Skip link past the navigation stops. Visible only when focused. */}
             <a
               href="#main-content"

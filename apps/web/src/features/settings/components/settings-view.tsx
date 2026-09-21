@@ -31,6 +31,7 @@ import { toast } from "@momentum/ui/components/toast";
 
 import { ThemeToggle } from "@/components/theme-toggle";
 import { updateProfileSettings } from "@/features/settings/actions";
+import { ReminderSettings } from "@/features/settings/components/reminder-settings";
 import { TimeWindowList } from "@/features/settings/components/time-window-list";
 import { TimezoneField } from "@/features/settings/components/timezone-field";
 import { WorkingHoursEditor } from "@/features/settings/components/working-hours-editor";
@@ -197,7 +198,10 @@ export function SettingsView({ defaults }: { defaults: SettingsDefaults }) {
       <Separator />
 
       <Section title="Notifications" description="Browser notifications, on this device.">
-        <FocusNotificationSwitch />
+        <div className="flex flex-col gap-4">
+          <FocusNotificationSwitch />
+          <ReminderSettings />
+        </div>
       </Section>
 
       <Separator />

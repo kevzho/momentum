@@ -273,8 +273,9 @@ describe("focus-end notification", () => {
   it("is one switch that hands the choice to the preference", () => {
     render(<SettingsView defaults={DEFAULTS} />);
 
+    // The focus-end switch and the reminders switch; each hands its choice to its own preference.
     const switches = screen.getAllByRole("switch");
-    expect(switches).toHaveLength(1);
+    expect(switches).toHaveLength(2);
     const control = screen.getByRole("switch", { name: "Notify me when a focus session ends" });
     expect(control).toHaveProperty("disabled", false);
     expect(control.getAttribute("aria-checked")).toBe("false");
@@ -307,7 +308,8 @@ describe("focus-end notification", () => {
     const control = screen.getByRole("switch", { name: "Notify me when a focus session ends" });
     expect(control).toHaveProperty("disabled", true);
     expect(control.getAttribute("aria-describedby")).toBe("focus-end-notification-note");
-    expect(screen.getByText("This browser does not support notifications.")).toBeDefined();
+    // Both notification switches explain the same missing API.
+    expect(screen.getAllByText("This browser does not support notifications.")).toHaveLength(2);
   });
 
   it("says that permission was refused, and leaves the switch live for a retry", () => {
