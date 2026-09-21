@@ -30,6 +30,22 @@ describe("createBlockInput", () => {
 
     expect(parsed.success).toBe(true);
     expect(parsed.success && parsed.data.date).toBe("2026-09-07");
+    expect(parsed.success && parsed.data.allDay).toBe(false);
+  });
+
+  it("accepts an all-day event only as its whole day, so the flag cannot lie about the span", () => {
+    const base = { id: ID, kind: "event", title: "Chem test", description: null, color: null };
+
+    const wholeDay = createBlockInput.safeParse({
+      ...base,
+      ...span({ startMinutes: 0, endMinutes: 1440 }),
+      allDay: true,
+    });
+    expect(wholeDay.success).toBe(true);
+
+    const timed = createBlockInput.safeParse({ ...base, ...span(), allDay: true });
+    expect(timed.success).toBe(false);
+    expect(!timed.success && timed.error.issues[0]?.path).toEqual(["allDay"]);
   });
 
   it("trims the title and refuses one that is only whitespace", () => {
@@ -142,6 +158,23 @@ describe("spans", () => {
       expect(parsed.success).toBe(false);
       expect(fieldsOf(parsed)).toContain("date");
     }
+  });
+});
+
+describe("rescheduleBlockInput", () => {
+  it("leaves the all-day flag alone unless it is sent, and holds it to the whole day", () => {
+    const moved = rescheduleBlockInput.safeParse({ id: ID, ...span() });
+    expect(moved.success && moved.data.allDay).toBeUndefined();
+
+    const toAllDay = rescheduleBlockInput.safeParse({
+      id: ID,
+      ...span({ startMinutes: 0, endMinutes: 1440 }),
+      allDay: true,
+    });
+    expect(toAllDay.success && toAllDay.data.allDay).toBe(true);
+
+    expect(rescheduleBlockInput.safeParse({ id: ID, ...span(), allDay: true }).success).toBe(false);
+    expect(rescheduleBlockInput.safeParse({ id: ID, ...span(), allDay: false }).success).toBe(true);
   });
 });
 

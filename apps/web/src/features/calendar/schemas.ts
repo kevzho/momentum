@@ -62,6 +62,24 @@ function orderedSpan<T extends { startMinutes: number; endMinutes: number }>(sch
   });
 }
 
+/** Minutes in a day; an all-day block is exactly this span. */
+const WHOLE_DAY = 1440;
+
+/**
+ * An all-day block is stored the way the seed stores one: local midnight to
+ * the next, flagged. The span is required to say so rather than normalised,
+ * so a caller cannot send a timed span with the flag and get something else.
+ */
+function wholeDayWhenAllDay<
+  T extends { startMinutes: number; endMinutes: number; allDay?: boolean | undefined },
+>(schema: z.ZodType<T>) {
+  return schema.refine(
+    (value) =>
+      value.allDay !== true || (value.startMinutes === 0 && value.endMinutes === WHOLE_DAY),
+    { message: "An all-day block spans its whole day.", path: ["allDay"] },
+  );
+}
+
 const weekday = z.literal([...WEEKDAYS]);
 
 /**
@@ -98,24 +116,28 @@ export const recurrenceInput = z
  * and habit blocks are generated. `kind` is a literal so a crafted request
  * cannot ask for a shape with no parent.
  */
-export const createBlockInput = orderedSpan(
-  z
-    .object({
-      id: uuid,
-      kind: z.literal("event"),
-      title,
-      description,
-      color,
-      ...span,
-      recurrence: recurrenceInput.nullable().default(null),
-    })
-    .refine(
-      (value) =>
-        value.recurrence === null ||
-        value.recurrence.until === null ||
-        value.recurrence.until >= value.date,
-      { message: "The rule ends before the event starts.", path: ["recurrence", "until"] },
-    ),
+export const createBlockInput = wholeDayWhenAllDay(
+  orderedSpan(
+    z
+      .object({
+        id: uuid,
+        kind: z.literal("event"),
+        title,
+        description,
+        color,
+        ...span,
+        /** A whole day with no clock time: an exam date, a deadline on the calendar. */
+        allDay: z.boolean().default(false),
+        recurrence: recurrenceInput.nullable().default(null),
+      })
+      .refine(
+        (value) =>
+          value.recurrence === null ||
+          value.recurrence.until === null ||
+          value.recurrence.until >= value.date,
+        { message: "The rule ends before the event starts.", path: ["recurrence", "until"] },
+      ),
+  ),
 );
 
 /**
@@ -132,8 +154,13 @@ export const updateBlockInput = z.object({
   recurrence: recurrenceInput.nullable().optional(),
 });
 
-/** Move and resize are one write, so a block never shows as moved but not yet resized. */
-export const rescheduleBlockInput = orderedSpan(z.object({ id: uuid, ...span }));
+/**
+ * Move and resize are one write, so a block never shows as moved but not yet
+ * resized. `allDay` omitted leaves the flag as it is; a drag never sends one.
+ */
+export const rescheduleBlockInput = wholeDayWhenAllDay(
+  orderedSpan(z.object({ id: uuid, ...span, allDay: z.boolean().optional() })),
+);
 
 export const deleteBlockInput = z.object({ id: uuid });
 

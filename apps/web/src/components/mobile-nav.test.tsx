@@ -9,6 +9,8 @@ vi.mock("next/navigation", async (importOriginal) => ({
 
 // Quick Add's context imports the task actions, a `'use server'` module that reaches `server-only`.
 vi.mock("@/features/tasks/actions", () => ({ createTask: vi.fn() }));
+// Quick Add creates events too; the calendar action is server-only.
+vi.mock("@/features/calendar/actions", () => ({ createBlock: vi.fn() }));
 // The project list's own mutations, for the same reason.
 vi.mock("@/features/projects/actions", () => ({
   createProject: vi.fn(),

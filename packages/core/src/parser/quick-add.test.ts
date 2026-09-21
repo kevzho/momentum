@@ -3,7 +3,13 @@ import { describe, expect, it } from "vitest";
 import { localDate } from "../time";
 import type { LocalDate, Uuid } from "../types";
 
-import { MAX_PARSED_MINUTES, parseQuickAdd, type DismissedToken } from "./index";
+import {
+  MAX_PARSED_MINUTES,
+  parseDatePhrase,
+  parseQuickAdd,
+  type DismissedToken,
+  type ParsedFieldKind,
+} from "./index";
 
 // A Monday, so "monday" has to jump a full week.
 const TODAY = localDate("2026-09-07");
@@ -389,5 +395,204 @@ describe("purity", () => {
       localDate("2026-09-11"),
       localDate("2026-09-11"),
     ]);
+  });
+});
+
+describe("written dates", () => {
+  it("reads a month and a day, and resolves it to the next such date on or after today", () => {
+    expect(parse("Chem test oct 3").dueDate).toBe(localDate("2026-10-03"));
+    expect(parse("Chem test Oct 3rd").dueDate).toBe(localDate("2026-10-03"));
+    expect(parse("Chem test october 3").dueDate).toBe(localDate("2026-10-03"));
+    expect(parse("Chem test 3 oct").dueDate).toBe(localDate("2026-10-03"));
+    expect(parse("Chem test sept 7").dueDate).toBe(TODAY);
+    // Already past this year, so it is next year's.
+    expect(parse("Chem test jan 15").dueDate).toBe(localDate("2027-01-15"));
+  });
+
+  it("reads a month, a day and a year", () => {
+    expect(parse("Thesis due oct 3, 2027").dueDate).toBe(localDate("2027-10-03"));
+    expect(parse("Thesis due 3 october 2027").dueDate).toBe(localDate("2027-10-03"));
+    expect(parse("Thesis due oct 3, 2027").title).toBe("Thesis");
+  });
+
+  it("reads numeric dates, month first", () => {
+    expect(parse("Problem set 9/25").dueDate).toBe(localDate("2026-09-25"));
+    expect(parse("Problem set 09/25").dueDate).toBe(localDate("2026-09-25"));
+    expect(parse("Problem set 1/15").dueDate).toBe(localDate("2027-01-15"));
+    expect(parse("Problem set 9/25/26").dueDate).toBe(localDate("2026-09-25"));
+    expect(parse("Problem set 9/25/2027").dueDate).toBe(localDate("2027-09-25"));
+    expect(parse("Problem set 2026-09-25").dueDate).toBe(localDate("2026-09-25"));
+  });
+
+  it("reads 'next week' and 'in N days/weeks'", () => {
+    expect(parse("Lab report next week").dueDate).toBe(localDate("2026-09-14"));
+    expect(parse("Lab report due next week").title).toBe("Lab report");
+    expect(parse("Lab report in 3 days").dueDate).toBe(localDate("2026-09-10"));
+    expect(parse("Lab report in 2 weeks").dueDate).toBe(localDate("2026-09-21"));
+    expect(parse("Lab report in 1 day").dueDate).toBe(localDate("2026-09-08"));
+  });
+
+  it("absorbs 'due' and 'by' so a title never ends in a dangling deadline word", () => {
+    for (const input of ["Essay due friday", "Essay by friday", "Essay due on friday"]) {
+      const result = parse(input);
+      expect(result.title).toBe("Essay");
+      expect(result.dueDate).toBe(localDate("2026-09-11"));
+    }
+    expect(parse("Essay due on friday").tokens[0]?.text).toBe("due on friday");
+    expect(parse("Essay due 9/25").tokens[0]?.text).toBe("due 9/25");
+  });
+
+  it("refuses what is not a date", () => {
+    expect(parse("Read chapter 3").dueDate).toBeNull();
+    expect(parse("Read chapter 3").title).toBe("Read chapter 3");
+    expect(parse("Score 13/45").dueDate).toBeNull();
+    expect(parse("Feb 30 party").dueDate).toBeNull();
+    expect(parse("Party feb 30").dueDate).toBeNull();
+    expect(parse("Party in 0 days").dueDate).toBeNull();
+    expect(parse("Party in x days").dueDate).toBeNull();
+    expect(parse("Party due").title).toBe("Party due");
+  });
+
+  it("finds Feb 29 in the next leap year", () => {
+    expect(parse("Leap feb 29").dueDate).toBe(localDate("2028-02-29"));
+  });
+
+  it("labels a written date the way the rest of the product does", () => {
+    expect(parse("x oct 3").tokens[0]?.label).toBe("Oct 3, 2026");
+    expect(parse("x 9/8").tokens[0]?.label).toBe("Tomorrow");
+    expect(parse("x 9/11").tokens[0]?.label).toBe("Friday");
+  });
+
+  it("gives back a whole phrase when dismissed, and keeps reading past it", () => {
+    const result = parse("Essay due oct 3 60m", [{ kind: "date", text: "due oct 3" }]);
+    expect(result.title).toBe("Essay due oct 3");
+    expect(result.dueDate).toBeNull();
+    expect(result.estimatedMinutes).toBe(60);
+  });
+
+  it("accounts for every character of a phrase", () => {
+    for (const input of [
+      "Essay due oct 3, 2027 60m",
+      "Essay by next week p2",
+      "Essay in 2 weeks",
+      "Essay 9/25/26 #school",
+    ]) {
+      expect(accountsForEveryCharacter(input)).toBe(true);
+    }
+  });
+});
+
+describe("the fields a capture reads", () => {
+  const EVENT: readonly ParsedFieldKind[] = ["date", "time", "duration"];
+
+  function parseEvent(input: string, dismissed: readonly DismissedToken[] = []) {
+    return parseQuickAdd(input, { today: TODAY, projects: PROJECTS, dismissed, fields: EVENT });
+  }
+
+  it("never reads a time for a task: a task has a deadline, not a clock", () => {
+    const result = parse("Chem test oct 3 9am");
+    expect(result.time).toBeNull();
+    expect(result.dueDate).toBeNull();
+    expect(result.title).toBe("Chem test oct 3 9am");
+  });
+
+  it("reads a date and a start time for an event", () => {
+    const result = parseEvent("Chem test oct 3 9am");
+    expect(result.title).toBe("Chem test");
+    expect(result.dueDate).toBe(localDate("2026-10-03"));
+    expect(result.time).toEqual({ startMinutes: 540, endMinutes: null });
+    expect(result.tokens.map((token) => token.label)).toEqual(["Oct 3, 2026", "09:00"]);
+  });
+
+  it("reads the time forms people write", () => {
+    for (const [text, start, end] of [
+      ["9am", 540, null],
+      ["9:30am", 570, null],
+      ["9.30am", 570, null],
+      ["9 am", 540, null],
+      ["12pm", 720, null],
+      ["12am", 0, null],
+      ["noon", 720, null],
+      ["14:00", 840, null],
+      ["9:00", 540, null],
+      ["9-11am", 540, 660],
+      ["9am-11am", 540, 660],
+      ["9–11am", 540, 660],
+      ["9:00-10:30", 540, 630],
+      ["2-3:30pm", 840, 930],
+      ["11-1pm", 660, 780],
+      ["11am-1", 660, 780],
+      ["9am to 11am", 540, 660],
+      ["9 - 11am", 540, 660],
+      ["10PM-11PM", 1320, 1380],
+    ] as const) {
+      const result = parseEvent(`Exam ${text}`);
+      expect(result.time, text).toEqual({ startMinutes: start, endMinutes: end });
+      expect(result.title, text).toBe("Exam");
+    }
+  });
+
+  it("absorbs 'at' and 'from' before a time", () => {
+    expect(parseEvent("Exam at 9am").title).toBe("Exam");
+    expect(parseEvent("Exam at 9am").tokens[0]?.text).toBe("at 9am");
+    expect(parseEvent("Exam from 9 to 11am").title).toBe("Exam");
+  });
+
+  it("refuses what is not a time", () => {
+    for (const text of ["9", "9-11", "pages 9-11", "13am", "25:00", "9:60", "0pm", "9am-8am"]) {
+      expect(parseEvent(`Exam ${text}`).time, text).toBeNull();
+    }
+  });
+
+  it("reads a date, a time and a duration in one line, and no project or priority", () => {
+    const result = parseEvent("Chem test oct 3 at 9am 2h p1 #school");
+    expect(result.title).toBe("Chem test oct 3 at 9am 2h p1 #school");
+    expect(result.time).toBeNull();
+
+    const clean = parseEvent("Chem test oct 3 at 9am 2h");
+    expect(clean.title).toBe("Chem test");
+    expect(clean.dueDate).toBe(localDate("2026-10-03"));
+    expect(clean.time).toEqual({ startMinutes: 540, endMinutes: null });
+    expect(clean.estimatedMinutes).toBe(120);
+  });
+
+  it("labels a range with an en dash, on the grid's clock", () => {
+    expect(parseEvent("Exam 9am-11am").tokens[0]?.label).toBe("09:00 – 11:00");
+    expect(parseEvent("Exam 2:30pm").tokens[0]?.label).toBe("14:30");
+  });
+
+  it("gives a dismissed time back with its qualifier", () => {
+    const result = parseEvent("Exam at 9am", [{ kind: "time", text: "at 9am" }]);
+    expect(result.title).toBe("Exam at 9am");
+    expect(result.time).toBeNull();
+  });
+
+  it("accounts for every character", () => {
+    const result = parseEvent("Chem test oct 3 from 9 to 11am 2h");
+    const kept = [result.title, ...result.tokens.map((token) => token.text)]
+      .join("")
+      .replace(/\s/gu, "");
+    const input = "Chem test oct 3 from 9 to 11am 2h".replace(/\s/gu, "");
+    expect(kept.split("").sort().join("")).toBe(input.split("").sort().join(""));
+  });
+});
+
+describe("parseDatePhrase, for a typed date field", () => {
+  it("reads the same forms as the title, with or without a qualifier", () => {
+    expect(parseDatePhrase("fri", TODAY)).toBe(localDate("2026-09-11"));
+    expect(parseDatePhrase("  due fri ", TODAY)).toBe(localDate("2026-09-11"));
+    expect(parseDatePhrase("oct 3", TODAY)).toBe(localDate("2026-10-03"));
+    expect(parseDatePhrase("9/25", TODAY)).toBe(localDate("2026-09-25"));
+    expect(parseDatePhrase("next week", TODAY)).toBe(localDate("2026-09-14"));
+    expect(parseDatePhrase("in 3 days", TODAY)).toBe(localDate("2026-09-10"));
+    expect(parseDatePhrase("tomorrow", TODAY)).toBe(localDate("2026-09-08"));
+  });
+
+  it("is null for anything else", () => {
+    expect(parseDatePhrase("", TODAY)).toBeNull();
+    expect(parseDatePhrase("due", TODAY)).toBeNull();
+    expect(parseDatePhrase("soon", TODAY)).toBeNull();
+    expect(parseDatePhrase("oct 3 2027 extra", TODAY)).toBeNull();
+    expect(parseDatePhrase("3", TODAY)).toBeNull();
   });
 });

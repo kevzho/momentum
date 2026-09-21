@@ -262,8 +262,11 @@ export interface BlockEditorValues {
   title: string;
   description: string | null;
   date: LocalDate;
+  /** Midnight to midnight when `allDay`. */
   startMinutes: Minutes;
   endMinutes: Minutes;
+  /** A whole day with no clock time. Offered on a plain event only; always false otherwise. */
+  allDay: boolean;
   color: ProjectColor | null;
   /** Null: does not repeat. Read only for an event draft; ignored for work, habit and single-occurrence drafts. */
   recurrence: RecurrenceRule | null;

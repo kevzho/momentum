@@ -7,15 +7,23 @@ import { localDate } from "@momentum/core/time";
 
 import type { ActionResult } from "@/lib/actions/result";
 
-const { createTaskMock, createProjectMock, errorToast, successToast, pushMock, reportError } =
-  vi.hoisted(() => ({
-    createTaskMock: vi.fn(),
-    createProjectMock: vi.fn(),
-    errorToast: vi.fn(),
-    successToast: vi.fn(),
-    pushMock: vi.fn(),
-    reportError: vi.fn(),
-  }));
+const {
+  createTaskMock,
+  createBlockMock,
+  createProjectMock,
+  errorToast,
+  successToast,
+  pushMock,
+  reportError,
+} = vi.hoisted(() => ({
+  createTaskMock: vi.fn(),
+  createBlockMock: vi.fn(),
+  createProjectMock: vi.fn(),
+  errorToast: vi.fn(),
+  successToast: vi.fn(),
+  pushMock: vi.fn(),
+  reportError: vi.fn(),
+}));
 
 vi.mock("@momentum/ui/components/toast", () => ({
   toast: {
@@ -35,6 +43,7 @@ vi.mock("next/navigation", async (importOriginal) => ({
 }));
 
 vi.mock("@/features/tasks/actions", () => ({ createTask: createTaskMock }));
+vi.mock("@/features/calendar/actions", () => ({ createBlock: createBlockMock }));
 vi.mock("@/features/projects/actions", () => ({
   createProject: createProjectMock,
   updateProject: vi.fn(),
@@ -523,5 +532,155 @@ describe("what the page underneath seeds", () => {
     fireEvent.click(screen.getByRole("button", { name: "Plain" }));
     field = await screen.findByLabelText<HTMLInputElement>("Task title");
     expect(field.placeholder).toBe("What needs doing?");
+  });
+});
+
+describe("capturing an event", () => {
+  const createdEvent = () =>
+    (createBlockMock.mock.calls.at(-1)?.[0] ?? {}) as Record<string, unknown>;
+
+  async function openEvent(title: string) {
+    function Page() {
+      const quickAdd = useQuickAdd();
+      return (
+        <button type="button" onClick={() => quickAdd.open({ kind: "event" })}>
+          New event
+        </button>
+      );
+    }
+    render(
+      <QuickAddProvider projects={[SCHOOL]} today={TODAY} weekStart={1}>
+        <Page />
+      </QuickAddProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "New event" }));
+    const field = await screen.findByLabelText<HTMLInputElement>("Event title");
+    fireEvent.change(field, { target: { value: title } });
+    return field;
+  }
+
+  beforeEach(() => {
+    createBlockMock.mockResolvedValue({ ok: true, data: null } as ActionResult<unknown>);
+  });
+
+  it("makes an all-day event from a title and a day", async () => {
+    const field = await openEvent("Chem test oct 3");
+
+    expect(screen.getByText("Oct 3, 2026 · All day")).toBeTruthy();
+    expect(screen.getByRole("switch", { name: "All day" }).getAttribute("aria-checked")).toBe(
+      "true",
+    );
+
+    await act(async () => {
+      fireEvent.keyDown(field, { key: "Enter" });
+    });
+
+    expect(createdEvent()).toMatchObject({
+      kind: "event",
+      title: "Chem test",
+      date: "2026-10-03",
+      startMinutes: 0,
+      endMinutes: 1440,
+      allDay: true,
+      recurrence: null,
+    });
+    expect(createTaskMock).not.toHaveBeenCalled();
+    expect(successToast).toHaveBeenCalledWith('Added "Chem test"', expect.anything());
+  });
+
+  it("reads a clock time and a length, and lands on today when no day is written", async () => {
+    const field = await openEvent("Office hours 2-3:30pm");
+    expect(screen.getByText("Sep 7, 2026 · 14:00 – 15:30 · 1h 30m")).toBeTruthy();
+
+    fireEvent.change(field, { target: { value: "Office hours at 2pm 2h" } });
+    expect(screen.getByText("Sep 7, 2026 · 14:00 – 16:00 · 2h")).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.keyDown(field, { key: "Enter" });
+    });
+    expect(createdEvent()).toMatchObject({
+      title: "Office hours",
+      date: "2026-09-07",
+      startMinutes: 840,
+      endMinutes: 960,
+      allDay: false,
+    });
+  });
+
+  it("gives a start alone an hour", async () => {
+    const field = await openEvent("Chem test fri 9am");
+    await act(async () => {
+      fireEvent.keyDown(field, { key: "Enter" });
+    });
+    expect(createdEvent()).toMatchObject({
+      date: "2026-09-11",
+      startMinutes: 540,
+      endMinutes: 600,
+      allDay: false,
+    });
+  });
+
+  it("hands the clock to its controls, and the words back to the title", async () => {
+    const field = await openEvent("Chem test 9am");
+    expect(screen.getByLabelText<HTMLInputElement>("Start").value).toBe("09:00");
+
+    fireEvent.change(screen.getByLabelText("End"), { target: { value: "11:30" } });
+    await waitFor(() => expect(field.value).toBe("Chem test 9am"));
+    expect(screen.queryByRole("group", { name: "Understood from the title" })).toBeNull();
+    expect(screen.getByText("Sep 7, 2026 · 09:00 – 11:30 · 2h 30m")).toBeTruthy();
+
+    // Switching back to all day takes the field over again.
+    fireEvent.click(screen.getByRole("switch", { name: "All day" }));
+    expect(screen.queryByLabelText("Start")).toBeNull();
+    expect(screen.getByText("Sep 7, 2026 · All day")).toBeTruthy();
+  });
+
+  it("switches from a task mid-line, re-reading the title as an event", async () => {
+    const field = await openAndType(renderShellWithProjects(), "Chem test oct 3 9am");
+    // On a task, "9am" is title text, and as the last word it ends the scan
+    // before the date: nothing is read, nothing is lost.
+    expect(field.value).toBe("Chem test oct 3 9am");
+    expect(screen.queryByRole("group", { name: "Understood from the title" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("radio", { name: "Event" }));
+    expect(screen.getByLabelText("Event title")).toBe(field);
+    expect(screen.getByRole("group", { name: "Understood from the title" }).textContent).toContain(
+      "09:00",
+    );
+    expect(screen.getByRole("button", { name: "Add event" })).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.keyDown(field, { key: "Enter" });
+    });
+    expect(createdEvent()).toMatchObject({ title: "Chem test", date: "2026-10-03" });
+    expect(createTaskMock).not.toHaveBeenCalled();
+  });
+
+  it("never reads a time on a task, and files 'due fri' as a deadline", async () => {
+    const field = await openAndType(renderShellWithProjects(), "Problem set 4 due fri");
+    await act(async () => {
+      fireEvent.keyDown(field, { key: "Enter" });
+    });
+    expect(created()).toMatchObject({ title: "Problem set 4", dueDate: "2026-09-11" });
+    expect(createBlockMock).not.toHaveBeenCalled();
+  });
+
+  it("puts a failure inside the dialog with a Retry that keeps the id", async () => {
+    createBlockMock.mockResolvedValueOnce({
+      ok: false,
+      error: { code: "unavailable", message: "Could not save." },
+    } as ActionResult<unknown>);
+    const field = await openEvent("Chem test oct 3");
+    await act(async () => {
+      fireEvent.keyDown(field, { key: "Enter" });
+    });
+    expect(failureShown()).toContain("Could not save.");
+
+    await act(async () => {
+      retryInline();
+    });
+    const ids = createBlockMock.mock.calls.map(([input]) => (input as { id: string }).id);
+    expect(ids).toHaveLength(2);
+    expect(ids[0]).toBe(ids[1]);
   });
 });

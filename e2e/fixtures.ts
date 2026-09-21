@@ -88,6 +88,8 @@ export interface LocalDay {
   iso: string;
   /** `Wednesday, September 9, 2026` — the `long` style of `formatLocalDate`. */
   long: string;
+  /** `Sep 9, 2026` — the `medium` style, what the date picker's trigger shows. */
+  medium: string;
   /** 0 = Sunday … 6 = Saturday. */
   weekday: number;
 }
@@ -109,6 +111,12 @@ export function localDay(timeZone: string, offsetDays = 0): LocalDay {
       timeZone: "UTC",
       weekday: "long",
       month: "long",
+      day: "numeric",
+      year: "numeric",
+    }).format(date),
+    medium: new Intl.DateTimeFormat("en-US", {
+      timeZone: "UTC",
+      month: "short",
       day: "numeric",
       year: "numeric",
     }).format(date),

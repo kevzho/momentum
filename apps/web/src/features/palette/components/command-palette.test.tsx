@@ -30,6 +30,9 @@ vi.mock("@/features/tasks/actions", () => ({
   createTask: createTaskMock,
 }));
 
+// Quick Add creates events too; the action is server-only.
+vi.mock("@/features/calendar/actions", () => ({ createBlock: vi.fn() }));
+
 // QuickAddProvider now reaches the project actions (server-only) through useProjectManager.
 vi.mock("@/features/projects/actions", () => ({
   createProject: vi.fn(),
@@ -252,7 +255,7 @@ describe("the commands themselves", () => {
     await waitFor(() => expect(successToast).toHaveBeenCalledWith("Completed “Buy milk”"));
   });
 
-  it("carries the intent to the calendar for a new event", async () => {
+  it("opens Quick Add on an event, from any route, rather than navigating", async () => {
     renderShell();
     await openWithShortcut();
 
@@ -260,7 +263,10 @@ describe("the commands themselves", () => {
     await waitFor(() => expect(options()[0]).toContain("Add event"));
     fireEvent.keyDown(paletteInput(), { key: "Enter" });
 
-    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/calendar?new=event"));
+    const field = await screen.findByLabelText("Event title");
+    expect(pushMock).not.toHaveBeenCalled();
+    await waitFor(() => expect(document.activeElement).toBe(field));
+    expect(screen.getByRole("radio", { name: "Event" }).getAttribute("aria-checked")).toBe("true");
   });
 
   it("returns to the root list from a picker without closing", async () => {
@@ -287,6 +293,10 @@ describe("the commands themselves", () => {
     type("add event");
     await waitFor(() => expect(options()[0]).toContain("Add event"));
     fireEvent.keyDown(paletteInput(), { key: "Enter" });
+
+    // The command opened Quick Add; Escape closes it so the chord can open the palette again.
+    const field = await screen.findByLabelText("Event title");
+    fireEvent.keyDown(field, { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
 
     await openWithShortcut();

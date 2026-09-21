@@ -1,11 +1,11 @@
 import { CalendarPlusIcon } from "lucide-react";
 
-import { NEW_EVENT_HREF } from "@/features/calendar/navigation";
 import { defineCommands } from "@/features/palette/types";
 
 /**
- * Navigates rather than opening the editor here: the editor needs the week's
- * items, grid spec and snap setting, which only the calendar page resolves.
+ * Opens Quick Add on an event, the same two interactions as a task: a title
+ * with a day and a time written into it, from any route. The calendar's own
+ * editor (colour, description, a repeat rule) is a click on the block after.
  */
 export const calendarCommands = defineCommands("calendar", [
   {
@@ -13,7 +13,7 @@ export const calendarCommands = defineCommands("calendar", [
     group: "create",
     label: "Add event",
     icon: CalendarPlusIcon,
-    keywords: ["new", "meeting", "appointment", "block"],
-    run: (context) => context.navigate(NEW_EVENT_HREF),
+    keywords: ["new", "meeting", "appointment", "block", "exam", "test", "class"],
+    run: (context) => context.quickAdd({ kind: "event" }),
   },
 ]);

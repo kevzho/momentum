@@ -65,6 +65,8 @@ vi.mock("@/features/tasks/actions", () => ({
   updateWorkBlock: vi.fn(),
   removeWorkBlock: vi.fn(),
 }));
+// Quick Add creates events too; the calendar action is server-only.
+vi.mock("@/features/calendar/actions", () => ({ createBlock: vi.fn() }));
 
 const { TasksView } = await import("@/features/tasks/components/tasks-view");
 const { AnnouncerProvider } = await import("@momentum/ui/components/announcer");

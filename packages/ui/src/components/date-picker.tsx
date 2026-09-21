@@ -4,11 +4,13 @@ import * as React from "react";
 import { CalendarIcon, XIcon } from "lucide-react";
 import { cn } from "cn";
 
+import { parseDatePhrase } from "@momentum/core/parser";
 import { addDays, formatLocalDate, isLocalDate, localDate } from "@momentum/core/time";
 import type { LocalDate, Weekday } from "@momentum/core/types";
 
 import { Button } from "@momentum/ui/components/button";
 import { Calendar } from "@momentum/ui/components/calendar";
+import { Input } from "@momentum/ui/components/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@momentum/ui/components/popover";
 import { Separator } from "@momentum/ui/components/separator";
 
@@ -17,6 +19,10 @@ import { Separator } from "@momentum/ui/components/separator";
  * browser-local midnight `Date`s and hands them back through `onSelect`, so
  * `toDate`/`fromDate` both use the browser's local calendar fields and the
  * offset cancels. `today` is passed in; this never asks the browser what day it is.
+ *
+ * The popover opens on a text field that takes a date the way Quick Add's
+ * title does ("fri", "oct 3", "9/25", "next week"), so a keyboard user sets a
+ * date in one line and Enter; the shortcuts and the grid are the pointer path.
  */
 function DatePicker({
   value,
@@ -25,6 +31,7 @@ function DatePicker({
   weekStart = 1,
   id,
   placeholder = "No due date",
+  clearLabel = "Clear due date",
   className,
   disabled,
   "aria-label": ariaLabel = "Due date",
@@ -36,19 +43,42 @@ function DatePicker({
   weekStart?: Weekday;
   id?: string;
   placeholder?: string;
+  /** The shortcut that emits null; worded for what null means to the caller. */
+  clearLabel?: string;
   className?: string;
   disabled?: boolean;
   "aria-label"?: string;
 }) {
   const [open, setOpen] = React.useState(false);
+  const [typed, setTyped] = React.useState("");
+  const [unreadable, setUnreadable] = React.useState(false);
+  const hintId = React.useId();
 
   function choose(next: LocalDate | null): void {
     onValueChange(next);
     setOpen(false);
   }
 
+  function commitTyped(): void {
+    const parsed = parseDatePhrase(typed, today);
+    if (parsed === null) {
+      setUnreadable(true);
+      return;
+    }
+    choose(parsed);
+  }
+
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (next) {
+          setTyped("");
+          setUnreadable(false);
+        }
+      }}
+    >
       <PopoverTrigger asChild>
         <Button
           id={id}
@@ -70,12 +100,39 @@ function DatePicker({
       </PopoverTrigger>
 
       <PopoverContent align="start" className="w-auto p-0">
+        <div className="flex flex-col gap-1 p-1.5">
+          <Input
+            value={typed}
+            placeholder="fri · oct 3 · 9/25"
+            aria-label="Type a date"
+            aria-invalid={unreadable || undefined}
+            aria-describedby={unreadable ? hintId : undefined}
+            className="h-8 text-base md:text-sm"
+            onChange={(event) => {
+              setTyped(event.target.value);
+              setUnreadable(false);
+            }}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter") return;
+              event.preventDefault();
+              commitTyped();
+            }}
+          />
+          {unreadable ? (
+            <p id={hintId} role="alert" className="px-1 text-xs text-destructive">
+              Not a date. Try “fri”, “oct 3” or “9/25”.
+            </p>
+          ) : null}
+        </div>
+
+        <Separator />
+
         <div className="flex flex-col gap-0.5 p-1.5">
           <Shortcut label="Today" onSelect={() => choose(today)} />
           <Shortcut label="Tomorrow" onSelect={() => choose(addDays(today, 1))} />
           <Shortcut label="Next week" onSelect={() => choose(addDays(today, 7))} />
           {value === null ? null : (
-            <Shortcut label="Clear due date" icon={XIcon} onSelect={() => choose(null)} />
+            <Shortcut label={clearLabel} icon={XIcon} onSelect={() => choose(null)} />
           )}
         </div>
 
@@ -83,7 +140,6 @@ function DatePicker({
 
         <Calendar
           mode="single"
-          autoFocus
           weekStartsOn={weekStart}
           selected={value === null ? undefined : toDate(value)}
           defaultMonth={toDate(value ?? today)}

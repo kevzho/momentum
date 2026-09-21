@@ -38,6 +38,7 @@ import { Input } from "@momentum/ui/components/input";
 import { Label } from "@momentum/ui/components/label";
 import { ProjectDot } from "@momentum/ui/components/project-dot";
 import { SideSheet } from "@momentum/ui/components/side-sheet";
+import { Switch } from "@momentum/ui/components/switch";
 import { Textarea } from "@momentum/ui/components/textarea";
 import { ToggleGroup, ToggleGroupItem } from "@momentum/ui/components/toggle-group";
 
@@ -107,6 +108,19 @@ function isRuleEditable(draft: BlockDraft): boolean {
   if (draft.mode !== "edit") return true;
   return draft.item.kind === "event" && draft.item.occurrence === null;
 }
+
+// "All day" is a plain event's to set: a work block reserves a span of time
+// by definition, a habit block is generated, and a series and its
+// occurrences keep the clock time the rule was defined with.
+function isAllDayEditable(draft: BlockDraft): boolean {
+  if (draft.mode === "create") return true;
+  if (draft.mode === "series") return false;
+  return draft.item.kind === "event" && draft.item.occurrence === null;
+}
+
+/** Where the clock lands when an all-day event is given a time again. */
+const DEFAULT_TIMED_START: Minutes = 9 * 60;
+const DEFAULT_TIMED_END: Minutes = 10 * 60;
 
 /** The rule as the editor holds it: the series' own, minus the timezone the server fixed. */
 function ruleOf(series: EventBlock | null): RecurrenceRule | null {
@@ -287,11 +301,23 @@ function BlockEditorForm({
     item?.description ?? seriesRow?.description ?? "",
   );
   const [date, setDate] = React.useState<string>(draft.span.date);
+  const allDayEditable = isAllDayEditable(draft);
+  const [allDay, setAllDay] = React.useState(allDayEditable && (item?.allDay ?? false));
   // The end is held as a clock reading: an end past 1440 fits no
   // `<input type="time">`, so `resolveEnd` reads the day off the two fields.
   const [startMinutes, setStartMinutes] = React.useState<Minutes>(draft.span.startMinutes);
   const [endClock, setEndClock] = React.useState<Minutes>(draft.span.endMinutes % MINUTES_PER_DAY);
   const endMinutes = resolveEnd(startMinutes, endClock);
+
+  // Turning "All day" off on an event that had no clock time gives it one
+  // rather than the midnight-to-midnight span it was stored as.
+  function setAllDayAndTimes(next: boolean) {
+    setAllDay(next);
+    if (!next && startMinutes === 0 && endClock === 0) {
+      setStartMinutes(DEFAULT_TIMED_START);
+      setEndClock(DEFAULT_TIMED_END);
+    }
+  }
   // `ownColor`, not `color`: preselecting the resolved colour would write an
   // explicit value onto a block that was following its project.
   const [color, setColor] = React.useState<ProjectColor | null>(
@@ -338,8 +364,10 @@ function BlockEditorForm({
       title: titleEditable ? trimmedTitle : (item?.title ?? trimmedTitle),
       description: trimmedDescription === "" ? null : trimmedDescription,
       date: localDate(date),
-      startMinutes,
-      endMinutes,
+      // Stored as the seed stores one: local midnight to the next, flagged.
+      startMinutes: allDay ? 0 : startMinutes,
+      endMinutes: allDay ? MINUTES_PER_DAY : endMinutes,
+      allDay,
       color,
       recurrence,
     });
@@ -408,38 +436,61 @@ function BlockEditorForm({
           ) : null}
         </div>
 
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor={`${ids}-start`}>Start</Label>
-          <Input
-            id={`${ids}-start`}
-            type="time"
-            value={formatMinutesOfDay(startMinutes)}
-            onChange={(event) => {
-              const minutes = minutesOfLocalTimeValue(event.target.value);
-              if (minutes !== null) setStartMinutes(minutes);
-            }}
-          />
-        </div>
+        {allDayEditable ? (
+          <div className="col-span-2 flex items-center gap-2">
+            <Switch
+              id={`${ids}-all-day`}
+              size="sm"
+              checked={allDay}
+              onCheckedChange={setAllDayAndTimes}
+            />
+            <Label htmlFor={`${ids}-all-day`}>All day</Label>
+          </div>
+        ) : null}
 
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor={`${ids}-end`}>End</Label>
-          <Input
-            id={`${ids}-end`}
-            type="time"
-            value={formatMinutesOfDay(endMinutes)}
-            onChange={(event) => {
-              const minutes = minutesOfLocalTimeValue(event.target.value);
-              if (minutes !== null) setEndClock(minutes);
-            }}
-          />
-        </div>
+        {allDay ? null : (
+          <>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor={`${ids}-start`}>Start</Label>
+              <Input
+                id={`${ids}-start`}
+                type="time"
+                value={formatMinutesOfDay(startMinutes)}
+                onChange={(event) => {
+                  const minutes = minutesOfLocalTimeValue(event.target.value);
+                  if (minutes !== null) setStartMinutes(minutes);
+                }}
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor={`${ids}-end`}>End</Label>
+              <Input
+                id={`${ids}-end`}
+                type="time"
+                value={formatMinutesOfDay(endMinutes)}
+                onChange={(event) => {
+                  const minutes = minutesOfLocalTimeValue(event.target.value);
+                  if (minutes !== null) setEndClock(minutes);
+                }}
+              />
+            </div>
+          </>
+        )}
       </div>
 
       {valid ? (
         <p data-slot="numeric" className="text-xs text-muted-foreground">
-          {formatLocalDate(localDate(date), "medium")} · {formatMinutesOfDay(startMinutes)} –{" "}
-          {formatMinutesOfDay(endMinutes)}
-          {crossesMidnight ? " next day" : ""} · {formatDuration(endMinutes - startMinutes)}
+          {formatLocalDate(localDate(date), "medium")}
+          {allDay ? (
+            " · All day"
+          ) : (
+            <>
+              {" "}
+              · {formatMinutesOfDay(startMinutes)} – {formatMinutesOfDay(endMinutes)}
+              {crossesMidnight ? " next day" : ""} · {formatDuration(endMinutes - startMinutes)}
+            </>
+          )}
           {seriesRow === null ? "" : " · first occurrence"}
         </p>
       ) : null}

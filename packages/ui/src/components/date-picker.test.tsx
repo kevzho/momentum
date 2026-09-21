@@ -73,4 +73,49 @@ describe.each(ZONES)("DatePicker in %s", (zone) => {
 
     expect(chosen).toEqual([localDate("2026-09-08")]);
   });
+
+  it("takes a typed date on Enter, resolved from the caller's today", () => {
+    const chosen: (LocalDate | null)[] = [];
+    render(
+      <DatePicker
+        value={null}
+        onValueChange={(next) => chosen.push(next)}
+        today={localDate("2026-09-07")}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Due date" }));
+    const field = screen.getByRole("textbox", { name: "Type a date" });
+    fireEvent.change(field, { target: { value: "oct 3" } });
+    fireEvent.keyDown(field, { key: "Enter" });
+
+    expect(chosen).toEqual([localDate("2026-10-03")]);
+    expect(screen.queryByRole("textbox", { name: "Type a date" })).toBeNull();
+  });
+
+  it("says when the typed text is not a date, and emits nothing", () => {
+    const chosen: (LocalDate | null)[] = [];
+    render(
+      <DatePicker
+        value={null}
+        onValueChange={(next) => chosen.push(next)}
+        today={localDate("2026-09-07")}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Due date" }));
+    const field = screen.getByRole("textbox", { name: "Type a date" });
+    fireEvent.change(field, { target: { value: "soonish" } });
+    fireEvent.keyDown(field, { key: "Enter" });
+
+    expect(chosen).toEqual([]);
+    expect(screen.getByRole("alert").textContent).toContain("Not a date");
+    expect(field.getAttribute("aria-invalid")).toBe("true");
+
+    // Typing again clears the message; a good date then commits.
+    fireEvent.change(field, { target: { value: "fri" } });
+    expect(screen.queryByRole("alert")).toBeNull();
+    fireEvent.keyDown(field, { key: "Enter" });
+    expect(chosen).toEqual([localDate("2026-09-11")]);
+  });
 });

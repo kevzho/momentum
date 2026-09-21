@@ -155,8 +155,72 @@ describe("BlockEditor", () => {
       date: "2026-09-08",
       startMinutes: 960,
       endMinutes: 1050,
+      allDay: false,
       color: "amber",
       recurrence: null,
+    });
+  });
+
+  describe("all day", () => {
+    it("hides the clock and submits the whole day, flagged, once switched on", () => {
+      const { onSubmit } = renderEditor();
+
+      fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Chem test" } });
+      fireEvent.click(screen.getByRole("switch", { name: "All day" }));
+
+      expect(screen.queryByLabelText("Start")).toBeNull();
+      expect(screen.queryByLabelText("End")).toBeNull();
+      expect(screen.getByText(/All day/u, { selector: "p" }).textContent).toBe(
+        "Sep 8, 2026 · All day",
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+      expect(onSubmit).toHaveBeenCalledWith(
+        CREATE_DRAFT,
+        expect.objectContaining({
+          date: "2026-09-08",
+          startMinutes: 0,
+          endMinutes: 1440,
+          allDay: true,
+        }),
+      );
+    });
+
+    it("opens an all-day event switched on, and gives it a morning hour when switched off", () => {
+      const item: CalendarItem = {
+        ...workItem({ id: "event-1", blockId: "event-1", kind: "event", title: "Chem test" }),
+        work: null,
+        allDay: true,
+        // Local midnight to the next, as the strip's items are stored.
+        startAt: instant("2026-09-08T04:00:00.000Z"),
+        endAt: instant("2026-09-09T04:00:00.000Z"),
+      };
+      const { onSubmit } = renderEditor({
+        draft: {
+          mode: "edit",
+          item,
+          span: { date: localDate("2026-09-08"), startMinutes: 0, endMinutes: 1440 },
+        },
+      });
+
+      const toggle = screen.getByRole("switch", { name: "All day" });
+      expect(toggle.getAttribute("aria-checked")).toBe("true");
+      expect(screen.queryByLabelText("Start")).toBeNull();
+
+      fireEvent.click(toggle);
+      expect(screen.getByLabelText<HTMLInputElement>("Start").value).toBe("09:00");
+      expect(screen.getByLabelText<HTMLInputElement>("End").value).toBe("10:00");
+
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+      expect(onSubmit).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ startMinutes: 540, endMinutes: 600, allDay: false }),
+      );
+    });
+
+    it("is not offered on a work block or an occurrence, which keep their times", () => {
+      renderEditor({ draft: { mode: "edit", item: workItem(), span: SPAN } });
+      expect(screen.queryByRole("switch", { name: "All day" })).toBeNull();
     });
   });
 

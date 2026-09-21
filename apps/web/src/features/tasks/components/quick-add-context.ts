@@ -15,8 +15,14 @@ export interface QuickAddContextValue {
   setDefaults: (defaults: QuickAddDefaults) => void;
 }
 
+/** What Quick Add captures: a task with a deadline, or an event on a day. */
+export type QuickAddKind = "task" | "event";
+
 export interface QuickAddDefaults {
+  /** Opens on that capture; the user can switch. Defaults to a task. */
+  kind?: QuickAddKind;
   projectId?: Uuid | null;
+  /** For an event, the day it is on. */
   dueDate?: LocalDate | null;
   /** Replaces the title field's placeholder for this opening — an example, never a value. */
   placeholder?: string;

@@ -217,9 +217,16 @@ export function CalendarView({
     [timezone],
   );
 
+  // `allDay` is sent only by the editor; a drag or a keyboard move never
+  // changes it, and an occurrence has no flag of its own.
   const reschedule = React.useCallback(
-    (item: CalendarItem, span: DaySpan, announcement?: string) => {
-      const patch: CalendarPatch = { kind: "reschedule", id: item.id, span };
+    (item: CalendarItem, span: DaySpan, announcement?: string, allDay?: boolean) => {
+      const patch: CalendarPatch = {
+        kind: "reschedule",
+        id: item.id,
+        span,
+        ...(allDay === undefined ? {} : { allDay }),
+      };
       const occurrence = item.occurrence;
       const blockId = item.blockId;
 
@@ -245,7 +252,12 @@ export function CalendarView({
               itemId: item.id,
               taskId: null,
               announcement,
-              run: () => rescheduleBlock({ id: blockId, ...span }),
+              run: () =>
+                rescheduleBlock({
+                  id: blockId,
+                  ...span,
+                  ...(allDay === undefined ? {} : { allDay }),
+                }),
             },
       );
     },
@@ -279,6 +291,7 @@ export function CalendarView({
             description: item.description,
             color: item.ownColor,
             ...span,
+            allDay: item.allDay,
           }),
       });
     },
@@ -442,6 +455,7 @@ export function CalendarView({
               description: values.description,
               color: values.color,
               span,
+              allDay: values.allDay,
               timezone,
             }),
           },
@@ -455,6 +469,7 @@ export function CalendarView({
               description: values.description,
               color: values.color,
               ...span,
+              allDay: values.allDay,
               recurrence: values.recurrence,
             }),
           announcement:
@@ -495,7 +510,8 @@ export function CalendarView({
       const item = current.item;
       const blockId = item.blockId;
       setDraft(null);
-      const moved = !sameSpan(spanOf(item, timezone), span);
+      const allDayChanged = item.kind === "event" && item.allDay !== values.allDay;
+      const moved = !sameSpan(spanOf(item, timezone), span) || allDayChanged;
 
       // An occurrence has times of its own and nothing else; `blockId` is null
       // until overridden, so `updateBlock` is never the right path for one.
@@ -530,7 +546,7 @@ export function CalendarView({
           }),
       });
 
-      if (moved) reschedule(item, span);
+      if (moved) reschedule(item, span, undefined, allDayChanged ? values.allDay : undefined);
     },
     [mutate, reschedule, timezone],
   );

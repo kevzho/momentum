@@ -43,7 +43,8 @@ export async function createBlock(input: unknown): Promise<ActionResult<Calendar
   const parsed = createBlockInput.safeParse(input);
   if (!parsed.success) return validationError(parsed.error.issues);
 
-  const { id, title, description, color, date, startMinutes, endMinutes, recurrence } = parsed.data;
+  const { id, title, description, color, date, startMinutes, endMinutes, allDay, recurrence } =
+    parsed.data;
   const { supabase, userId, profile } = await requireSession();
   const span = spanInstants(date, startMinutes, endMinutes, profile.timezone);
 
@@ -56,6 +57,7 @@ export async function createBlock(input: unknown): Promise<ActionResult<Calendar
       description,
       color,
       ...span,
+      allDay,
       // The schedule is defined in the profile's zone from now on (Domain Rule 16).
       ...(recurrence === null ? {} : { recurrence: { ...recurrence, timezone: profile.timezone } }),
     }),
@@ -93,11 +95,14 @@ export async function rescheduleBlock(input: unknown): Promise<ActionResult<Cale
   const parsed = rescheduleBlockInput.safeParse(input);
   if (!parsed.success) return validationError(parsed.error.issues);
 
-  const { id, date, startMinutes, endMinutes } = parsed.data;
+  const { id, date, startMinutes, endMinutes, allDay } = parsed.data;
   const { supabase, profile } = await requireSession();
 
   return attempt(() =>
-    blocks.update(supabase, id, spanInstants(date, startMinutes, endMinutes, profile.timezone)),
+    blocks.update(supabase, id, {
+      ...spanInstants(date, startMinutes, endMinutes, profile.timezone),
+      ...(allDay === undefined ? {} : { allDay }),
+    }),
   );
 }
 

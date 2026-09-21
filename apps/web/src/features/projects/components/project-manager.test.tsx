@@ -25,6 +25,8 @@ vi.mock("@momentum/ui/components/toast", () => ({
 }));
 
 vi.mock("@/features/tasks/actions", () => ({ createTask: vi.fn() }));
+// Quick Add creates events too; the calendar action is server-only.
+vi.mock("@/features/calendar/actions", () => ({ createBlock: vi.fn() }));
 vi.mock("@/features/projects/actions", () => ({
   createProject: createProjectMock,
   updateProject: updateProjectMock,

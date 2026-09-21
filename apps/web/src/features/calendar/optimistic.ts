@@ -14,7 +14,7 @@ import type { CalendarItem, DaySpan, PlanTask } from "@/features/calendar/types"
 
 export type CalendarPatch =
   | { kind: "create"; item: CalendarItem }
-  | { kind: "reschedule"; id: string; span: DaySpan }
+  | { kind: "reschedule"; id: string; span: DaySpan; allDay?: boolean }
   | {
       kind: "content";
       id: string;
@@ -44,7 +44,13 @@ export function applyPatch(
 
     case "reschedule":
       return items.map((item) =>
-        item.id === patch.id ? { ...item, ...instantsFor(patch.span, timezone) } : item,
+        item.id === patch.id
+          ? {
+              ...item,
+              ...instantsFor(patch.span, timezone),
+              ...(patch.allDay === undefined ? {} : { allDay: patch.allDay }),
+            }
+          : item,
       );
 
     case "content":
@@ -119,6 +125,7 @@ export function optimisticEvent(input: {
   description: string | null;
   color: ProjectColor | null;
   span: DaySpan;
+  allDay?: boolean;
   timezone: IanaTimeZone;
 }): CalendarItem {
   return {
@@ -128,7 +135,7 @@ export function optimisticEvent(input: {
     title: input.title,
     description: input.description,
     ...instantsFor(input.span, input.timezone),
-    allDay: false,
+    allDay: input.allDay ?? false,
     ownColor: input.color,
     color: input.color ?? KIND_DEFAULT_COLOR.event,
     completedAt: null,
