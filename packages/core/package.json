@@ -15,7 +15,8 @@
     "./recurrence": "./src/recurrence/index.ts",
     "./scheduling": "./src/scheduling/index.ts",
     "./analytics": "./src/analytics/index.ts",
-    "./parser": "./src/parser/index.ts"
+    "./parser": "./src/parser/index.ts",
+    "./courses": "./src/courses/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

@@ -145,6 +145,21 @@ begin
     (p_home,   u, 'Home',          null,                                          'amber',  null, now() - interval '8 weeks'),
     (p_old,    u, 'Internship search', 'Closed out in the spring.',              'slate',  now() - interval '2 weeks', now() - interval '7 weeks');
 
+  -- A course over the Coursework project: a term around this week, two weeks written up.
+  insert into public.courses (user_id, project_id, code, instructor, location, syllabus, term_start, term_end, created_at)
+  values (u, p_course, 'STAT 201', 'Dr. Okafor', 'Room 204',
+    E'Grading: problem sets 40%, midterm 25%, final 35%.\nOffice hours Tue 14:00\u201315:00.',
+    monday - 21, monday + 76, now() - interval '3 weeks');
+
+  insert into public.course_weeks (user_id, course_id, week_number, topic, materials, created_at)
+  select u, c.id, w.n, w.topic, w.materials, now() - interval '3 weeks'
+  from public.courses c
+  cross join (values
+    (1, 'Descriptive statistics', 'Chapter 1; lecture slides 1\u20132.'),
+    (4, 'Sampling distributions', 'Chapter 4; problem set 3 walkthrough video.')
+  ) as w(n, topic, materials)
+  where c.project_id = p_course;
+
   -- Open tasks: every priority, with and without due dates and estimates.
   insert into public.tasks
     (id, user_id, project_id, title, description, priority, estimated_minutes, due_date, sort_order, created_at)
@@ -537,6 +552,14 @@ begin
 
   insert into public.projects (id, user_id, name, color, created_at)
   values (proj, u, 'Recording', 'cyan', now() - interval '3 weeks');
+
+  -- The sparse account has a course too, so the RLS sweeps have a row per table on both sides.
+  insert into public.courses (user_id, project_id, code, term_start, term_end, created_at)
+  values (u, proj, 'MUS 110', sunday - 14, sunday + 70, now() - interval '3 weeks');
+
+  insert into public.course_weeks (user_id, course_id, week_number, topic, created_at)
+  select u, c.id, 1, 'Signal chain', now() - interval '3 weeks'
+  from public.courses c where c.project_id = proj;
 
   insert into public.tasks
     (id, user_id, project_id, title, priority, estimated_minutes, due_date, sort_order, created_at)

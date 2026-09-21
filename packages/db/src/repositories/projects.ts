@@ -79,6 +79,12 @@ export async function update(
  * Archiving hides the project from every list and touches nothing else: its
  * tasks keep their `project_id`, and blocks keep inheriting its colour.
  */
+/** Deletes the project. Its tasks fall back to the inbox (`project_id` set null by the FK). */
+export async function remove(client: MomentumClient, id: Uuid): Promise<void> {
+  const { error } = await client.from("projects").delete().eq("id", id);
+  if (error) throw error;
+}
+
 export async function setArchived(
   client: MomentumClient,
   id: Uuid,

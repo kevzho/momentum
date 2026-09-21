@@ -10,6 +10,8 @@ import type { MomentumClient, Row } from "@momentum/db";
 export interface ExportTables {
   profiles: readonly Row<"profiles">[];
   projects: readonly Row<"projects">[];
+  courses: readonly Row<"courses">[];
+  course_weeks: readonly Row<"course_weeks">[];
   tasks: readonly Row<"tasks">[];
   calendar_blocks: readonly Row<"calendar_blocks">[];
   habits: readonly Row<"habits">[];
@@ -29,6 +31,8 @@ export async function exportTablesFor(client: MomentumClient): Promise<ExportTab
   const [
     profiles,
     projects,
+    courses,
+    course_weeks,
     tasks,
     calendar_blocks,
     habits,
@@ -44,6 +48,8 @@ export async function exportTablesFor(client: MomentumClient): Promise<ExportTab
   ] = await Promise.all([
     rows("profiles", client.from("profiles").select("*").order("created_at")),
     rows("projects", client.from("projects").select("*").order("created_at")),
+    rows("courses", client.from("courses").select("*").order("created_at")),
+    rows("course_weeks", client.from("course_weeks").select("*").order("created_at")),
     rows("tasks", client.from("tasks").select("*").order("created_at")),
     rows("calendar_blocks", client.from("calendar_blocks").select("*").order("created_at")),
     rows("habits", client.from("habits").select("*").order("created_at")),
@@ -61,6 +67,8 @@ export async function exportTablesFor(client: MomentumClient): Promise<ExportTab
   return {
     profiles,
     projects,
+    courses,
+    course_weeks,
     tasks,
     calendar_blocks,
     habits,

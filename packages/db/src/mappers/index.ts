@@ -7,3 +7,4 @@ export * from "./habit";
 export * from "./focus";
 export * from "./gamification";
 export * from "./review";
+export * from "./course";

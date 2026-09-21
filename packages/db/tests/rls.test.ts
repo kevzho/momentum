@@ -24,6 +24,8 @@ const describeDb = DB_TESTS_ENABLED ? describe : describe.skip;
 const USER_OWNED_TABLES = [
   "profiles",
   "projects",
+  "courses",
+  "course_weeks",
   "tasks",
   "calendar_blocks",
   "habits",

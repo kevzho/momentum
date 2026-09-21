@@ -8,6 +8,7 @@ describe("navigation registry", () => {
       "/today",
       "/calendar",
       "/tasks",
+      "/courses",
       "/habits",
       "/focus",
       "/progress",

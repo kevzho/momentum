@@ -180,6 +180,111 @@ export type Database = {
         };
         Relationships: [];
       };
+      course_weeks: {
+        Row: {
+          course_id: string;
+          created_at: string;
+          id: string;
+          materials: string | null;
+          topic: string | null;
+          updated_at: string;
+          user_id: string;
+          week_number: number;
+        };
+        Insert: {
+          course_id: string;
+          created_at?: string;
+          id?: string;
+          materials?: string | null;
+          topic?: string | null;
+          updated_at?: string;
+          user_id: string;
+          week_number: number;
+        };
+        Update: {
+          course_id?: string;
+          created_at?: string;
+          id?: string;
+          materials?: string | null;
+          topic?: string | null;
+          updated_at?: string;
+          user_id?: string;
+          week_number?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "course_weeks_course_id_fkey";
+            columns: ["course_id"];
+            isOneToOne: false;
+            referencedRelation: "courses";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "course_weeks_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      courses: {
+        Row: {
+          code: string | null;
+          created_at: string;
+          id: string;
+          instructor: string | null;
+          location: string | null;
+          project_id: string;
+          syllabus: string | null;
+          term_end: string;
+          term_start: string;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          code?: string | null;
+          created_at?: string;
+          id?: string;
+          instructor?: string | null;
+          location?: string | null;
+          project_id: string;
+          syllabus?: string | null;
+          term_end: string;
+          term_start: string;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          code?: string | null;
+          created_at?: string;
+          id?: string;
+          instructor?: string | null;
+          location?: string | null;
+          project_id?: string;
+          syllabus?: string | null;
+          term_end?: string;
+          term_start?: string;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "courses_project_id_fkey";
+            columns: ["project_id"];
+            isOneToOne: true;
+            referencedRelation: "projects";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "courses_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       focus_pauses: {
         Row: {
           id: string;

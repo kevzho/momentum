@@ -38,6 +38,8 @@ const INVALID = "22023";
 const USER_OWNED_TABLES = [
   "profiles",
   "projects",
+  "courses",
+  "course_weeks",
   "tasks",
   "calendar_blocks",
   "habits",

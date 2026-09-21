@@ -2,6 +2,7 @@ import type { Route } from "next";
 import {
   CalendarDaysIcon,
   ChartNoAxesColumnIcon,
+  GraduationCapIcon,
   ListTodoIcon,
   RepeatIcon,
   SettingsIcon,
@@ -25,6 +26,7 @@ export const PRIMARY_NAV: readonly NavItem[] = [
   { href: "/today", label: "Today", icon: SunriseIcon },
   { href: "/calendar", label: "Calendar", icon: CalendarDaysIcon },
   { href: "/tasks", label: "Tasks", icon: ListTodoIcon },
+  { href: "/courses", label: "Courses", icon: GraduationCapIcon },
   { href: "/habits", label: "Habits", icon: RepeatIcon },
   { href: "/focus", label: "Focus", icon: TimerIcon },
   { href: "/progress", label: "Progress", icon: TrophyIcon },

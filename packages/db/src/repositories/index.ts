@@ -6,3 +6,4 @@ export * as tasks from "./tasks";
 export * as projects from "./projects";
 export * as weeklyGoals from "./weekly-goals";
 export * as gamification from "./gamification";
+export * as courses from "./courses";
