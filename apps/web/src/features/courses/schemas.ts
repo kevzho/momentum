@@ -145,6 +145,36 @@ export const finishSyllabusUploadInput = z.object({
 
 export const removeSyllabusFileInput = z.object({ courseId: uuid });
 
+// ---- Course files ----------------------------------------------------------------
+
+/** Fifty megabytes, the bucket's own limit: large enough for a scanned textbook. */
+export const MAX_COURSE_FILE_BYTES = 50 * 1024 * 1024;
+
+const pdfName = z
+  .string()
+  .trim()
+  .min(1)
+  .max(255, "File names are at most 255 characters.")
+  .refine((value) => /\.pdf$/iu.test(value), "Course files are PDFs.");
+
+/** The file id is client-generated: it names the object, and a retry collides with itself. */
+export const beginCourseFileUploadInput = z.object({
+  courseId: uuid,
+  fileId: uuid,
+  fileName: pdfName,
+  size: z
+    .number()
+    .int()
+    .positive("The file is empty.")
+    .max(MAX_COURSE_FILE_BYTES, "A course file is at most 50 MB."),
+});
+
+export const finishCourseFileUploadInput = beginCourseFileUploadInput.extend({
+  sortOrder: z.number().finite().default(0),
+});
+
+export const removeCourseFileInput = z.object({ id: uuid });
+
 export type CreateCourseInput = z.infer<typeof createCourseInput>;
 export type CreateCourseItemInput = z.infer<typeof createCourseItemInput>;
 export type UpdateCourseInput = z.infer<typeof updateCourseInput>;

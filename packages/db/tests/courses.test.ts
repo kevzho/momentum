@@ -260,4 +260,65 @@ describeDb("courses", () => {
     const { data: left } = await admin.from("course_items").select("id").eq("id", item.id);
     expect(left).toEqual([]);
   });
+  it("keeps course files to the owner's folder and course, and drops them with the course", async () => {
+    const projectId = await mintProject(owner, ownerId);
+    const course = await courses.insert(owner, {
+      userId: ownerId,
+      projectId,
+      termStart: TERM_START,
+      termEnd: TERM_END,
+    });
+    courseIds.push(course.id);
+
+    const fileId = crypto.randomUUID();
+    const file = await courses.insertFile(owner, {
+      id: fileId,
+      userId: ownerId,
+      courseId: course.id,
+      path: `${ownerId}/${course.id}/${fileId}.pdf`,
+      fileName: "Textbook.pdf",
+      sizeBytes: 1024,
+      sortOrder: 1,
+    });
+    expect(await courses.listFilesFor(owner, course.id)).toEqual([file]);
+
+    // A path outside the course's own folder is refused by the check constraint.
+    const strayId = crypto.randomUUID();
+    const stray = await owner
+      .from("course_files")
+      .insert({
+        id: strayId,
+        user_id: ownerId,
+        course_id: course.id,
+        path: `${ownerId}/elsewhere/${strayId}.pdf`,
+        file_name: "x.pdf",
+        size_bytes: 1,
+      })
+      .select("id")
+      .maybeSingle();
+    expect(stray.error?.code).toBe("23514");
+
+    const plantedId = crypto.randomUUID();
+    const planted = await neighbour
+      .from("course_files")
+      .insert({
+        id: plantedId,
+        user_id: neighbourId,
+        course_id: course.id,
+        path: `${neighbourId}/${course.id}/${plantedId}.pdf`,
+        file_name: "planted.pdf",
+        size_bytes: 1,
+      })
+      .select("id")
+      .maybeSingle();
+    expect(planted.error?.code).toBe(DENIED);
+
+    const { data: seen } = await neighbour.from("course_files").select("id").eq("id", file.id);
+    expect(seen).toEqual([]);
+
+    await courses.remove(owner, course.id);
+    courseIds.splice(courseIds.indexOf(course.id), 1);
+    const { data: left } = await admin.from("course_files").select("id").eq("id", file.id);
+    expect(left).toEqual([]);
+  });
 });

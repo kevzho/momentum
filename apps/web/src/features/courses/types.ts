@@ -1,6 +1,7 @@
 import type { CourseStatus, CourseWeekSpan } from "@momentum/core/courses";
 import type {
   Course,
+  CourseFile,
   CourseItem,
   CourseItemKind,
   CourseWeek,
@@ -63,6 +64,8 @@ export interface CoursePageData {
   weekStart: Weekday;
   summary: CourseSummary;
   weeks: readonly CourseWeekView[];
+  /** PDFs attached beside the syllabus, in list order. */
+  files: readonly CourseFile[];
   /** Top-level tasks in the project with no due date, or due outside the term. */
   unplaced: readonly Task[];
 }

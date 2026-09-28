@@ -1,6 +1,7 @@
 import {
   COURSE_ITEM_KINDS,
   type Course,
+  type CourseFile,
   type CourseItem,
   type CourseItemKind,
   type CourseWeek,
@@ -54,5 +55,18 @@ export function rowToCourseItem(row: Row<"course_items">): CourseItem {
     sortOrder: row.sort_order,
     createdAt: toInstant(row.created_at),
     updatedAt: toInstant(row.updated_at),
+  };
+}
+
+export function rowToCourseFile(row: Row<"course_files">): CourseFile {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    courseId: row.course_id,
+    path: row.path,
+    fileName: row.file_name,
+    sizeBytes: row.size_bytes,
+    sortOrder: row.sort_order,
+    createdAt: toInstant(row.created_at),
   };
 }

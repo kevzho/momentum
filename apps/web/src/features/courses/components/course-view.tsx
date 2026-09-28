@@ -25,6 +25,7 @@ import {
   updateSyllabus,
 } from "@/features/courses/actions";
 import { CourseFormDialog } from "@/features/courses/components/course-form-dialog";
+import { CourseFilesPanel } from "@/features/courses/components/course-files-panel";
 import { AssignmentRow, CourseWeekRow } from "@/features/courses/components/course-week-row";
 import { DeleteCourseDialog } from "@/features/courses/components/delete-course-dialog";
 import { SyllabusPanel } from "@/features/courses/components/syllabus-panel";
@@ -198,6 +199,12 @@ export function CourseView({ data }: { data: CoursePageData }) {
             notes={syllabus.state}
             onNotes={(next) => syllabus.run(next)}
             onFileChanged={() => router.refresh()}
+          />
+
+          <CourseFilesPanel
+            courseId={course.id}
+            files={data.files}
+            onFilesChanged={() => router.refresh()}
           />
 
           {data.unplaced.length === 0 ? null : (

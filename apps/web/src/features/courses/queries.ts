@@ -59,10 +59,11 @@ export async function getCoursePage(id: Uuid): Promise<CoursePageData> {
   const course = await courses.findById(supabase, id);
   if (course === null) notFound();
 
-  const [project, weekRows, itemRows, taskRows] = await Promise.all([
+  const [project, weekRows, itemRows, fileRows, taskRows] = await Promise.all([
     projects.findById(supabase, course.projectId),
     courses.listWeeksFor(supabase, course.id),
     courses.listItemsFor(supabase, course.id),
+    courses.listFilesFor(supabase, course.id),
     tasks.listFor(supabase, userId),
   ]);
   if (project === null) notFound();
@@ -95,6 +96,7 @@ export async function getCoursePage(id: Uuid): Promise<CoursePageData> {
     weekStart: profile.weekStart,
     summary: summarise(course, project, assignments, today),
     weeks,
+    files: fileRows,
     unplaced,
   };
 }
@@ -146,6 +148,22 @@ export async function getSyllabusFileUrl(courseId: Uuid): Promise<string | null>
   const { data, error } = await supabase.storage
     .from("syllabi")
     .createSignedUrl(course.syllabusPath, SYLLABUS_URL_SECONDS);
+  if (error) return null;
+  return data.signedUrl;
+}
+
+/**
+ * A signed URL for one of the course's files, or null when there is no such
+ * file on this course (row-level security hides another account's).
+ */
+export async function getCourseFileUrl(courseId: Uuid, fileId: Uuid): Promise<string | null> {
+  const { supabase } = await requireSession();
+  const file = await courses.findFileById(supabase, fileId);
+  if (file === null || file.courseId !== courseId) return null;
+
+  const { data, error } = await supabase.storage
+    .from("syllabi")
+    .createSignedUrl(file.path, SYLLABUS_URL_SECONDS);
   if (error) return null;
   return data.signedUrl;
 }

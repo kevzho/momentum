@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  beginCourseFileUploadInput,
   beginSyllabusUploadInput,
   createCourseInput,
   createCourseItemInput,
@@ -137,5 +138,32 @@ describe("beginSyllabusUploadInput", () => {
       beginSyllabusUploadInput.safeParse({ courseId: ID, fileName: "syllabus.pdf", size: 0 })
         .success,
     ).toBe(false);
+  });
+});
+
+describe("course file uploads", () => {
+  const FILE = "5b6c7d8e-9f0a-4b1c-8d2e-3f4a5b6c7d8e";
+
+  it("accepts a PDF up to 50 MB, with a client-made id", () => {
+    const parsed = beginCourseFileUploadInput.safeParse({
+      courseId: ID,
+      fileId: FILE,
+      fileName: "All of Statistics.pdf",
+      size: 47_223_405,
+    });
+    expect(parsed.success).toBe(true);
+  });
+
+  it("refuses anything over 50 MB, a non-PDF, or a malformed id", () => {
+    const base = { courseId: ID, fileId: FILE, fileName: "book.pdf", size: 1 };
+    expect(
+      beginCourseFileUploadInput.safeParse({ ...base, size: 50 * 1024 * 1024 + 1 }).success,
+    ).toBe(false);
+    expect(beginCourseFileUploadInput.safeParse({ ...base, fileName: "book.epub" }).success).toBe(
+      false,
+    );
+    expect(beginCourseFileUploadInput.safeParse({ ...base, fileId: "not-an-id" }).success).toBe(
+      false,
+    );
   });
 });

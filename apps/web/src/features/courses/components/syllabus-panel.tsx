@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { unstable_rethrow } from "next/navigation";
 import { FileTextIcon, UploadIcon, XIcon } from "lucide-react";
 
 import { Button } from "@momentum/ui/components/button";
@@ -13,9 +12,8 @@ import {
   finishSyllabusUpload,
   removeSyllabusFile,
 } from "@/features/courses/actions";
+import { isPdfName, putPdf, settle } from "@/features/courses/components/pdf-upload";
 import { MAX_SYLLABUS_BYTES } from "@/features/courses/schemas";
-import { failure, type ActionResult } from "@/lib/actions/result";
-import { reportError } from "@/lib/report-error";
 
 /**
  * The syllabus: a PDF, typed notes, or both. The PDF goes straight from the
@@ -45,7 +43,7 @@ export function SyllabusPanel({
       toast.error("A syllabus PDF is at most 10 MB.");
       return;
     }
-    if (!/\.pdf$/iu.test(file.name)) {
+    if (!isPdfName(file.name)) {
       toast.error("The syllabus has to be a PDF.");
       return;
     }
@@ -61,12 +59,7 @@ export function SyllabusPanel({
         return;
       }
 
-      const response = await fetch(ticket.data.signedUrl, {
-        method: "PUT",
-        headers: { "content-type": "application/pdf" },
-        body: file,
-      });
-      if (!response.ok) {
+      if (!(await putPdf(ticket.data.signedUrl, file))) {
         toast.error("The upload did not go through. Try again.");
         return;
       }
@@ -187,18 +180,4 @@ export function SyllabusPanel({
       />
     </section>
   );
-}
-
-/** A rejected call becomes a failed result, so it never reaches the route's error boundary. */
-async function settle<T>(
-  call: () => Promise<ActionResult<T>>,
-  source: string,
-): Promise<ActionResult<T>> {
-  try {
-    return await call();
-  } catch (thrown) {
-    unstable_rethrow(thrown);
-    reportError(thrown, { source });
-    return failure("unavailable", "Momentum could not reach the server. Nothing was saved.");
-  }
 }

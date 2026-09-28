@@ -117,10 +117,10 @@ enabled = true
 # The maximum file size allowed (e.g. "5MB", "500KB").
 file_size_limit = "50MiB"
 
-# The syllabus PDFs; the migration creates the same bucket and its policies on a hosted project.
+# Syllabus and course-file PDFs; the migrations create the same bucket and its policies on a hosted project.
 [storage.buckets.syllabi]
 public = false
-file_size_limit = "10MiB"
+file_size_limit = "50MiB"
 allowed_mime_types = ["application/pdf"]
 
 # Uncomment to configure local storage buckets

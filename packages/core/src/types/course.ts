@@ -63,3 +63,20 @@ export interface CourseItem {
   createdAt: Instant;
   updatedAt: Instant;
 }
+
+/**
+ * A PDF attached to a course beside its syllabus — a textbook, lecture notes.
+ * The object lives in the private `syllabi` bucket at `path`, which is always
+ * `<user id>/<course id>/<id>.pdf`.
+ */
+export interface CourseFile {
+  id: Uuid;
+  userId: Uuid;
+  courseId: Uuid;
+  path: string;
+  /** The name it was uploaded under, for display. */
+  fileName: string;
+  sizeBytes: number;
+  sortOrder: number;
+  createdAt: Instant;
+}

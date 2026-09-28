@@ -5,15 +5,25 @@ import { refresh, revalidatePath } from "next/cache";
 import { courses, projects } from "@momentum/db";
 import { courseWeekSpans, isInSpan } from "@momentum/core/courses";
 import { nowInstant } from "@momentum/core/time";
-import type { Course, CourseItem, CourseWeek, LocalDate, Uuid } from "@momentum/core/types";
+import type {
+  Course,
+  CourseFile,
+  CourseItem,
+  CourseWeek,
+  LocalDate,
+  Uuid,
+} from "@momentum/core/types";
 
 import {
+  beginCourseFileUploadInput,
   beginSyllabusUploadInput,
   createCourseInput,
   createCourseItemInput,
   deleteCourseInput,
   deleteCourseItemInput,
+  finishCourseFileUploadInput,
   finishSyllabusUploadInput,
+  removeCourseFileInput,
   removeSyllabusFileInput,
   setCourseItemDoneInput,
   setCourseWeekInput,
@@ -92,7 +102,7 @@ export async function updateSyllabus(input: unknown): Promise<ActionResult<Cours
   return attempt(() => courses.update(supabase, id, { syllabus }));
 }
 
-/** The course and its weeks. The project and its tasks stay. */
+/** The course, its weeks and its files. The project and its tasks stay. */
 export async function deleteCourse(input: unknown): Promise<ActionResult<{ id: string }>> {
   const parsed = deleteCourseInput.safeParse(input);
   if (!parsed.success) return validationError(parsed.error.issues);
@@ -101,7 +111,15 @@ export async function deleteCourse(input: unknown): Promise<ActionResult<{ id: s
   const { supabase } = await requireSession();
 
   return attempt(async () => {
+    const course = await courses.findById(supabase, id);
+    const files = course === null ? [] : await courses.listFilesFor(supabase, id);
     await courses.remove(supabase, id);
+    // The rows went with the course; the objects are removed best effort.
+    const paths = [
+      ...files.map((file) => file.path),
+      ...(course?.syllabusPath == null ? [] : [course.syllabusPath]),
+    ];
+    if (paths.length > 0) await supabase.storage.from(SYLLABI_BUCKET).remove(paths);
     return { id };
   });
 }
@@ -289,6 +307,83 @@ export async function removeSyllabusFile(input: unknown): Promise<ActionResult<C
   });
 }
 
+// ---- Course files ----------------------------------------------------------------
+
+/** The object path of a course file: fixed by the ids, as `course_files_path_chk` requires. */
+function courseFilePath(userId: Uuid, courseId: Uuid, fileId: Uuid): string {
+  return `${userId}/${courseId}/${fileId}.pdf`;
+}
+
+/**
+ * Mints a one-time upload URL for a course file, the same way as the
+ * syllabus: the browser PUTs the bytes straight to storage.
+ */
+export async function beginCourseFileUpload(
+  input: unknown,
+): Promise<ActionResult<SyllabusUploadTicket>> {
+  const parsed = beginCourseFileUploadInput.safeParse(input);
+  if (!parsed.success) return validationError(parsed.error.issues);
+
+  const { courseId, fileId } = parsed.data;
+  const { supabase, userId } = await requireSession();
+
+  return attempt(async () => {
+    const course = await courses.findById(supabase, courseId);
+    if (course === null) throw notFound();
+
+    const { data, error } = await supabase.storage
+      .from(SYLLABI_BUCKET)
+      .createSignedUploadUrl(courseFilePath(userId, courseId, fileId));
+    if (error) throw storageError(error.message);
+    return { signedUrl: data.signedUrl, path: data.path };
+  });
+}
+
+/** Records an uploaded file on the course once the object is there. */
+export async function finishCourseFileUpload(input: unknown): Promise<ActionResult<CourseFile>> {
+  const parsed = finishCourseFileUploadInput.safeParse(input);
+  if (!parsed.success) return validationError(parsed.error.issues);
+
+  const { courseId, fileId, fileName, size, sortOrder } = parsed.data;
+  const { supabase, userId } = await requireSession();
+
+  return attempt(async () => {
+    const existing = await courses.findFileById(supabase, fileId);
+    if (existing !== null) return existing;
+
+    const path = courseFilePath(userId, courseId, fileId);
+    const { error } = await supabase.storage.from(SYLLABI_BUCKET).info(path);
+    if (error) throw storageError("The upload did not arrive. Try again.");
+
+    return courses.insertFile(supabase, {
+      id: fileId,
+      userId,
+      courseId,
+      path,
+      fileName,
+      sizeBytes: size,
+      sortOrder,
+    });
+  });
+}
+
+export async function removeCourseFile(input: unknown): Promise<ActionResult<{ id: string }>> {
+  const parsed = removeCourseFileInput.safeParse(input);
+  if (!parsed.success) return validationError(parsed.error.issues);
+
+  const { id } = parsed.data;
+  const { supabase } = await requireSession();
+
+  return attempt(async () => {
+    const file = await courses.findFileById(supabase, id);
+    if (file === null) return { id };
+    await courses.removeFile(supabase, id);
+    // Best effort: a stray object costs storage, not correctness.
+    await supabase.storage.from(SYLLABI_BUCKET).remove([file.path]);
+    return { id };
+  });
+}
+
 function storageError(message: string): DatabaseError {
   return { code: "STORAGE", message };
 }
@@ -364,6 +459,7 @@ function constraintMessage(message: string): string {
     return "A course needs a name of at most 100 characters.";
   if (message.includes("courses_code_chk")) return "A course code is at most 20 characters.";
   if (message.includes("course_items_planned_chk")) return "Pick a day inside that week.";
+  if (message.includes("course_files_size_chk")) return "A course file is at most 50 MB.";
   if (message.includes("course_items_title_chk"))
     return "An item needs a title of at most 300 characters.";
   return message;

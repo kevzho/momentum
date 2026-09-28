@@ -1,5 +1,6 @@
 import type {
   Course,
+  CourseFile,
   CourseItem,
   CourseItemKind,
   CourseWeek,
@@ -8,7 +9,7 @@ import type {
   Uuid,
 } from "@momentum/core/types";
 
-import { rowToCourse, rowToCourseItem, rowToCourseWeek } from "../mappers/course";
+import { rowToCourse, rowToCourseFile, rowToCourseItem, rowToCourseWeek } from "../mappers/course";
 import type { InsertRow, MomentumClient, UpdateRow } from "../types";
 
 /**
@@ -267,5 +268,60 @@ export async function updateItem(
 
 export async function removeItem(client: MomentumClient, id: Uuid): Promise<void> {
   const { error } = await client.from("course_items").delete().eq("id", id);
+  if (error) throw error;
+}
+
+// ---- Files ---------------------------------------------------------------------
+
+/** The PDFs attached to one course, in list order. */
+export async function listFilesFor(client: MomentumClient, courseId: Uuid): Promise<CourseFile[]> {
+  const { data, error } = await client
+    .from("course_files")
+    .select("*")
+    .eq("course_id", courseId)
+    .order("sort_order", { ascending: true })
+    .order("created_at", { ascending: true });
+
+  if (error) throw error;
+  return data.map(rowToCourseFile);
+}
+
+export async function findFileById(client: MomentumClient, id: Uuid): Promise<CourseFile | null> {
+  const { data, error } = await client.from("course_files").select("*").eq("id", id).maybeSingle();
+
+  if (error) throw error;
+  return data === null ? null : rowToCourseFile(data);
+}
+
+/** `id` is the one the object path was minted with; the path check ties them together. */
+export interface NewCourseFile {
+  id: Uuid;
+  userId: Uuid;
+  courseId: Uuid;
+  path: string;
+  fileName: string;
+  sizeBytes: number;
+  sortOrder: number;
+}
+
+export async function insertFile(client: MomentumClient, file: NewCourseFile): Promise<CourseFile> {
+  const row: InsertRow<"course_files"> = {
+    id: file.id,
+    user_id: file.userId,
+    course_id: file.courseId,
+    path: file.path,
+    file_name: file.fileName,
+    size_bytes: file.sizeBytes,
+    sort_order: file.sortOrder,
+  };
+
+  const { data, error } = await client.from("course_files").insert(row).select("*").single();
+
+  if (error) throw error;
+  return rowToCourseFile(data);
+}
+
+export async function removeFile(client: MomentumClient, id: Uuid): Promise<void> {
+  const { error } = await client.from("course_files").delete().eq("id", id);
   if (error) throw error;
 }

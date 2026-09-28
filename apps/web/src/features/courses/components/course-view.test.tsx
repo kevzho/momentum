@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { instant, localDate } from "@momentum/core/time";
-import type { Course, Task, Uuid } from "@momentum/core/types";
+import type { Course, CourseFile, Task, Uuid } from "@momentum/core/types";
 
 import type { CoursePageData } from "@/features/courses/types";
 import { QuickAddContext } from "@/features/tasks/components/quick-add-context";
@@ -21,6 +21,9 @@ const { actions, openQuickAdd, pushMock, errorToast, successToast } = vi.hoisted
     beginSyllabusUpload: vi.fn(),
     finishSyllabusUpload: vi.fn(),
     removeSyllabusFile: vi.fn(),
+    beginCourseFileUpload: vi.fn(),
+    finishCourseFileUpload: vi.fn(),
+    removeCourseFile: vi.fn(),
   },
   openQuickAdd: vi.fn(),
   pushMock: vi.fn(),
@@ -155,6 +158,7 @@ function data(): CoursePageData {
         isCurrent: false,
       },
     ],
+    files: [],
     unplaced: [UNDATED],
   };
 }
@@ -370,5 +374,80 @@ describe("the week checklist", () => {
     renderView();
     // Week 1 runs Sep 7–13; the entry is planned for Wed 9.
     expect(screen.getByRole("combobox", { name: "Read chapter 1: day" }).textContent).toBe("Wed 9");
+  });
+});
+
+describe("the course files", () => {
+  const FILE: CourseFile = {
+    id: "5b6c7d8e-9f0a-4b1c-8d2e-3f4a5b6c7d8e" as Uuid,
+    userId: USER_ID,
+    courseId: COURSE_ID,
+    path: `${USER_ID}/${COURSE_ID}/5b6c7d8e-9f0a-4b1c-8d2e-3f4a5b6c7d8e.pdf`,
+    fileName: "All of Statistics.pdf",
+    sizeBytes: 5_100_012,
+    sortOrder: 1,
+    createdAt: instant("2026-09-01T00:00:00.000Z"),
+  };
+
+  it("lists each file as a link through the owner-only route, with its size", () => {
+    renderView({ ...data(), files: [FILE] });
+
+    const link = screen.getByRole("link", { name: "All of Statistics.pdf" });
+    expect(link.getAttribute("href")).toBe(`/api/courses/${COURSE_ID}/files/${FILE.id}`);
+    expect(link.getAttribute("target")).toBe("_blank");
+    expect(screen.getByText("4.9 MB")).toBeTruthy();
+  });
+
+  it("says what the section is for when there are none", () => {
+    renderView();
+    expect(screen.getByText("Textbooks and notes, up to 50 MB each.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Add PDF" })).toBeTruthy();
+  });
+
+  it("removes a file through the action", async () => {
+    actions.removeCourseFile.mockResolvedValue({ ok: true, data: { id: FILE.id } });
+    renderView({ ...data(), files: [FILE] });
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove All of Statistics.pdf" }));
+
+    await waitFor(() => expect(actions.removeCourseFile).toHaveBeenCalledWith({ id: FILE.id }));
+    expect(successToast).toHaveBeenCalledWith("Removed All of Statistics.pdf");
+  });
+
+  it("uploads every picked PDF straight to storage, then records each", async () => {
+    actions.beginCourseFileUpload.mockResolvedValue({
+      ok: true,
+      data: { signedUrl: "https://storage.test/upload", path: "p" },
+    });
+    actions.finishCourseFileUpload.mockResolvedValue({ ok: true, data: FILE });
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal("fetch", fetchMock);
+    renderView();
+
+    const input = document.querySelector<HTMLInputElement>('input[type="file"][multiple]');
+    expect(input).not.toBeNull();
+    const books = [
+      new File(["%PDF-1"], "Lay.pdf", { type: "application/pdf" }),
+      new File(["%PDF-1"], "Ross.pdf", { type: "application/pdf" }),
+    ];
+    fireEvent.change(input as HTMLInputElement, { target: { files: books } });
+
+    await waitFor(() => expect(successToast).toHaveBeenCalledWith("2 files uploaded"));
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(actions.finishCourseFileUpload).toHaveBeenCalledWith(
+      expect.objectContaining({ courseId: COURSE_ID, fileName: "Ross.pdf", sortOrder: 2 }),
+    );
+    vi.unstubAllGlobals();
+  });
+
+  it("refuses a file that is not a PDF before asking the server", async () => {
+    renderView();
+    const input = document.querySelector<HTMLInputElement>('input[type="file"][multiple]');
+    fireEvent.change(input as HTMLInputElement, {
+      target: { files: [new File(["x"], "notes.docx")] },
+    });
+
+    await waitFor(() => expect(errorToast).toHaveBeenCalledWith("notes.docx is not a PDF."));
+    expect(actions.beginCourseFileUpload).not.toHaveBeenCalled();
   });
 });
